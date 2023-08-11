@@ -174,7 +174,7 @@ ui <- dashboardPage(skin = 'blue',
                 ## Predict
                 tabItem(tabName = 'predict',
                         fluidRow(
-                          shinydashboard::box(title='Analyte Forcast',
+                          shinydashboard::box(title='Analyte Forcast (Under Construction)',
                                               footer = 'Forcasting Main Analyte Through Time',
                                               status = 'info',
                                               collapsible = T,
