@@ -1,0 +1,13 @@
+name: AnalyteViewer
+title: AnalyteViewer
+username:
+account: t-lama
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5287213
+bundleId: 6151273
+url: https://t-lama.shinyapps.io/AnalyteViewer/
+when: 1659304363.31969
+lastSyncTime: 1659304363.31969
+asMultiple: FALSE
+asStatic: FALSE

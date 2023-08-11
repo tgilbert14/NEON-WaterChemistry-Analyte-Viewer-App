@@ -1,0 +1,14 @@
+name: AnalyteCompareApp
+title: AnalyteCompareApp
+username:
+account: t-lama
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3466905
+bundleId: 5342590
+url: https://t-lama.shinyapps.io/AnalyteCompareApp/
+when: 1638912933.17973
+lastSyncTime: 1638912933.17973
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: MLR_data.R|sensorScript.R|serverNEON.R|usdsD2016.csv|usdsD2017.csv|usdsD2018.csv|usdsD2019.csv|usgs_data.csv|usgs_dis.R
