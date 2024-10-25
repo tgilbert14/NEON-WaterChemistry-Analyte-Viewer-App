@@ -1,7 +1,7 @@
 
 # Analyte Comparison (v2.0)
 
-#### Timothy Gilbert (tsgilbert90@gmail.com)
+#### Timothy Gilbert (tsgilbert@arizona.edu)
 ## 2020-01-14
 
 ## About
