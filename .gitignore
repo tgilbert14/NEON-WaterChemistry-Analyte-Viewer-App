@@ -2,3 +2,17 @@
 .Rhistory
 .RData
 .Ruserdata
+.vs/
+.claude/
+
+# NEON precompute working files (the built bundle data/neon_swc.rds IS committed)
+data/.neon_cache/
+data/precompute_log.txt
+data/precompute_run.out
+data/app_run.log
+
+# timestamped save_bundle backups
+data/neon_swc_*.rds
+
+# derived; the data dictionary is downloadable in-app
+data/analyte_coverage.csv

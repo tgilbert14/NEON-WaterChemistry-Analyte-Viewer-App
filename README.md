@@ -1,94 +1,99 @@
+# NEON Surface Water Chemistry — Analyte Viewer
 
-# Analyte Comparison (v2.0)
+An interactive R/Shiny app for exploring **water-chemistry analytes** measured across
+[NEON](https://www.neonscience.org/) aquatic field sites. Pick a site, a date range, and two
+analytes — then explore how they move together through time, how they relate, what else they
+correlate with, their seasonal pattern, and a quick machine-learning estimate.
 
-#### Timothy Gilbert (tsgilbert@arizona.edu)
-## 2020-01-14
+Built on the **Surface Water Chemistry** product
+[(DP1.20093.001)](https://data.neonscience.org/data-products/DP1.20093.001).
 
-## About
+> Rebuilt 2026 — modern [bslib](https://rstudio.github.io/bslib/) UI, real NEON data bundled for
+> instant loads, and statistics that show their work. (The original 2021 shinydashboard version
+> is preserved in [`legacy/`](legacy/).)
 
-This Shiny app uses **National Ecological Observatory Network** [(NEON data portal)](https://data.neonscience.org/) to compare analyte concentrations using **Surface Water Chemistry** [(SWC)](https://data.neonscience.org/data-products/DP1.20093.001#about) sampling across various NEON [sites](https://www.neonscience.org/field-sites/field-sites-map) across the United States. Start by selecting a date range, aquatic field site, and two analytes to examine, then click **Process Selection(s)**. More information on the data collection process can be found by clicking on [SWC](https://data.neonscience.org/data-products/DP1.20093.001#about) anywhere in this document. More information on the NEON project can by clicking [here](https://www.neonscience.org/).<!-- Two spaces apart -->
+---
 
-## Comparison Plot
+## What it does
 
-This app allows you to select an Aquatic Field site, dates, and two analytes to compare, one '**main**' and another a secondary component. The data is pulled directly from the NEON database from the selected date range and plotted through time on a dual y-axis plot. The plot auto scales to allow for pattern detection between the various analytes. The plot is interactive and provides the exact sampling dates and concentrations.
+| Tab | What you get |
+|-----|--------------|
+| **Compare** | Two analytes through time. *Normalized* mode (z-scores on one axis) compares **shape** honestly; *Dual axis (raw)* shows original units with an explicit "independent axes" caveat. Below-detection samples are drawn as open markers. |
+| **Relationship** | Ordinary-least-squares regression of the two analytes with a 95% confidence band, R² / adjusted R² / slope / p-value / n, and a temporal-autocorrelation flag. |
+| **Correlations** | The main analyte vs every other analyte as a lollipop (anchored at 0) plus a sortable table. Spearman by default, Pearson alongside, **n shown per row**, and rows with n < 8 flagged as unreliable. |
+| **Seasonal** | Monthly climatology (box-and-jitter) and a real **STL** seasonal-trend decomposition of the actual monthly record. No fabricated forecasts. |
+| **Predictor** | A `glm` that estimates the main analyte from its three best-correlated analytes, with cross-validated RMSE. Move the sliders for a live estimate. |
+| **Data** | The wide table behind every tab, with CSV / Excel download for exactly the current site and range. |
+| **Site map** | All NEON aquatic sites; the selected one highlighted. |
 
-![Example plot for Sycamore Creek (D14 Tucson, AZ) for conductivity vs ANC concentrations](ExPlot.jpg)
+The flagship default view — **Sycamore Creek, AZ (SYCA): specific conductance vs ANC** — loads a
+real, strong relationship on first visit (Pearson r ≈ 0.86 over the full record).
 
+---
 
-## Correlation Report
+## Architecture
 
-The Correlation Report tab uses the '**main**' analyte chosen and calculates correlation compared to every other analyte independently.
-
-![Example table for Sycamore Creek (D14 Tucson, AZ) for correlation of conductivity compared to other measured analytes](ExCor.jpg)
-
-
-```{r, eval=FALSE}
-# list of analyes being evaluated
-alist<- c('ANC','Br','Ca','Cl','CO3','conductivity','DIC','DOC','F','Fe','HCO3','K','Mg','Mn','Na','NH4 - N','NO2 - N','NO3+NO2 - N','Ortho - P','pH','Si','SO4','TDN','TDP','TDS','TN','TOC','TP','TPC','TPN','TSS','TSS - Dry Mass','UV Absorbance (250 nm)','UV Absorbance (280 nm)')
-    
-    # empty table to store correlation results
-    correlation <- data.table(Analyte=character(),Correlation=numeric())
-
-    # main analyte selected data
-    analyte_data<- External.data %>%
-      filter(analyte == select.analyte) %>%
-      select(analyte, analyteConcentration, collectDate) %>%
-      arrange(collectDate)
-    
-    i=1
-    while (i < length(alist)+1 ) {
-      # goes through all analytes and saves data
-      analyte_dataB<- External.data %>%
-        filter(analyte == alist[i]) %>%
-        select(analyte, analyteConcentration, collectDate) %>% 
-        arrange(collectDate)
-      # joins analyte data together by collect date
-      analytes<- left_join(analyte_data, analyte_dataB, by= 'collectDate')
-      
-      # saves correlation # into table
-      correlation[[i,2]]<- cor(analytes$analyteConcentration.x, analytes$analyteConcentration.y)
-      # saves 2nd analyte being evaluated into table
-      correlation[[i,1]]<- paste0(analytes$analyte.y[1])
-      i=i+1
-    }
-    # organizing data
-    correlation<- correlation %>%
-      arrange(desc(Correlation))
-    
-    i=1
-    # if no value is produced...
-    while (i < length(alist)+1 ) {
-    if(is.na(correlation[[i,2]])) {
-      correlation[[i,2]]<- ('Not enough data')
-    }
-      i=i+1
-    }
-    # take out 'main' analyte that is being compared to the rest
-    correlationA<- correlation %>%
-      filter(Analyte != select.analyte)
+```
+app.R                         # the whole app: bslib UI + server
+helpers.R                     # analyte names/units, colors, theme + chart helpers,
+                              #   correlation_table(), fit_lm(), kfold_rmse()
+data/neon_swc.rds             # REAL NEON SWC, precomputed (loaded once at startup)
+scripts/precompute_neon_data.R  # pulls SWC from the NEON public API (resumable, cached)
+scripts/build_rds_from_cache.R  # builds data/neon_swc.rds from the cache
+legacy/                       # the original 2021 app + old data files
 ```
 
-_Some sites may not have enough data points for certain analytes and do not produce a correlation result. Therefore the table will print 'Not enough data'_
+**Why a precomputed `.rds`?** The original app called `neonUtilities::loadByProduct()` on every
+selection — slow, network-dependent, and (per the original author's own note) it blocked
+publishing to shinyapps.io. The rebuild pulls the data **once** from the NEON public API into a
+compact bundle the app loads instantly. No runtime NEON calls, no `neonUtilities` dependency.
 
+`data/neon_swc.rds` is a list:
 
-## Regression Analysis
+| Object | Shape |
+|--------|-------|
+| `swc_long` | `site, collectDate (Date), analyte, value, units, source ("External Lab"/"Field Probe"), belowDetection (0/1)` |
+| `swc_wide` | one row per `site × collectDate`, one numeric column per analyte |
+| `sites_meta` | `site, siteName, domain, state, lat, long, n_obs, n_analytes, first, last` |
+| `analyte_meta` | per-analyte coverage (`units, n, n_sites, source`) |
+| `built` | provenance: build timestamp, product code, totals |
 
-The Analysis tab plots out the two selected analyte concentrations through linear regression (lm). Below that the summary is taken for the relationship between the two analytes and the R^2 and P-value is printed out. Data points are paired by collection date of samples taken.
+### Refreshing the data
 
-```{r, eval=FALSE}
-    # portion of code for plotting linear regression of two analytes
-    sct_base<-ggplot(analytes,aes(y = analyteConcentration.y,x = analyteConcentration.x))
-    d.plot<- sct_base+geom_point()+
-      geom_smooth(method = "lm",se = F, color = "Red", show.legend = T, formula = 'y ~ x', na.rm = F)+
-      geom_smooth(color = "Grey", show.legend = T, inherit.aes = T)+
-      theme_classic()+
-      ggtitle(paste0(analytes$analyte.y[1],' vs ',analytes$analyte.x[1]))+
-      xlab(analytes$analyte.x[1])+
-      ylab(analytes$analyte.y[1])
-    
-    # portion of code for summary of linear regression (for P-value)
-    mdl_1<-lm(analyteConcentration.y ~ analyteConcentration.x,data = analytes)
-    summary(mdl_1)
+```sh
+# from the project root, with R on PATH:
+Rscript scripts/precompute_neon_data.R     # pulls/refreshes the cache (resumable)
+Rscript scripts/build_rds_from_cache.R     # rebuilds data/neon_swc.rds from the cache
 ```
 
-![Example plot of linear regression of conductivity vs ANC concentrations](ExReg.jpg)
+The cache (`data/.neon_cache/`) is git-ignored; the built `data/neon_swc.rds` is committed.
+
+---
+
+## Running locally
+
+```r
+# install once:
+install.packages(c("shiny","bslib","bsicons","plotly","DT","ggplot2",
+                   "dplyr","tidyr","readr","lubridate","shinycssloaders"))
+# then, from the project root:
+shiny::runApp("app.R")
+```
+
+## Honesty notes (by design)
+
+- **Every statistic shows its sample size.** Correlations default to Spearman (robust to the
+  skew typical of water chemistry), guard at n ≥ 8, and print a multiple-comparisons caveat.
+- **The seasonal view is a real STL decomposition** of the measured monthly series — not the
+  synthetic sine-wave "forecast" the original app shipped.
+- **Analyte names and units are chemically correct** (e.g. Br = bromide, not bicarbonate;
+  Cl = chloride; ANC in meq/L; pH unitless) and units are read from the data, not hard-coded.
+- **Below-detection values are flagged, not hidden.**
+- Regression carries explicit caveats: correlation ≠ causation, and repeated-measures p-values
+  are optimistic (a lag-1 autocorrelation flag quantifies it).
+
+## Credits
+
+Original app and concept: **Timothy Gilbert** (tsgilbert@arizona.edu). 2026 rebuild data
+product: NEON DP1.20093.001 (National Ecological Observatory Network, operated by Battelle,
+funded by NSF).
