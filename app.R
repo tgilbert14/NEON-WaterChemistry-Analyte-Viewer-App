@@ -57,10 +57,26 @@ aqua_theme <- bs_theme(
     .info-link { color: var(--bs-secondary); opacity:.65; text-decoration:none; font-size:1rem;
                  display:inline-flex; align-items:center; padding:.15rem .3rem; line-height:1; }
     .info-link:hover { opacity:1; }
+    .help-q { opacity:.55; cursor:pointer; font-size:.82em; vertical-align:middle; }
+    .help-q:hover { opacity:1; }
+    .value-box .help-q { color: currentColor; }
     .card-header { font-weight:600; }
     .scope-note { color: var(--bs-secondary); font-style: italic; font-size:.82rem; }
     .preset-reason { background: rgba(14,124,155,.06); border-left:3px solid var(--bs-primary);
                      padding:.5rem .75rem; border-radius:.3rem; font-size:.86rem; margin-bottom:.4rem; }
+
+    /* --- subtle water motion (tasteful, not gaudy) --- */
+    .navbar, .bslib-page-navbar > .navbar {
+      background-image: linear-gradient(110deg,#0a5f78 0%,#0E7C9B 28%,#1aa0c0 50%,#0E7C9B 72%,#0a5f78 100%) !important;
+      background-size: 280% 100%; animation: waterflow 22s ease-in-out infinite;
+    }
+    @keyframes waterflow { 0%,100% { background-position:0% 50%; } 50% { background-position:100% 50%; } }
+    /* soft light-on-water sheen across the coloured value boxes */
+    .value-box { position:relative; overflow:hidden; }
+    .value-box::after { content:''; position:absolute; inset:0; pointer-events:none;
+      background: radial-gradient(130% 90% at 12% -10%, rgba(255,255,255,.14), transparent 55%); }
+    /* respect reduced-motion preference */
+    @media (prefers-reduced-motion: reduce) { .navbar { animation:none !important; } }
   ")
 
 ## ---- Per-tab info-modal content (progressive disclosure) -----------------
@@ -109,6 +125,31 @@ INFO <- list(
 
 info_link <- function(id) actionLink(id, bs_icon("info-circle"), class = "info-link",
                                       title = "How is this computed?")
+
+## ---- Plain-language glossary + a (?) popover helper for jargon ------------
+GLOSSARY <- list(
+  spearman = HTML("<b>Spearman's rho (ρ)</b> measures whether two analytes <b>rise and fall together</b>,
+    even if not in a straight line. <b>+1</b> = move together perfectly, <b>0</b> = no relationship,
+    <b>−1</b> = one goes up as the other goes down. We default to it (over Pearson) because water-chemistry
+    values are usually skewed."),
+  pearson  = HTML("<b>Pearson's r</b> measures how close two analytes are to a <b>straight-line</b>
+    relationship, on the same −1 to +1 scale as Spearman — but it assumes the link is linear."),
+  n        = HTML("<b>n</b> is the number of dates where <b>both</b> analytes were measured — the sample
+    size behind the number. Bigger n = more trustworthy."),
+  r2       = HTML("<b>R²</b> is the share of one analyte's variation explained by the other (0–100%).
+    Higher = the line fits the points better."),
+  pval     = HTML("<b>p-value</b> is roughly the chance you'd see a relationship this strong if there were
+    really none. Small (e.g. &lt; 0.05) suggests it isn't a fluke — though it's optimistic for samples
+    repeated through time."),
+  rmse     = HTML("<b>RMSE</b> is the model's typical miss, in the analyte's units. <b>Skill</b> compares it
+    to simply guessing the average: <b>+50%</b> means the model's error is half that naive baseline (and a
+    negative skill means it's worse than guessing the average)."),
+  stl      = HTML("<b>STL</b> splits the monthly series into a slow <b>trend</b>, a repeating <b>seasonal</b>
+    cycle, and leftover noise — computed from the real measured data.")
+)
+# small (?) icon that pops a plain-language explanation on click/hover
+help_pop <- function(key, ttl = NULL)
+  popover(bs_icon("question-circle", class = "help-q"), GLOSSARY[[key]], title = ttl, placement = "top")
 
 ## ---- JS: onboarding localStorage + phone width ---------------------------
 APP_JS <- HTML("
@@ -229,12 +270,14 @@ ui <- page_sidebar(
                         div(class = "d-flex align-items-center gap-2",
                             radioButtons("cor_method", NULL, inline = TRUE,
                               choices = c("Spearman" = "spearman", "Pearson" = "pearson"),
-                              selected = "spearman"), info_link("info_correlations")))),
-        withSpinner(plotlyOutput("cor_lolli", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+                              selected = "spearman"),
+                            help_pop("spearman", "Spearman vs Pearson"), info_link("info_correlations")))),
+        withSpinner(plotlyOutput("cor_lolli", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         div(style = "min-height:340px; overflow-x:auto", DTOutput("cor_table")),
         card_footer(class = "scope-note", HTML(
-          "Computed on co-sampled dates only (n per row). Screening many analytes at once inflates chance
-           findings — hypothesis-generating, not confirmatory. Rows with n &lt; 8 are flagged.")))
+          "Top 18 shown above (full list in the table). <b style='color:#0E7C9B'>Teal</b> = reliable (n ≥ 8),
+           <b style='color:#9aa0a6'>grey</b> = fewer than 8 paired samples. Computed on co-sampled dates only;
+           screening many analytes at once inflates chance findings — hypothesis-generating, not confirmatory.")))
     ),
     nav_panel(
       "Data", icon = bs_icon("table"),
@@ -421,14 +464,17 @@ server <- function(input, output, session) {
     r_theme <- if (is.na(r)) "secondary" else if (abs(r) >= 0.7) "success" else if (abs(r) >= 0.4) "warning" else "secondary"
     layout_columns(
       col_widths = breakpoints(sm = 6, lg = 3), fill = FALSE,
-      value_box("Paired samples", n, "matched sample dates", theme = "primary"),
+      value_box(tagList("Paired samples ", help_pop("n", "Sample size (n)")),
+                n, "matched sample dates", theme = "primary"),
       value_box("Date span", paste0(format(sp[1], "%Y"), "–", format(sp[2], "%Y")),
                 paste0(yrs, " years of record"), theme = "secondary"),
       div(class = "vb-door", role = "button", tabindex = "0",
           `aria-label` = "Open the Relationship tab for this analyte pair",
           onclick = "Shiny.setInputValue('goto_rel', Math.random(), {priority:'event'})",
           onkeydown = "if(event.key==='Enter'||event.key===' '){event.preventDefault();Shiny.setInputValue('goto_rel', Math.random(), {priority:'event'})}",
-          value_box("Correlation · Spearman ρ", ifelse(is.na(r), "—", sprintf("%.2f", r)),
+          value_box(tagList("Correlation · Spearman ρ ",
+                            tags$span(onclick = "event.stopPropagation()", help_pop("spearman", "Spearman ρ"))),
+                    ifelse(is.na(r), "—", sprintf("%.2f", r)),
                     if (n > 0) paste0("n = ", n, " paired") else "select two analytes", theme = r_theme)),
       value_box("Field site", input$site, sm$siteName %||% input$site, theme = "dark")
     )
@@ -543,13 +589,13 @@ server <- function(input, output, session) {
     r2_theme <- if (f$r2 >= 0.7) "success" else if (f$r2 >= 0.4) "warning" else "secondary"
     tagList(
       layout_columns(col_widths = 6, fill = FALSE,
-        value_box("R²", sprintf("%.3f", f$r2), "variance explained", theme = r2_theme),
+        value_box(tagList("R² ", help_pop("r2", "R-squared")), sprintf("%.3f", f$r2), "variance explained", theme = r2_theme),
         value_box("Adjusted R²", sprintf("%.3f", f$adj_r2), "penalized for predictors", theme = "secondary"),
         value_box("Slope", sprintf("%.3g", f$slope), sprintf("± %.2g (SE)", f$slope_se), theme = "secondary"),
-        value_box("n", f$n, "paired samples", theme = "primary")),
+        value_box(tagList("n ", help_pop("n", "Sample size")), f$n, "paired samples", theme = "primary")),
       div(class = "px-2 pb-2",
-        tags$p(HTML(sprintf("<b>p-value (slope):</b> %s",
-                            ifelse(f$p < .001, "&lt; 0.001", signif(f$p, 3))))),
+        tags$p(HTML(sprintf("<b>p-value (slope):</b> %s ",
+                            ifelse(f$p < .001, "&lt; 0.001", signif(f$p, 3)))), help_pop("pval", "p-value")),
         tags$p(HTML(sprintf("<b>Temporal autocorrelation (lag-1):</b> %s (%s) — %s",
                             ifelse(is.na(ac), "—", sprintf("%.2f", ac)), ac_flag,
                             "high values mean the p-value above is optimistic."))))
@@ -565,18 +611,19 @@ server <- function(input, output, session) {
   output$cor_lolli <- renderPlotly({ safe_plotly({
     ct <- cor_tbl()
     if (is.null(ct) || !nrow(ct)) return(plotly_message("No co-sampled analytes in this window.", mode()))
-    ct <- ct |> mutate(display = factor(display, levels = rev(display)))
+    # top 18 by |coef| keeps the labels legible; the full set is in the table below
+    ct <- head(ct, 18) |> mutate(display = factor(display, levels = rev(display)))
     pp <- ggplot(ct, aes(x = coef, y = display)) +
       geom_vline(xintercept = 0, color = "rgba(0,0,0,.3)") +
       geom_segment(aes(x = 0, xend = coef, yend = display, color = reliable), linewidth = .9) +
       geom_point(aes(color = reliable, text = paste0(display, "<br>", input$cor_method, " = ", signif(coef, 3),
-                     "<br>n = ", n, ifelse(reliable, "", "<br>⚠ low n — interpret with care"))), size = 3) +
-      scale_color_manual(values = c(`TRUE` = COL$main, `FALSE` = "#BBBBBB"),
-                         labels = c(`TRUE` = "n ≥ 8", `FALSE` = "n < 8"), name = NULL) +
+                     "<br>n = ", n, ifelse(reliable, "", "<br>⚠ low n — interpret with care"))), size = 3.2) +
+      scale_color_manual(values = c(`TRUE` = COL$main, `FALSE` = "#BBBBBB")) +
       scale_x_continuous(limits = c(-1, 1), breaks = seq(-1, 1, .5)) +
       labs(x = paste0(tools::toTitleCase(input$cor_method), " correlation with ", analyte_display(main_a())), y = NULL) +
-      theme_neon()
-    ggplotly(pp, tooltip = "text") |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_correlations"))
+      theme_neon() + theme(legend.position = "none", axis.text.y = element_text(size = 10.5))
+    ggplotly(pp, tooltip = "text") |> layout(margin = list(l = 10)) |>
+      plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_correlations"))
   }, mode()) })
 
   output$cor_table <- renderDT({
@@ -658,12 +705,12 @@ server <- function(input, output, session) {
                 line = list(color = COL$secondary, width = 1.4, dash = "dot"), opacity = .8,
                 hovertemplate = "%{y:.3g}<extra></extra>") |>
       layout(yaxis = list(title = axis_title(main_a(), df$units[1])), xaxis = list(title = ""),
-             legend = list(orientation = "h", y = 1.08), margin = list(t = 56, b = 40),
+             legend = list(orientation = "h", y = -0.16, x = 0), margin = list(t = 74, b = 64),
              title = list(
                text = paste0("STL — ", analyte_display(main_a()),
                              "<br><span style='font-size:11px;color:#9aa4ad'>",
                              n_real, " of ", n_tot, " months real · ", n_fill, " interpolated before decomposition</span>"),
-               font = list(size = 14), x = 0, xanchor = "left"))
+               font = list(size = 14), x = 0, xanchor = "left", y = 0.98, yanchor = "top"))
     p1 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_STL"))
   }, mode()) })
 
@@ -720,12 +767,13 @@ server <- function(input, output, session) {
     tagList(
       value_box(paste0("Predicted ", analyte_display(main_a())),
                 ifelse(is.na(yhat), "—", paste0(signif(yhat, 4), " ", unit)),
-                "from the slider values", showcase = bs_icon("magic"), theme = "primary"),
+                "from the slider values", theme = "primary"),
       div(class = "px-2 pt-2 scope-note",
-          sprintf("Cross-validated RMSE ≈ %s %s vs %s %s for a mean-only baseline (skill %s) on %d records.",
+          HTML(sprintf("Cross-validated RMSE ≈ %s %s vs %s %s for a mean-only baseline (skill %s) on %d records. ",
                   ifelse(is.na(cv$rmse), "—", signif(cv$rmse, 3)), unit,
                   ifelse(is.na(cv$null_rmse), "—", signif(cv$null_rmse, 3)), unit,
-                  ifelse(is.na(skill), "—", sprintf("%+.0f%%", 100 * skill)), cv$n))
+                  ifelse(is.na(skill), "—", sprintf("%+.0f%%", 100 * skill)), cv$n)),
+          help_pop("rmse", "RMSE & skill"))
     )
   }, error = function(e) div(class = "text-muted p-2", "Adjusting…")) })
 
@@ -778,16 +826,18 @@ server <- function(input, output, session) {
       readr::write_excel_csv(dict, file)
     })
 
-  ## ---- Site map ----
+  ## ---- Site map (click a marker to select that site -> jump to Compare) ----
   output$map <- renderPlotly({ safe_plotly({
     m <- D$sites_meta |> mutate(sel = site == input$site) |> filter(is.finite(lat), is.finite(long))
     if (!nrow(m)) return(plotly_message("No site coordinates available.", mode()))
     plot_ly(m, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
-            marker = list(size = ~ifelse(sel, 14, 7),
-                          color = ~ifelse(sel, COL$secondary, "#9aa0a6"),
-                          line = list(width = ~ifelse(sel, 1.6, .4), color = "white")),
+            source = "sitemap", customdata = ~site,
+            marker = list(size = ~ifelse(sel, 15, 8),
+                          color = ~ifelse(sel, COL$secondary, "#6f9bb0"),
+                          line = list(width = ~ifelse(sel, 1.8, .5), color = "white")),
             text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",
-                           n_obs %||% 0, " samples · ", n_analytes %||% 0, " analytes<br>", first, " – ", last),
+                           n_obs %||% 0, " samples · ", n_analytes %||% 0, " analytes<br>", first, " – ", last,
+                           "<br><i>click to select this site</i>"),
             hoverinfo = "text") |>
       layout(geo = list(scope = "north america",
                         lataxis = list(range = c(15, 72)), lonaxis = list(range = c(-162, -60)),
@@ -796,8 +846,19 @@ server <- function(input, output, session) {
                         subunitcolor = "rgba(180,190,200,1)", countrycolor = "rgba(180,190,200,1)",
                         bgcolor = "rgba(0,0,0,0)"),
              margin = list(t = 0, b = 0, l = 0, r = 0)) |>
+      event_register("plotly_click") |>
       plotly_theme(mode(), narrow()) |> plotly_clean("neon_sites_map")
   }, mode()) })
+
+  # Clicking a site on the map selects it and takes the user to the comparison
+  observeEvent(event_data("plotly_click", source = "sitemap"), {
+    ev <- event_data("plotly_click", source = "sitemap")
+    site <- ev$customdata
+    if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site) {
+      updateSelectizeInput(session, "site", selected = site)
+      nav_select("main_tabs", "Compare")
+    }
+  })
 }
 
 shinyApp(ui, server)
