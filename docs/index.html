@@ -220,8 +220,14 @@
     .feat {
       background: var(--card);
       border: 1px solid #eef3f5;
-      border-radius: 14px;
+      border-top: 3px solid #cfe2e8;
+      border-radius: 12px;
       padding: 20px
+    }
+
+    .feat-star {
+      border-top: 3px solid var(--teal);
+      background: linear-gradient(180deg, rgba(14, 124, 155, .04), #fff 40%)
     }
 
     .feat h3 {
@@ -233,12 +239,6 @@
       margin: 0;
       color: #42606e;
       font-size: .95rem
-    }
-
-    .feat .ic {
-      font-size: 1.4rem;
-      margin-bottom: 8px;
-      display: block
     }
 
     .honest {
@@ -292,7 +292,7 @@
 
   <header class="hero">
     <div class="wrap">
-      <span class="badge">💧 NEON · Surface Water Chemistry · DP1.20093.001</span>
+      <span class="badge">NEON · Surface Water Chemistry · DP1.20093.001</span>
       <h1>NEON Water Chemistry<br>Analyte Viewer</h1>
       <p class="lead">Compare two water-chemistry analytes at any of 34 NEON aquatic field sites,
         then explore how they move together through time, how they relate, what else they correlate
@@ -331,31 +331,32 @@
     <div class="wrap">
       <span class="sub">What you can do</span>
       <div class="grid">
-        <div class="feat"><span class="ic">📈</span>
+        <div class="feat">
           <h3>Compare through time</h3>
           <p>Two analytes on a shared time axis — normalized to compare shape honestly, or raw on dual axes with an
             explicit caveat.</p>
         </div>
-        <div class="feat"><span class="ic">📐</span>
+        <div class="feat feat-star">
+          <h3>See the seasonal pattern</h3>
+          <p>Monthly climatology and a real STL decomposition of the measured record — trend and seasonal cycle pulled
+            from the actual data, with no fabricated forecasts.</p>
+        </div>
+        <div class="feat feat-star">
+          <h3>Predict an analyte</h3>
+          <p>A model that estimates the main analyte from its three best-correlated analytes, scored against a mean-only
+            baseline so you can see whether it actually adds anything.</p>
+        </div>
+        <div class="feat">
           <h3>Test the relationship</h3>
           <p>Least-squares fit with a confidence band, R²/p/n, and a temporal-autocorrelation flag so the p-value isn't
             oversold.</p>
         </div>
-        <div class="feat"><span class="ic">🪜</span>
+        <div class="feat">
           <h3>Screen correlations</h3>
           <p>Main analyte vs every other — Spearman by default, n shown per row, low-n flagged, multiple-comparisons
             caveat printed.</p>
         </div>
-        <div class="feat"><span class="ic">📅</span>
-          <h3>See seasonality</h3>
-          <p>Monthly climatology and a real STL decomposition of the measured record — no fabricated forecasts.</p>
-        </div>
-        <div class="feat"><span class="ic">🧮</span>
-          <h3>Predict an analyte</h3>
-          <p>A glm from the three best-correlated analytes, reported against a mean-only baseline so you can see whether
-            it adds anything.</p>
-        </div>
-        <div class="feat"><span class="ic">🗺️</span>
+        <div class="feat">
           <h3>Place it on the map</h3>
           <p>All 34 NEON aquatic sites, from desert streams to Alaskan lakes to Puerto Rican rivers.</p>
         </div>

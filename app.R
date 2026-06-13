@@ -49,10 +49,15 @@ aqua_theme <- bs_theme(
   bs_add_rules("
     .value-box { box-shadow: 0 1px 5px rgba(11,42,58,.08); }
     .card { box-shadow: 0 1px 5px rgba(11,42,58,.06); }
-    .vb-door { cursor: pointer; transition: transform .12s ease; }
+    .vb-door { cursor: pointer; transition: transform .12s ease; height:100%; }
+    .vb-door > * { height:100%; }
     .vb-door:hover { transform: translateY(-2px); }
-    .info-link { color: var(--bs-secondary); opacity:.7; text-decoration:none; font-size:.85rem; }
+    .value-box .value-box-title { font-size:.8rem; opacity:.9; }
+    .value-box .value-box-value { white-space: nowrap; }
+    .info-link { color: var(--bs-secondary); opacity:.65; text-decoration:none; font-size:1rem;
+                 display:inline-flex; align-items:center; padding:.15rem .3rem; line-height:1; }
     .info-link:hover { opacity:1; }
+    .card-header { font-weight:600; }
     .scope-note { color: var(--bs-secondary); font-style: italic; font-size:.82rem; }
     .preset-reason { background: rgba(14,124,155,.06); border-left:3px solid var(--bs-primary);
                      padding:.5rem .75rem; border-radius:.3rem; font-size:.86rem; margin-bottom:.4rem; }
@@ -134,9 +139,6 @@ ui <- page_sidebar(
 
   sidebar = sidebar(
     title = "Controls", width = 340, open = "desktop",
-    selectInput("preset", tagList("Preset comparison ", info_link("info_preset")),
-                choices = c("Custom…" = "", setNames(names(PRESETS), names(PRESETS))),
-                selected = names(PRESETS)[1]),
     selectizeInput("site", "Field site", choices = SITE_CHO, selected = DEF_SITE,
                    options = list(placeholder = "Type to search sites…")),
     div(dateRangeInput("dates", "Date range", format = "yyyy-mm", startview = "year",
@@ -152,8 +154,14 @@ ui <- page_sidebar(
                    choices = analyte_choices(site_present(DEF_SITE)), selected = DEF_A[2]),
     div(class = "scope-note", textOutput("armed", inline = TRUE)),
     hr(),
-    input_dark_mode(id = "color_mode"),
-    actionLink("about", tagList(bs_icon("info-circle"), " About this app & data"), class = "info-link")
+    selectInput("preset", "Jump to a preset comparison",
+                choices = c("Custom…" = "", setNames(names(PRESETS), names(PRESETS))),
+                selected = names(PRESETS)[1]),
+    div(class = "scope-note", style = "margin-top:-.4rem", "Sets both analytes to a meaningful pair."),
+    hr(),
+    div(class = "d-flex justify-content-between align-items-center",
+        input_dark_mode(id = "color_mode"),
+        actionLink("about", "About & data", class = "info-link"))
   ),
 
   # Summary strip
@@ -164,21 +172,48 @@ ui <- page_sidebar(
     nav_panel(
       "Compare", icon = bs_icon("graph-up"),
       card(full_screen = TRUE,
-        card_header(div(class = "d-flex justify-content-between align-items-center",
+        card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                         span("Two analytes through time"),
-                        div(radioButtons("ts_mode", NULL, inline = TRUE,
+                        div(class = "d-flex align-items-center gap-2",
+                            radioButtons("ts_mode", NULL, inline = TRUE,
                               choices = c("Normalized" = "norm", "Dual axis (raw)" = "dual"),
                               selected = "norm"), info_link("info_compare")))),
         uiOutput("preset_reason"),
         uiOutput("ts_note"),
         withSpinner(plotlyOutput("ts", height = 440), type = 8, color = "#0E7C9B", hide.ui = TRUE),
-        card_footer(class = "scope-note", textOutput("ts_footer", inline = TRUE)))
+        card_footer(class = "scope-note",
+          span(textOutput("ts_footer", inline = TRUE)), " · ",
+          actionLink("goto_seasonal", "see its seasonal pattern →", class = "info-link")))
+    ),
+    nav_panel(
+      "Seasonal pattern", icon = bs_icon("calendar3"),
+      layout_columns(col_widths = breakpoints(sm = 12, lg = c(6, 6)),
+        card(full_screen = TRUE,
+          card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
+                          span("Monthly climatology"), info_link("info_seasonal"))),
+          withSpinner(plotlyOutput("clim", height = 380), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
+        card(full_screen = TRUE,
+          card_header("Seasonal-trend decomposition (STL)"),
+          withSpinner(plotlyOutput("stl", height = 380), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+          card_footer(class = "scope-note",
+            "Descriptive of the real monthly record — not a calibrated forecast. Needs ≥ 24 months.")))
+    ),
+    nav_panel(
+      "Predictor", icon = bs_icon("cpu"),
+      layout_columns(col_widths = breakpoints(sm = 12, lg = c(5, 7)),
+        card(card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
+                             span("Estimate the main analyte"), info_link("info_predictor"))),
+          uiOutput("pred_intro"), uiOutput("pred_sliders")),
+        card(card_header("Prediction"),
+          uiOutput("pred_out"),
+          card_footer(class = "scope-note",
+            "glm on the 3 best-correlated analytes; cross-validated RMSE shown. Interpolation aid, not a sensor.")))
     ),
     nav_panel(
       "Relationship", icon = bs_icon("rulers"),
       layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)),
         card(full_screen = TRUE,
-          card_header(div(class = "d-flex justify-content-between",
+          card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                           span("Regression"), info_link("info_relationship"))),
           withSpinner(plotlyOutput("reg", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
         card(card_header("Fit statistics"),
@@ -189,9 +224,10 @@ ui <- page_sidebar(
     nav_panel(
       "Correlations", icon = bs_icon("bar-chart-steps"),
       card(full_screen = TRUE,
-        card_header(div(class = "d-flex justify-content-between align-items-center",
+        card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                         span("Main analyte vs every other analyte"),
-                        div(radioButtons("cor_method", NULL, inline = TRUE,
+                        div(class = "d-flex align-items-center gap-2",
+                            radioButtons("cor_method", NULL, inline = TRUE,
                               choices = c("Spearman" = "spearman", "Pearson" = "pearson"),
                               selected = "spearman"), info_link("info_correlations")))),
         withSpinner(plotlyOutput("cor_lolli", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE),
@@ -199,30 +235,6 @@ ui <- page_sidebar(
         card_footer(class = "scope-note", HTML(
           "Computed on co-sampled dates only (n per row). Screening many analytes at once inflates chance
            findings — hypothesis-generating, not confirmatory. Rows with n &lt; 8 are flagged.")))
-    ),
-    nav_panel(
-      "Seasonal", icon = bs_icon("calendar3"),
-      layout_columns(col_widths = breakpoints(sm = 12, lg = c(6, 6)),
-        card(full_screen = TRUE,
-          card_header(div(class = "d-flex justify-content-between",
-                          span("Monthly climatology"), info_link("info_seasonal"))),
-          withSpinner(plotlyOutput("clim", height = 380), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
-        card(full_screen = TRUE,
-          card_header("Seasonal-trend decomposition (STL)"),
-          withSpinner(plotlyOutput("stl", height = 380), type = 8, color = "#0E7C9B", hide.ui = TRUE),
-          card_footer(class = "scope-note",
-            "Descriptive of the real monthly record — not a calibrated forecast. Needs ≥ 24 months."))),
-    ),
-    nav_panel(
-      "Predictor", icon = bs_icon("cpu"),
-      layout_columns(col_widths = breakpoints(sm = 12, lg = c(5, 7)),
-        card(card_header(div(class = "d-flex justify-content-between",
-                             span("Estimate the main analyte"), info_link("info_predictor"))),
-          uiOutput("pred_intro"), uiOutput("pred_sliders")),
-        card(card_header("Prediction"),
-          uiOutput("pred_out"),
-          card_footer(class = "scope-note",
-            "glm on the 3 best-correlated analytes; cross-validated RMSE shown. Interpolation aid, not a sensor.")))
     ),
     nav_panel(
       "Data", icon = bs_icon("table"),
@@ -282,11 +294,6 @@ server <- function(input, output, session) {
       showModal(modalDialog(title = INFO[[k]][[1]], INFO[[k]][[2]], easyClose = TRUE,
                             footer = modalButton("Close")))
     })
-  })
-  observeEvent(input$info_preset, {
-    showModal(modalDialog(title = "Preset comparisons", easyClose = TRUE, footer = modalButton("Close"),
-      HTML("Each preset sets both analytes to a scientifically meaningful pair (e.g. specific conductance vs ANC,
-            or total vs bioavailable phosphorus). Pick <b>Custom…</b> to choose any two analytes yourself.")))
   })
   observeEvent(input$about, {
     showModal(modalDialog(title = "About this app & data", easyClose = TRUE, size = "l",
@@ -414,25 +421,20 @@ server <- function(input, output, session) {
     r_theme <- if (is.na(r)) "secondary" else if (abs(r) >= 0.7) "success" else if (abs(r) >= 0.4) "warning" else "secondary"
     layout_columns(
       col_widths = breakpoints(sm = 6, lg = 3), fill = FALSE,
-      value_box("Paired samples", n, "matched collection dates",
-                showcase = bs_icon("droplet-half"), theme = "primary"),
+      value_box("Paired samples", n, "matched sample dates", theme = "primary"),
       value_box("Date span", paste0(format(sp[1], "%Y"), "–", format(sp[2], "%Y")),
-                paste0(yrs, " yrs of record"), showcase = bs_icon("calendar-range"), theme = "secondary"),
+                paste0(yrs, " years of record"), theme = "secondary"),
       div(class = "vb-door", role = "button", tabindex = "0",
           `aria-label` = "Open the Relationship tab for this analyte pair",
           onclick = "Shiny.setInputValue('goto_rel', Math.random(), {priority:'event'})",
           onkeydown = "if(event.key==='Enter'||event.key===' '){event.preventDefault();Shiny.setInputValue('goto_rel', Math.random(), {priority:'event'})}",
-          value_box("Correlation (Spearman ρ)",
-                    ifelse(is.na(r), "—", sprintf("%.2f", r)),
-                    paste0(analyte_display(main_a()), " vs ", analyte_display(sec_a()),
-                           if (n > 0) paste0(" · n = ", n) else ""),
-                    showcase = bs_icon("graph-up"), theme = r_theme)),
-      value_box(input$site, sm$siteName %||% input$site,
-                paste0(sm$domain %||% "", if (!is.na(sm$state %||% NA)) paste0(" · ", sm$state) else ""),
-                showcase = bs_icon("geo-alt"), theme = "dark")
+          value_box("Correlation · Spearman ρ", ifelse(is.na(r), "—", sprintf("%.2f", r)),
+                    if (n > 0) paste0("n = ", n, " paired") else "select two analytes", theme = r_theme)),
+      value_box("Field site", input$site, sm$siteName %||% input$site, theme = "dark")
     )
   })
   observeEvent(input$goto_rel, nav_select("main_tabs", "Relationship"))
+  observeEvent(input$goto_seasonal, nav_select("main_tabs", "Seasonal pattern"))
 
   ## ---- Compare: time series ----
   output$ts <- renderPlotly({ safe_plotly({
