@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NEON Water Chemistry — Analyte Viewer</title>
+<meta name="description" content="Explore real NEON surface-water-chemistry analytes across 34 aquatic field sites — time series, relationships, correlations, seasonality and a quick predictor. Honest statistics, instant loads." />
+
+<!-- Open Graph / social card.  TODO: drop a real 1200x630 docs/og-image.png (a screenshot of
+     the Compare tab works well) and set the absolute URL below to your Pages domain. -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="NEON Water Chemistry — Analyte Viewer" />
+<meta property="og:description" content="Real NEON surface-water-chemistry across 34 aquatic sites — compare analytes, test relationships, see seasonality. Honest stats, instant loads." />
+<meta property="og:image" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="NEON Water Chemistry — Analyte Viewer" />
+<meta name="twitter:description" content="Real NEON water chemistry across 34 aquatic sites. Honest stats, instant loads." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --teal:#0E7C9B; --teal-d:#0a5f78; --amber:#D55E00; --ink:#0B2A3A;
+    --slate:#5B7A8C; --bg:#FBFDFE; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:var(--bg);
+       -webkit-font-smoothing:antialiased;line-height:1.55}
+  h1,h2,h3{font-family:"Inter Tight",Inter,sans-serif;line-height:1.15;margin:0}
+  a{color:var(--teal)}
+  .wrap{max-width:980px;margin:0 auto;padding:0 22px}
+
+  /* Hero */
+  .hero{position:relative;overflow:hidden;color:#fff;
+        background:radial-gradient(120% 140% at 20% 0%, #1597b8 0%, var(--teal) 42%, var(--teal-d) 100%)}
+  .hero::after{content:"";position:absolute;inset:0;opacity:.5;pointer-events:none;
+        background:
+          radial-gradient(40px 40px at 12% 30%, rgba(255,255,255,.10), transparent 70%),
+          radial-gradient(60px 60px at 82% 22%, rgba(255,255,255,.08), transparent 70%),
+          radial-gradient(50px 50px at 65% 78%, rgba(255,255,255,.07), transparent 70%)}
+  .hero .wrap{position:relative;padding:70px 22px 64px}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;font-weight:600;
+         letter-spacing:.04em;text-transform:uppercase;background:rgba(255,255,255,.16);
+         padding:6px 12px;border-radius:999px;backdrop-filter:blur(4px)}
+  .hero h1{font-size:clamp(2.1rem,5vw,3.3rem);font-weight:800;margin:18px 0 10px;letter-spacing:-.02em}
+  .hero p.lead{font-size:clamp(1.05rem,2.2vw,1.28rem);max-width:62ch;margin:0 0 28px;color:rgba(255,255,255,.92)}
+  .cta-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:1.05rem;
+       padding:14px 26px;border-radius:12px;text-decoration:none;transition:transform .12s ease,box-shadow .12s ease}
+  .btn-primary{background:#fff;color:var(--teal-d);box-shadow:0 8px 24px rgba(0,0,0,.18)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,.24)}
+  .btn-ghost{color:#fff;border:1.5px solid rgba(255,255,255,.6)}
+  .btn-ghost:hover{background:rgba(255,255,255,.12)}
+  .warm{font-size:.82rem;color:rgba(255,255,255,.82);margin-top:14px;min-height:1.2em}
+
+  /* Stats strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:-34px auto 0;position:relative;z-index:2}
+  .stat{background:var(--card);border-radius:14px;padding:18px 16px;box-shadow:0 6px 22px rgba(11,42,58,.08)}
+  .stat .n{font-family:"Inter Tight";font-weight:800;font-size:1.7rem;color:var(--teal)}
+  .stat .l{font-size:.82rem;color:var(--slate);font-weight:500}
+
+  /* Features */
+  section.body{padding:54px 0 10px}
+  .sub{color:var(--slate);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.78rem}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:22px}
+  .feat{background:var(--card);border:1px solid #eef3f5;border-radius:14px;padding:20px}
+  .feat h3{font-size:1.08rem;margin-bottom:6px}
+  .feat p{margin:0;color:#42606e;font-size:.95rem}
+  .feat .ic{font-size:1.4rem;margin-bottom:8px;display:block}
+
+  .honest{margin:40px 0;background:rgba(14,124,155,.06);border-left:4px solid var(--teal);
+          border-radius:10px;padding:20px 22px}
+  .honest h2{font-size:1.25rem;margin-bottom:10px}
+  .honest ul{margin:0;padding-left:18px;color:#3b5563}
+  .honest li{margin:6px 0}
+
+  footer{border-top:1px solid #e7eef1;padding:26px 0 50px;color:var(--slate);font-size:.9rem}
+  footer a{font-weight:600;text-decoration:none}
+
+  @media(max-width:760px){ .stats{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">💧 NEON · Surface Water Chemistry · DP1.20093.001</span>
+    <h1>NEON Water Chemistry<br>Analyte Viewer</h1>
+    <p class="lead">Compare two water-chemistry analytes at any of 34 NEON aquatic field sites,
+      then explore how they move together through time, how they relate, what else they correlate
+      with, and their seasonal pattern — on real data, with statistics that show their work.</p>
+    <div class="cta-row">
+      <a id="launch" class="btn btn-primary" href="#">Launch the app&nbsp;→</a>
+      <a class="btn btn-ghost" href="https://github.com/tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+    <div class="warm" id="warm"></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><div class="n">34</div><div class="l">aquatic field sites</div></div>
+    <div class="stat"><div class="n">~197k</div><div class="l">real observations</div></div>
+    <div class="stat"><div class="n">34</div><div class="l">analytes</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">live API waits</div></div>
+  </div>
+</div>
+
+<section class="body">
+  <div class="wrap">
+    <span class="sub">What you can do</span>
+    <div class="grid">
+      <div class="feat"><span class="ic">📈</span><h3>Compare through time</h3><p>Two analytes on a shared time axis — normalized to compare shape honestly, or raw on dual axes with an explicit caveat.</p></div>
+      <div class="feat"><span class="ic">📐</span><h3>Test the relationship</h3><p>Least-squares fit with a confidence band, R²/p/n, and a temporal-autocorrelation flag so the p-value isn't oversold.</p></div>
+      <div class="feat"><span class="ic">🪜</span><h3>Screen correlations</h3><p>Main analyte vs every other — Spearman by default, n shown per row, low-n flagged, multiple-comparisons caveat printed.</p></div>
+      <div class="feat"><span class="ic">📅</span><h3>See seasonality</h3><p>Monthly climatology and a real STL decomposition of the measured record — no fabricated forecasts.</p></div>
+      <div class="feat"><span class="ic">🧮</span><h3>Predict an analyte</h3><p>A glm from the three best-correlated analytes, reported against a mean-only baseline so you can see whether it adds anything.</p></div>
+      <div class="feat"><span class="ic">🗺️</span><h3>Place it on the map</h3><p>All 34 NEON aquatic sites, from desert streams to Alaskan lakes to Puerto Rican rivers.</p></div>
+    </div>
+
+    <div class="honest">
+      <h2>Honest by design</h2>
+      <ul>
+        <li>Every statistic shows its <b>sample size</b>.</li>
+        <li>Correlations default to <b>Spearman</b> (robust to skewed chemistry) with an n ≥ 8 reliability guard.</li>
+        <li>The seasonal view is a <b>real STL decomposition</b>, with interpolated months disclosed — not a synthetic sine wave.</li>
+        <li>Chemistry names &amp; units are <b>correct</b> (bromide vs bicarbonate, chloride vs chlorine, ANC in meq/L…).</li>
+        <li><b>Below-detection</b> values are flagged, not hidden — 15,553 of them across the record.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water Chemistry</a>
+    product. App &amp; concept: <b>Timothy Gilbert</b> · 2026 bslib rebuild.
+    Data: National Ecological Observatory Network (operated by Battelle, funded by NSF).
+  </div>
+</footer>
+
+<script>
+  // ── Set this to your deployed app URL (Connect Cloud) or "app/" for a shinylive build ──
+  const APP_URL = "https://REPLACE-WITH-YOUR-DEPLOYED-APP-URL";
+
+  (function () {
+    const placeholder = APP_URL.indexOf("REPLACE-WITH") !== -1;
+    const launch = document.getElementById("launch");
+    const warm = document.getElementById("warm");
+
+    if (placeholder) {
+      launch.addEventListener("click", function (e) {
+        e.preventDefault();
+        warm.textContent = "⚠ Set APP_URL in docs/index.html to your deployed app URL, then re-publish.";
+      });
+      return;
+    }
+    launch.href = APP_URL;
+
+    // Pre-warm the (possibly sleeping) app while the visitor reads, to soften cold start.
+    try {
+      warm.textContent = "Warming up the app…";
+      fetch(APP_URL, { mode: "no-cors", cache: "no-store" })
+        .then(function () { warm.textContent = "Ready when you are."; })
+        .catch(function () { warm.textContent = ""; });
+    } catch (e) { /* ignore */ }
+  })();
+</script>
+</body>
+</html>
