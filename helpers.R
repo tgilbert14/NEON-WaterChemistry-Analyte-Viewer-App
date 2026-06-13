@@ -146,7 +146,7 @@ theme_neon <- function(base = 13) {
       plot.subtitle = ggplot2::element_text(color = "#5f6b7a", size = base - 2),
       plot.title.position = "plot",
       panel.grid.minor = ggplot2::element_blank(),
-      panel.grid.major = ggplot2::element_line(color = "rgba(0,0,0,.07)"),
+      panel.grid.major = ggplot2::element_line(color = "#00000012"),  # hex+alpha: valid in both browser & PDF device
       axis.title    = ggplot2::element_text(color = "#3c4757"),
       legend.position = "bottom")
 }
@@ -170,6 +170,19 @@ plotly_clean <- function(p, filename = "neon_analyte_chart") {
     modeBarButtonsToRemove = c("lasso2d","select2d","autoScale2d",
                                "hoverClosestCartesian","hoverCompareCartesian","toggleSpikelines"),
     toImageButtonOptions = list(format = "png", scale = 3, filename = filename))
+}
+
+# tiny sparkline for a value_box showcase (no axes, transparent, area fill)
+spark <- function(x, y, col) {
+  ok <- is.finite(y)
+  if (sum(ok) < 2) return(NULL)
+  plotly::plot_ly(x = x[ok], y = y[ok], type = "scatter", mode = "lines", height = 70,
+                  line = list(color = col, width = 2, shape = "spline"),
+                  fill = "tozeroy", fillcolor = paste0(col, "26"), hoverinfo = "skip") |>
+    plotly::layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE),
+                   margin = list(l = 0, r = 0, t = 0, b = 0),
+                   paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)", showlegend = FALSE) |>
+    plotly::config(displayModeBar = FALSE)
 }
 
 # Empty / error state as a real annotated plot (never a vanished validate())

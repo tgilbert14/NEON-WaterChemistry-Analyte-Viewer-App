@@ -36,6 +36,7 @@ pick_default_analytes <- function(s) {
   c(a, b)
 }
 DEF_A <- pick_default_analytes(DEF_SITE); DEF_SPAN <- site_span(DEF_SITE)
+DEF_SITE_B <- (setdiff(site_tbl$site, DEF_SITE))[1]   # a different site for the two-site compare
 
 ## ---- Theme ---------------------------------------------------------------
 aqua_theme <- bs_theme(
@@ -211,6 +212,16 @@ ui <- page_sidebar(
   navset_card_tab(
     id = "main_tabs",
     nav_panel(
+      "Explore", icon = bs_icon("geo-alt"),
+      card(full_screen = TRUE,
+        card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
+                        span("Pick a site to explore"),
+                        span(class = "scope-note d-none d-md-inline",
+                             "Markers are coloured by the main analyte's site average — click any marker"))),
+        withSpinner(plotlyOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        card_footer(class = "scope-note", uiOutput("map_footer")))
+    ),
+    nav_panel(
       "Compare", icon = bs_icon("graph-up"),
       card(full_screen = TRUE,
         card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
@@ -280,23 +291,29 @@ ui <- page_sidebar(
            screening many analytes at once inflates chance findings — hypothesis-generating, not confirmatory.")))
     ),
     nav_panel(
-      "Data", icon = bs_icon("table"),
+      "Two sites", icon = bs_icon("signpost-split"),
       card(full_screen = TRUE,
-        card_header(div(class = "d-flex justify-content-between align-items-center",
-          span("Data table"),
-          div(class = "btn-group btn-group-sm",
-              downloadButton("dl_long", "Tidy CSV", class = "btn-sm btn-outline-primary"),
-              downloadButton("dl_wide", "Wide CSV", class = "btn-sm btn-outline-secondary"),
-              downloadButton("dl_dict", "Data dictionary", class = "btn-sm btn-outline-secondary"),
-              info_link("info_data")))),
-        withSpinner(DTOutput("data_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE))
+        card_header(div(class = "d-flex justify-content-between align-items-center gap-3 flex-wrap",
+          span("Same analyte, two sites"),
+          div(class = "d-flex align-items-center gap-2",
+              span(class = "scope-note", "vs"),
+              selectizeInput("site_b", NULL, choices = SITE_CHO, selected = DEF_SITE_B, width = "240px")))),
+        uiOutput("two_sites_note"),
+        withSpinner(plotlyOutput("two_sites", height = 440), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        card_footer(class = "scope-note", "The main analyte at the selected site vs a second site, over the same date window."))
     ),
     nav_panel(
-      "Site map", icon = bs_icon("geo-alt"),
+      "Data", icon = bs_icon("table"),
       card(full_screen = TRUE,
-        card_header("NEON aquatic sites — selected site highlighted"),
-        withSpinner(plotlyOutput("map", height = 500), type = 8, color = "#0E7C9B", hide.ui = TRUE),
-        card_footer(class = "scope-note", "Hover a site for its record length and analyte coverage."))
+        card_header(div(class = "d-flex justify-content-between align-items-center flex-wrap gap-2",
+          span("Data table & downloads"),
+          div(class = "btn-group btn-group-sm",
+              downloadButton("dl_report", "PDF report", class = "btn-sm btn-primary"),
+              downloadButton("dl_long", "Tidy CSV", class = "btn-sm btn-outline-primary"),
+              downloadButton("dl_wide", "Wide CSV", class = "btn-sm btn-outline-secondary"),
+              downloadButton("dl_dict", "Dictionary", class = "btn-sm btn-outline-secondary"),
+              info_link("info_data")))),
+        withSpinner(DTOutput("data_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE))
     )
   )
 )
@@ -318,9 +335,9 @@ server <- function(input, output, session) {
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
         tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
         tags$ol(
-          tags$li(HTML("Pick a <b>field site</b> and a <b>date range</b> in the sidebar.")),
+          tags$li(HTML("<b>Click a site on the map</b> (coloured by the analyte) — or use the sidebar — to begin.")),
           tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against — or start from a preset.")),
-          tags$li(HTML("Move through the tabs: time series, relationship, correlations, seasonality, and a quick predictor."))),
+          tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons."))),
         tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled for instant results.")),
         checkboxInput("dont_show", "Don't show this again", FALSE),
         footer = actionButton("start", "Start exploring", class = "btn-primary")))
@@ -453,21 +470,26 @@ server <- function(input, output, session) {
     div(class = "scope-note", style = "margin:.1rem 0 .4rem", txt)
   })
 
-  ## ---- Summary strip ----
+  ## ---- Summary strip (analyte sparklines + correlation + site) ----
   output$summary_strip <- renderUI({
-    p <- sel_pair(); n <- nrow(p)
-    # Spearman, n>=8 to color "strong" — consistent with the Correlations tab default
+    sl <- sel_long(); p <- sel_pair(); n <- nrow(p)
+    A <- main_a(); B <- sec_a()
+    ma <- sl |> filter(analyte == A) |> arrange(collectDate)
+    sb <- sl |> filter(analyte == B) |> arrange(collectDate)
+    unitA <- pretty_unit(ma$units[1] %||% NA, A); unitB <- pretty_unit(sb$units[1] %||% NA, B)
+    latestA <- if (nrow(ma)) paste0(signif(tail(ma$value, 1), 4), if (nzchar(unitA)) paste0(" ", unitA) else "") else "—"
+    latestB <- if (nrow(sb)) paste0(signif(tail(sb$value, 1), 4), if (nzchar(unitB)) paste0(" ", unitB) else "") else "—"
     r <- if (n >= 8) suppressWarnings(stats::cor(p$x, p$y, method = "spearman")) else NA_real_
     sm <- D$sites_meta[D$sites_meta$site == input$site, ]
-    sp <- dates_d()
-    yrs <- round(as.numeric(difftime(sp[2], sp[1], units = "days")) / 365.25, 1)
     r_theme <- if (is.na(r)) "secondary" else if (abs(r) >= 0.7) "success" else if (abs(r) >= 0.4) "warning" else "secondary"
     layout_columns(
       col_widths = breakpoints(sm = 6, lg = 3), fill = FALSE,
-      value_box(tagList("Paired samples ", help_pop("n", "Sample size (n)")),
-                n, "matched sample dates", theme = "primary"),
-      value_box("Date span", paste0(format(sp[1], "%Y"), "–", format(sp[2], "%Y")),
-                paste0(yrs, " years of record"), theme = "secondary"),
+      value_box(analyte_display(A), latestA, paste0("latest of ", nrow(ma), " samples"),
+                showcase = spark(ma$collectDate, ma$value, "#9fd6e6"),
+                showcase_layout = "bottom", theme = "primary"),
+      value_box(analyte_display(B), latestB, paste0("latest of ", nrow(sb), " samples"),
+                showcase = spark(sb$collectDate, sb$value, "#f0c08a"),
+                showcase_layout = "bottom", theme = "secondary"),
       div(class = "vb-door", role = "button", tabindex = "0",
           `aria-label` = "Open the Relationship tab for this analyte pair",
           onclick = "Shiny.setInputValue('goto_rel', Math.random(), {priority:'event'})",
@@ -826,29 +848,152 @@ server <- function(input, output, session) {
       readr::write_excel_csv(dict, file)
     })
 
-  ## ---- Site map (click a marker to select that site -> jump to Compare) ----
-  output$map <- renderPlotly({ safe_plotly({
-    m <- D$sites_meta |> mutate(sel = site == input$site) |> filter(is.finite(lat), is.finite(long))
-    if (!nrow(m)) return(plotly_message("No site coordinates available.", mode()))
-    plot_ly(m, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
-            source = "sitemap", customdata = ~site,
-            marker = list(size = ~ifelse(sel, 15, 8),
-                          color = ~ifelse(sel, COL$secondary, "#6f9bb0"),
-                          line = list(width = ~ifelse(sel, 1.8, .5), color = "white")),
-            text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",
-                           n_obs %||% 0, " samples · ", n_analytes %||% 0, " analytes<br>", first, " – ", last,
-                           "<br><i>click to select this site</i>"),
-            hoverinfo = "text") |>
-      layout(geo = list(scope = "north america",
-                        lataxis = list(range = c(15, 72)), lonaxis = list(range = c(-162, -60)),
-                        showland = TRUE,
-                        landcolor = if (identical(mode(), "dark")) "rgba(40,46,54,1)" else "rgba(243,245,247,1)",
-                        subunitcolor = "rgba(180,190,200,1)", countrycolor = "rgba(180,190,200,1)",
-                        bgcolor = "rgba(0,0,0,0)"),
-             margin = list(t = 0, b = 0, l = 0, r = 0)) |>
-      event_register("plotly_click") |>
-      plotly_theme(mode(), narrow()) |> plotly_clean("neon_sites_map")
+  ## ---- One-click PDF site report (self-contained, base pdf() + ggplot) ----
+  output$dl_report <- downloadHandler(
+    filename = function() paste0(fn_base(), "-report.pdf"),
+    content = function(file) {
+      d <- dates_d(); A <- main_a(); B <- sec_a(); st <- input$site
+      sm <- D$sites_meta[D$sites_meta$site == st, ]
+      uA <- D$analyte_meta$units[D$analyte_meta$analyte == A][1]
+      uB <- D$analyte_meta$units[D$analyte_meta$analyte == B][1]
+      wide <- D$swc_wide |> filter(site == st, collectDate >= d[1], collectDate <= d[2])
+      pair <- tibble(collectDate = wide$collectDate,
+                     x = suppressWarnings(as.numeric(wide[[A]])),
+                     y = suppressWarnings(as.numeric(wide[[B]]))) |> filter(is.finite(x), is.finite(y))
+      f <- if (nrow(pair) >= 3) fit_lm(pair) else NULL
+      rho <- if (nrow(pair) >= 8) suppressWarnings(stats::cor(pair$x, pair$y, method = "spearman")) else NA
+
+      grDevices::pdf(file, width = 8.5, height = 11); on.exit(grDevices::dev.off())
+      # PDF-safe theme (base pdf() device can't use the web "Inter" font)
+      th <- ggplot2::theme_minimal(base_size = 12) +
+        ggplot2::theme(plot.title = element_text(face = "bold", size = 15),
+                       plot.subtitle = element_text(color = "grey40"),
+                       plot.title.position = "plot",
+                       panel.grid.minor = element_blank(), legend.position = "bottom")
+
+      # Page 1 — cover + headline stats
+      lines <- c(
+        sprintf("Site: %s (%s · %s)", sm$siteName %||% st, st, sm$domain %||% ""),
+        sprintf("Window: %s to %s", d[1], d[2]),
+        sprintf("Analytes: %s  vs  %s", analyte_display(A), analyte_display(B)),
+        sprintf("Paired samples: %d", nrow(pair)),
+        if (!is.na(rho)) sprintf("Spearman rho: %.2f", rho) else "Spearman rho: insufficient data (n < 8)",
+        if (!is.null(f)) sprintf("OLS R-squared: %.3f   ·   p %s", f$r2, ifelse(f$p < .001, "< 0.001", paste0("= ", signif(f$p, 2)))) else "OLS: insufficient data",
+        sprintf("Source: NEON Surface Water Chemistry %s · data through %s", D$built$product, D$built$data_through))
+      cover <- ggplot() + xlim(0, 1) + ylim(0, 1) + theme_void() +
+        annotate("text", x = 0.04, y = 0.92, hjust = 0, fontface = "bold", size = 8, color = COL$main,
+                 label = "NEON Water Chemistry") +
+        annotate("text", x = 0.04, y = 0.85, hjust = 0, size = 6, label = "Site report") +
+        annotate("text", x = 0.04, y = seq(0.72, 0.72 - 0.06 * (length(lines) - 1), by = -0.06),
+                 hjust = 0, size = 4.2, label = lines) +
+        annotate("text", x = 0.04, y = 0.06, hjust = 0, size = 3, color = "grey50",
+                 label = paste0("Generated ", substr(D$built$when, 1, 10), " from a precomputed read-only dataset (no live API)."))
+      print(cover)
+
+      # Page 2 — time series (both analytes, faceted, real units)
+      sl <- D$swc_long |> filter(site == st, analyte %in% c(A, B), collectDate >= d[1], collectDate <= d[2]) |>
+        mutate(lab = factor(ifelse(analyte == A, axis_title(A, uA), axis_title(B, uB)),
+                            levels = c(axis_title(A, uA), axis_title(B, uB))))
+      if (nrow(sl)) print(
+        ggplot(sl, aes(collectDate, value)) +
+          geom_line(aes(color = lab), linewidth = .6) + geom_point(aes(color = lab), size = 1.3) +
+          scale_color_manual(values = setNames(c(COL$main, COL$secondary), levels(sl$lab)), guide = "none") +
+          facet_wrap(~lab, ncol = 1, scales = "free_y", strip.position = "left") +
+          labs(x = NULL, y = NULL, title = paste0(sm$siteName %||% st, " — analytes through time")) +
+          th + theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 90)))
+
+      # Page 3 — regression
+      if (!is.null(f)) {
+        sub <- sprintf("OLS · R² = %.3f · p %s · n = %d", f$r2,
+                       ifelse(f$p < .001, "< 0.001", paste0("= ", signif(f$p, 2))), nrow(pair))
+        print(ggplot(pair, aes(x, y)) +
+          geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = COL$main, fill = COL$main, alpha = .15) +
+          geom_point(color = COL$secondary, alpha = .8, size = 2) +
+          labs(x = axis_title(A, uA), y = axis_title(B, uB),
+               title = paste0(analyte_display(B), " vs ", analyte_display(A)), subtitle = sub) + th)
+      }
+
+      # Page 4 — seasonal climatology of the main analyte
+      cl <- D$swc_long |> filter(site == st, analyte == A, collectDate >= d[1], collectDate <= d[2]) |>
+        mutate(month = lubridate::month(collectDate, label = TRUE))
+      if (nrow(cl) >= 6) print(
+        ggplot(cl, aes(month, value)) +
+          geom_boxplot(outlier.shape = NA, fill = COL$main, alpha = .18, color = COL$main) +
+          geom_jitter(width = .15, height = 0, color = COL$main, alpha = .5, size = 1.4) +
+          labs(x = NULL, y = axis_title(A, uA), title = paste0("Monthly climatology — ", analyte_display(A))) + th)
+    })
+
+  ## ---- Two sites: same analyte at site A vs site B ----
+  output$two_sites_note <- renderUI({
+    s2name <- D$sites_meta$siteName[match(input$site_b, D$sites_meta$site)]
+    div(class = "scope-note", style = "margin:.1rem 0 .4rem",
+        sprintf("Comparing %s at %s vs %s.", analyte_display(main_a()),
+                D$sites_meta$siteName[match(input$site, D$sites_meta$site)] %||% input$site,
+                s2name %||% input$site_b))
+  })
+  output$two_sites <- renderPlotly({ safe_plotly({
+    d <- dates_d(); A <- main_a(); s1 <- input$site; s2 <- input$site_b %||% DEF_SITE_B
+    df <- D$swc_long |> filter(analyte == A, site %in% c(s1, s2),
+                               collectDate >= d[1], collectDate <= d[2]) |> arrange(collectDate)
+    if (!nrow(df)) return(plotly_message("No data for this analyte at these sites in this window.", mode()))
+    unit <- df$units[1]
+    lab <- function(s) paste0(s, " — ", D$sites_meta$siteName[match(s, D$sites_meta$site)])
+    df <- df |> mutate(siteLab = ifelse(site == s1, lab(s1), lab(s2)))
+    pal <- setNames(c(COL$main, COL$secondary), c(lab(s1), lab(s2)))
+    plot_ly(df, x = ~collectDate, y = ~value, color = ~siteLab, colors = pal,
+            type = "scatter", mode = "markers+lines", marker = list(size = 6), line = list(width = 2),
+            hovertemplate = ~paste0("<b>", siteLab, "</b><br>%{x|%b %d, %Y}<br>%{y} ", pretty_unit(unit, A), "<extra></extra>")) |>
+      layout(yaxis = list(title = axis_title(A, unit)), xaxis = list(title = "", type = "date"),
+             legend = list(orientation = "h", y = 1.1), margin = list(t = 30),
+             title = list(text = paste0(analyte_display(A), " — two sites"), font = list(size = 14), x = 0, xanchor = "left")) |>
+      plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
   }, mode()) })
+
+  ## ---- Explore map: markers coloured by the main analyte; click -> select + Compare ----
+  output$map <- renderPlotly({ safe_plotly({
+    d <- dates_d(); ana <- main_a()
+    site_avg <- D$swc_long |>
+      filter(analyte == ana, collectDate >= d[1], collectDate <= d[2]) |>
+      group_by(site) |> summarise(avg = mean(value, na.rm = TRUE), nobs = dplyr::n(), .groups = "drop")
+    m <- D$sites_meta |> filter(is.finite(lat), is.finite(long)) |>
+      left_join(site_avg, by = "site") |> mutate(sel = site == input$site)
+    if (!nrow(m)) return(plotly_message("No site coordinates available.", mode()))
+    unit  <- pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == ana][1], ana)
+    has_v <- m |> filter(is.finite(avg)); no_v <- m |> filter(!is.finite(avg))
+
+    geo <- list(scope = "north america", lataxis = list(range = c(15, 72)), lonaxis = list(range = c(-162, -60)),
+                showland = TRUE, landcolor = if (identical(mode(), "dark")) "rgba(40,46,54,1)" else "rgba(243,245,247,1)",
+                subunitcolor = "rgba(180,190,200,1)", countrycolor = "rgba(180,190,200,1)", bgcolor = "rgba(0,0,0,0)")
+    p <- plot_ly(source = "sitemap")
+    if (nrow(no_v))
+      p <- add_trace(p, data = no_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
+                     customdata = ~site, showlegend = FALSE,
+                     marker = list(size = ifelse(no_v$sel, 14, 7), color = "#cdd5da",
+                                   line = list(width = ifelse(no_v$sel, 2.2, .4),
+                                               color = ifelse(no_v$sel, COL$secondary, "white"))),
+                     text = ~paste0("<b>", siteName, "</b><br>", site, "<br>no ", analyte_display(ana),
+                                    " in this window<br><i>click to select</i>"), hoverinfo = "text")
+    if (nrow(has_v))
+      p <- add_trace(p, data = has_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
+                     customdata = ~site, showlegend = FALSE,
+                     marker = list(size = ifelse(has_v$sel, 17, 11), color = ~avg,
+                                   colorscale = "YlGnBu", reversescale = TRUE, showscale = TRUE,
+                                   colorbar = list(title = list(text = paste0(analyte_display(ana), "<br>", unit),
+                                                                font = list(size = 10)), thickness = 12, len = .68, x = 1),
+                                   line = list(width = ifelse(has_v$sel, 2.4, .5),
+                                               color = ifelse(has_v$sel, COL$secondary, "white"))),
+                     text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",
+                                    analyte_display(ana), ": ", signif(avg, 3), " ", unit, " (avg, n=", nobs, ")",
+                                    "<br><i>click to select</i>"), hoverinfo = "text")
+    p |> layout(geo = geo, margin = list(t = 0, b = 0, l = 0, r = 0)) |>
+      event_register("plotly_click") |> plotly_theme(mode(), narrow()) |> plotly_clean("neon_sites_map")
+  }, mode()) })
+
+  output$map_footer <- renderUI({
+    HTML(sprintf("Markers coloured by the average <b>%s</b> at each site over the selected window (darker = higher);
+                  grey = not measured there. The selected site is ringed. <b>Click any marker</b> to choose it and
+                  jump to the comparison.", analyte_display(main_a())))
+  })
 
   # Clicking a site on the map selects it and takes the user to the comparison
   observeEvent(event_data("plotly_click", source = "sitemap"), {
