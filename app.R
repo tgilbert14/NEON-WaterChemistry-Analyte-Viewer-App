@@ -124,6 +124,11 @@ ui <- page_sidebar(
   title = tagList(bs_icon("droplet-half"), " NEON Water Chemistry — Analyte Viewer"),
   theme = aqua_theme,
   window_title = "NEON Analyte Viewer",
+  # Flow content naturally instead of filling the viewport. A fillable page collapses
+  # its card bodies to ~0 height when served in an indefinite-height container (Connect
+  # Cloud / iframe), which hid every chart on the deployed host. Natural flow + each
+  # chart's explicit height = charts always render and the page just scrolls.
+  fillable = FALSE,
   tags$head(tags$script(APP_JS),
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1")),
 
@@ -165,7 +170,8 @@ ui <- page_sidebar(
                               choices = c("Normalized" = "norm", "Dual axis (raw)" = "dual"),
                               selected = "norm"), info_link("info_compare")))),
         uiOutput("preset_reason"),
-        withSpinner(plotlyOutput("ts", height = 460), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        uiOutput("ts_note"),
+        withSpinner(plotlyOutput("ts", height = 440), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         card_footer(class = "scope-note", textOutput("ts_footer", inline = TRUE)))
     ),
     nav_panel(
@@ -389,6 +395,14 @@ server <- function(input, output, session) {
     div(class = "preset-reason", bs_icon("lightbulb"), " ", PRESET_REASON[[pm]])
   })
 
+  output$ts_note <- renderUI({
+    txt <- if (identical(input$ts_mode, "dual"))
+      "Two independent y-axes (left = main, right = secondary, colour-matched). Lines tracking each other does not by itself imply correlation — test it on the Relationship tab."
+    else
+      "Each series is standardized to mean 0, SD 1 so you compare shape, not magnitude. Raw values are in the hover and on the Data tab."
+    div(class = "scope-note", style = "margin:.1rem 0 .4rem", txt)
+  })
+
   ## ---- Summary strip ----
   output$summary_strip <- renderUI({
     p <- sel_pair(); n <- nrow(p)
@@ -442,15 +456,12 @@ server <- function(input, output, session) {
                   hovertemplate = paste0("<b>", analyte_display(B), "</b><br>%{x|%b %d, %Y}<br>%{y} ",
                                          pretty_unit(unitB, B), "<extra></extra>")) |>
         layout(
-          xaxis = list(title = NULL, type = "date"),
+          xaxis = list(title = "", type = "date"),
           yaxis  = list(title = list(text = axis_title(A, unitA), font = list(color = COL$main)),
                         tickfont = list(color = COL$main)),
           yaxis2 = list(title = list(text = axis_title(B, unitB), font = list(color = COL$secondary)),
                         tickfont = list(color = COL$secondary), overlaying = "y", side = "right", showgrid = FALSE),
-          legend = list(orientation = "h", x = 0, y = 1.12), margin = list(t = 30, r = 70),
-          annotations = list(list(x = 0, y = -0.18, xref = "paper", yref = "paper", showarrow = FALSE,
-            text = "Two independent axes — line proximity alone does not imply correlation; test it on the Relationship tab.",
-            font = list(size = 10, color = "#9aa4ad"), align = "left")))
+          legend = list(orientation = "h", x = 0, y = 1.1), margin = list(t = 34, r = 72, b = 40))
     } else {
       df2 <- df |> group_by(analyte) |> arrange(collectDate) |>
         mutate(sd_ = sd(value, na.rm = TRUE), mu_ = mean(value, na.rm = TRUE),
@@ -479,11 +490,8 @@ server <- function(input, output, session) {
       p <- p |> layout(
         hovermode = "x unified",
         yaxis = list(title = "Standardized value (z-score)", zeroline = TRUE),
-        xaxis = list(title = NULL, type = "date"),
-        legend = list(orientation = "h", x = 0, y = 1.12), margin = list(t = 30),
-        annotations = list(list(x = 0, y = 1.16, xref = "paper", yref = "paper", showarrow = FALSE, align = "left",
-          text = "Each series standardized (mean 0, SD 1) — compares shape, not magnitude. Raw values in hover.",
-          font = list(size = 10, color = "#9aa4ad"))))
+        xaxis = list(title = "", type = "date"),
+        legend = list(orientation = "h", x = 0, y = 1.1), margin = list(t = 34, b = 40))
     }
     p |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_", A, "_vs_", B, "_timeseries"))
   }, mode()) })
@@ -619,12 +627,14 @@ server <- function(input, output, session) {
       return(plotly_message("Need ≥ 24 months across ≥ 2 years for an STL decomposition.\nWiden the date range.", mode()))
     full <- tibble(ym = seq(min(ms$ym), max(ms$ym), by = "month")) |> left_join(ms, by = "ym")
     v <- full$v
-    # Guard: too much interpolation manufactures a fake seasonal signal (Quinn/Don/Aaron)
+    # Guard: refuse only when interpolation would dominate (a gap longer than a full
+    # seasonal cycle, or under ~45% real). Otherwise show it and disclose the count in
+    # the title — the disclosure, not a hard block, is the honesty lever (Quinn/Don/Aaron).
     n_real <- sum(!is.na(v)); n_tot <- length(v); n_fill <- n_tot - n_real
     gap_runs <- rle(is.na(v)); max_gap <- if (any(gap_runs$values)) max(gap_runs$lengths[gap_runs$values]) else 0
-    if (n_real / n_tot < 0.5 || max_gap > 4)
+    if (n_real / n_tot < 0.45 || max_gap > 12)
       return(plotly_message(sprintf(
-        "Too many interpolated months for an honest decomposition\n(%d of %d months real; longest gap %d). Widen the range or pick a better-sampled analyte.",
+        "Too sparse for an honest decomposition\n(%d of %d months sampled; longest gap %d months).\nWiden the range or pick a better-sampled analyte.",
         n_real, n_tot, max_gap), mode()))
     # linear-interpolate interior gaps; carry ends
     idx <- which(!is.na(v))
@@ -645,12 +655,13 @@ server <- function(input, output, session) {
       add_trace(y = ~(trend + seasonal), type = "scatter", mode = "lines", name = "trend + seasonal",
                 line = list(color = COL$secondary, width = 1.4, dash = "dot"), opacity = .8,
                 hovertemplate = "%{y:.3g}<extra></extra>") |>
-      layout(yaxis = list(title = axis_title(main_a(), df$units[1])), xaxis = list(title = NULL),
-             legend = list(orientation = "h", y = 1.12),
-             title = list(text = paste0("STL — ", analyte_display(main_a())), font = list(size = 14)),
-             annotations = list(list(x = 0, y = -0.16, xref = "paper", yref = "paper", showarrow = FALSE, align = "left",
-               text = sprintf("%d of %d months are real samples; %d interpolated before decomposition.", n_real, n_tot, n_fill),
-               font = list(size = 10, color = "#9aa4ad"))))
+      layout(yaxis = list(title = axis_title(main_a(), df$units[1])), xaxis = list(title = ""),
+             legend = list(orientation = "h", y = 1.08), margin = list(t = 56, b = 40),
+             title = list(
+               text = paste0("STL — ", analyte_display(main_a()),
+                             "<br><span style='font-size:11px;color:#9aa4ad'>",
+                             n_real, " of ", n_tot, " months real · ", n_fill, " interpolated before decomposition</span>"),
+               font = list(size = 14), x = 0, xanchor = "left"))
     p1 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_STL"))
   }, mode()) })
 
