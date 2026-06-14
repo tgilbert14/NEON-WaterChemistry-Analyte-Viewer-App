@@ -66,6 +66,24 @@ aqua_theme <- bs_theme(
     .preset-reason { background: rgba(14,124,155,.06); border-left:3px solid var(--bs-primary);
                      padding:.5rem .75rem; border-radius:.3rem; font-size:.86rem; margin-bottom:.4rem; }
 
+    /* --- interaction feedback (the front half of the loading loop) --- */
+    /* every tappable control acknowledges the press instantly, before the server replies */
+    .btn:active, .vb-door:active { transform: translateY(1px) scale(.985); filter: brightness(.96); }
+    /* full-screen 'working' veil raised CLIENT-SIDE on heavy interactions (site/analyte/map…) */
+    #wcOverlay { display:none; position:fixed; inset:0; z-index:6000; background:rgba(251,253,254,.84);
+                 align-items:center; justify-content:center; flex-direction:column; gap:.7rem; }
+    #wcOverlay .wc-spin { width:46px; height:46px; border:4px solid rgba(14,124,155,.2); border-top-color:#0E7C9B;
+                          border-radius:50%; animation:wcspin .8s linear infinite; }
+    #wcOverlay .wc-msg { font-weight:600; color:#0E7C9B; letter-spacing:.2px; }
+    @keyframes wcspin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #wcOverlay .wc-spin { animation:none; } }
+    /* sticky current-selection breadcrumb, visible above the tabs at every width */
+    .armed-bar { position:sticky; top:0; z-index:20; background:rgba(14,124,155,.08);
+                 border:1px solid rgba(14,124,155,.16); border-radius:.5rem; padding:.4rem .75rem;
+                 margin:.1rem 0 .7rem; font-size:.85rem; color:#0a5f78; font-weight:600;
+                 display:flex; align-items:center; gap:.45rem; }
+    .armed-bar .bi { color:#0E7C9B; flex:none; }
+
     /* --- subtle water motion (tasteful, not gaudy) --- */
     .navbar, .bslib-page-navbar > .navbar {
       background-image: linear-gradient(110deg,#0a5f78 0%,#0E7C9B 28%,#1aa0c0 50%,#0E7C9B 72%,#0a5f78 100%) !important;
@@ -162,6 +180,21 @@ $(document).on('shiny:connected', function(){
 Shiny.addCustomMessageHandler('neon_set_seen', function(x){ try{ localStorage.setItem('neon_seen','1'); }catch(e){} });
 window.addEventListener('resize', function(){ clearTimeout(window.__rt);
   window.__rt=setTimeout(function(){ Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'}); },250); });
+
+/* ---- client-side 'working' veil ----------------------------------------
+   A site/analyte/date/map change kicks off recompute on the worker; the
+   per-output withSpinner can't paint until that work starts, so raise a veil
+   on the GESTURE and clear it when Shiny goes idle (work finished). */
+var wcSafety=null;
+function wcVeilOn(){ var o=document.getElementById('wcOverlay'); if(!o) return;
+  o.style.display='flex';
+  if(navigator.vibrate){ try{ navigator.vibrate(12); }catch(e){} }
+  clearTimeout(wcSafety); wcSafety=setTimeout(wcVeilOff, 30000); }   /* never stick */
+function wcVeilOff(){ var o=document.getElementById('wcOverlay'); if(o) o.style.display='none'; clearTimeout(wcSafety); }
+var WC_HEAVY=['site','analyte_main','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','color_mode','swap','full_range'];
+$(document).on('shiny:inputchanged', function(e){ if(WC_HEAVY.indexOf(e.name)>=0) wcVeilOn(); });
+$(document).on('mousedown', '#map', function(){ wcVeilOn(); });   /* map dot -> select + jump */
+$(document).on('shiny:idle', function(){ wcVeilOff(); });
 ")
 
 #======================================================================
@@ -178,6 +211,9 @@ ui <- page_sidebar(
   fillable = FALSE,
   tags$head(tags$script(APP_JS),
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1")),
+
+  # client-side 'working' overlay (shown on heavy interactions, hidden on idle)
+  tags$div(id = "wcOverlay", tags$div(class = "wc-spin"), tags$div(class = "wc-msg", "Updating…")),
 
   sidebar = sidebar(
     title = "Controls", width = 340, open = "desktop",
@@ -209,6 +245,9 @@ ui <- page_sidebar(
   # Summary strip
   uiOutput("summary_strip"),
 
+  # always-visible "what am I looking at" breadcrumb (the sidebar copy is hidden on phones)
+  div(class = "armed-bar", bs_icon("crosshair"), textOutput("armed_top", inline = TRUE)),
+
   navset_card_tab(
     id = "main_tabs",
     nav_panel(
@@ -217,7 +256,7 @@ ui <- page_sidebar(
         card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                         span("Pick a site to explore"),
                         span(class = "scope-note d-none d-md-inline",
-                             "Markers are coloured by the main analyte's site average — click any marker"))),
+                             "Markers are coloured by the main analyte's site average — tap any marker"))),
         withSpinner(plotlyOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         card_footer(class = "scope-note", uiOutput("map_footer")))
     ),
@@ -284,7 +323,8 @@ ui <- page_sidebar(
                               selected = "spearman"),
                             help_pop("spearman", "Spearman vs Pearson"), info_link("info_correlations")))),
         withSpinner(plotlyOutput("cor_lolli", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
-        div(style = "min-height:340px; overflow-x:auto", DTOutput("cor_table")),
+        div(style = "min-height:340px; overflow-x:auto",
+            withSpinner(DTOutput("cor_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
         card_footer(class = "scope-note", HTML(
           "Top 18 shown above (full list in the table). <b style='color:#0E7C9B'>Teal</b> = reliable (n ≥ 8),
            <b style='color:#9aa0a6'>grey</b> = fewer than 8 paired samples. Computed on co-sampled dates only;
@@ -335,7 +375,7 @@ server <- function(input, output, session) {
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
         tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
         tags$ol(
-          tags$li(HTML("<b>Click a site on the map</b> (coloured by the analyte) — or use the sidebar — to begin.")),
+          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte) — or use the sidebar — to begin.")),
           tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against — or start from a preset.")),
           tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons."))),
         tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled for instant results.")),
@@ -451,11 +491,13 @@ server <- function(input, output, session) {
     if (length(hit)) names(PRESETS)[hit[1]] else NA_character_
   })
 
-  output$armed <- renderText({
+  armed_txt <- reactive({
     sp <- dates_d()
     paste0(input$site, " · ", format(sp[1], "%Y"), "–", format(sp[2], "%Y"), " · ",
            analyte_display(main_a()), " vs ", analyte_display(sec_a()))
   })
+  output$armed     <- renderText(armed_txt())
+  output$armed_top <- renderText(armed_txt())
 
   output$preset_reason <- renderUI({
     pm <- preset_match(); if (is.na(pm)) return(NULL)
@@ -466,7 +508,7 @@ server <- function(input, output, session) {
     txt <- if (identical(input$ts_mode, "dual"))
       "Two independent y-axes (left = main, right = secondary, colour-matched). Lines tracking each other does not by itself imply correlation — test it on the Relationship tab."
     else
-      "Each series is standardized to mean 0, SD 1 so you compare shape, not magnitude. Raw values are in the hover and on the Data tab."
+      "Each series is standardized to mean 0, SD 1 so you compare shape, not magnitude. Raw values are on the Data tab (or hover/tap a point)."
     div(class = "scope-note", style = "margin:.1rem 0 .4rem", txt)
   })
 
@@ -518,15 +560,17 @@ server <- function(input, output, session) {
         add_trace(data = dA, x = ~collectDate, y = ~value, type = "scatter", mode = "markers+lines",
                   name = analyte_display(A), line = list(color = COL$main, width = 2),
                   marker = list(color = COL$main, size = 7),
-                  hovertemplate = paste0("<b>", analyte_display(A), "</b><br>%{x|%b %d, %Y}<br>%{y} ",
+                  hovertemplate = paste0("<b>", analyte_display(A), "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ",
                                          pretty_unit(unitA, A), "<extra></extra>")) |>
         add_trace(data = dB, x = ~collectDate, y = ~value, yaxis = "y2", type = "scatter", mode = "markers+lines",
                   name = analyte_display(B), line = list(color = COL$secondary, width = 2),
                   marker = list(color = COL$secondary, size = 7),
-                  hovertemplate = paste0("<b>", analyte_display(B), "</b><br>%{x|%b %d, %Y}<br>%{y} ",
+                  hovertemplate = paste0("<b>", analyte_display(B), "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ",
                                          pretty_unit(unitB, B), "<extra></extra>")) |>
         layout(
-          xaxis = list(title = "", type = "date"),
+          hovermode = "x unified",
+          xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
+                       spikethickness = 1, spikecolor = "#9aa7b0", spikedash = "dot"),
           yaxis  = list(title = list(text = axis_title(A, unitA), font = list(color = COL$main)),
                         tickfont = list(color = COL$main)),
           yaxis2 = list(title = list(text = axis_title(B, unitB), font = list(color = COL$secondary)),
@@ -942,8 +986,11 @@ server <- function(input, output, session) {
     pal <- setNames(c(COL$main, COL$secondary), c(lab(s1), lab(s2)))
     plot_ly(df, x = ~collectDate, y = ~value, color = ~siteLab, colors = pal,
             type = "scatter", mode = "markers+lines", marker = list(size = 6), line = list(width = 2),
-            hovertemplate = ~paste0("<b>", siteLab, "</b><br>%{x|%b %d, %Y}<br>%{y} ", pretty_unit(unit, A), "<extra></extra>")) |>
-      layout(yaxis = list(title = axis_title(A, unit)), xaxis = list(title = "", type = "date"),
+            hovertemplate = ~paste0("<b>", siteLab, "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ", pretty_unit(unit, A), "<extra></extra>")) |>
+      layout(hovermode = "x unified",
+             yaxis = list(title = axis_title(A, unit)),
+             xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
+                          spikethickness = 1, spikecolor = "#9aa7b0", spikedash = "dot"),
              legend = list(orientation = "h", y = 1.1), margin = list(t = 30),
              title = list(text = paste0(analyte_display(A), " — two sites"), font = list(size = 14), x = 0, xanchor = "left")) |>
       plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
@@ -972,7 +1019,7 @@ server <- function(input, output, session) {
                                    line = list(width = ifelse(no_v$sel, 2.2, .4),
                                                color = ifelse(no_v$sel, COL$secondary, "white"))),
                      text = ~paste0("<b>", siteName, "</b><br>", site, "<br>no ", analyte_display(ana),
-                                    " in this window<br><i>click to select &amp; compare</i>"), hoverinfo = "text")
+                                    " in this window<br><i>tap to select &amp; compare</i>"), hoverinfo = "text")
     if (nrow(has_v))
       p <- add_trace(p, data = has_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
                      customdata = ~site, showlegend = FALSE,
@@ -984,14 +1031,14 @@ server <- function(input, output, session) {
                                                color = ifelse(has_v$sel, COL$secondary, "white"))),
                      text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",
                                     analyte_display(ana), ": ", signif(avg, 3), " ", unit, " (avg, n=", nobs, ")",
-                                    "<br><i>click to select &amp; compare</i>"), hoverinfo = "text")
+                                    "<br><i>tap to select &amp; compare</i>"), hoverinfo = "text")
     p |> layout(geo = geo, margin = list(t = 0, b = 0, l = 0, r = 0)) |>
       event_register("plotly_click") |> plotly_theme(mode(), narrow()) |> plotly_clean("neon_sites_map")
   }, mode()) })
 
   output$map_footer <- renderUI({
     HTML(sprintf("Markers coloured by the average <b>%s</b> at each site over the selected window (darker = higher);
-                  grey = not measured there. The selected site is ringed. <b>Click any marker</b> to choose it and
+                  grey = not measured there. The selected site is ringed. <b>Tap any marker</b> to choose it and
                   jump to the comparison.", analyte_display(main_a())))
   })
 
