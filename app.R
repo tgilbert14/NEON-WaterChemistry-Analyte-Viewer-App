@@ -972,7 +972,7 @@ server <- function(input, output, session) {
                                    line = list(width = ifelse(no_v$sel, 2.2, .4),
                                                color = ifelse(no_v$sel, COL$secondary, "white"))),
                      text = ~paste0("<b>", siteName, "</b><br>", site, "<br>no ", analyte_display(ana),
-                                    " in this window<br><i>click to select</i>"), hoverinfo = "text")
+                                    " in this window<br><i>click to select &amp; compare</i>"), hoverinfo = "text")
     if (nrow(has_v))
       p <- add_trace(p, data = has_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
                      customdata = ~site, showlegend = FALSE,
@@ -984,7 +984,7 @@ server <- function(input, output, session) {
                                                color = ifelse(has_v$sel, COL$secondary, "white"))),
                      text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",
                                     analyte_display(ana), ": ", signif(avg, 3), " ", unit, " (avg, n=", nobs, ")",
-                                    "<br><i>click to select</i>"), hoverinfo = "text")
+                                    "<br><i>click to select &amp; compare</i>"), hoverinfo = "text")
     p |> layout(geo = geo, margin = list(t = 0, b = 0, l = 0, r = 0)) |>
       event_register("plotly_click") |> plotly_theme(mode(), narrow()) |> plotly_clean("neon_sites_map")
   }, mode()) })
