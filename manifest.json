@@ -1,7 +1,7 @@
 {
   "version": 1,
   "locale": "en_US",
-  "platform": "4.3.1",
+  "platform": "4.5.2",
   "metadata": {
     "appmode": "shiny",
     "primary_rmd": null,
@@ -34,7 +34,7 @@
         "Maintainer": "Garrick Aden-Buie <garrick@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-09-02 22:00:06 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 22:15:15 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 03:49:16 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "DT",
         "RemoteRef": "DT",
@@ -66,7 +66,7 @@
         "Maintainer": "Winston Chang <winston@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-02-15 00:50:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 00:22:31 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:26 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "R6",
         "RemoteRef": "R6",
@@ -92,7 +92,12 @@
         "NeedsCompilation": "no",
         "Repository": "CRAN",
         "Date/Publication": "2022-04-03 19:20:13 UTC",
-        "Built": "R 4.3.0; ; 2023-04-15 00:42:01 UTC; windows"
+        "Built": "R 4.5.2; ; 2025-11-01 00:30:56 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "RColorBrewer",
+        "RemoteRef": "RColorBrewer",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.1-3"
       }
     },
     "Rcpp": {
@@ -121,7 +126,7 @@
         "Maintainer": "Dirk Eddelbuettel <edd@debian.org>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-10 09:50:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:10:53 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:25 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "Rcpp",
@@ -159,8 +164,13 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-11-14 19:50:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-06 14:40:04 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "S7",
+        "RemoteRef": "S7",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.2.1"
       }
     },
     "askpass": {
@@ -187,8 +197,13 @@
         "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2024-10-04 07:20:03 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 01:06:11 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:54 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "askpass",
+        "RemoteRef": "askpass",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.2.1"
       }
     },
     "base64enc": {
@@ -211,7 +226,7 @@
         "Packaged": "2026-02-02 01:51:07 UTC; rforge",
         "Repository": "CRAN",
         "Date/Publication": "2026-02-02 06:31:10 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 20:15:33 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-06 00:51:45 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "base64enc",
@@ -245,7 +260,7 @@
         "Maintainer": "Michael Chirico <MichaelChirico4@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-03-06 10:50:01 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 00:22:45 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:27 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "bit",
@@ -280,7 +295,7 @@
         "Maintainer": "Michael Chirico <michaelchirico4@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-01-16 16:00:07 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 01:06:11 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:56 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "bit64",
@@ -313,7 +328,12 @@
         "Maintainer": "Carson Sievert <carson@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2023-11-04 00:30:05 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 01:06:42 UTC; windows"
+        "Built": "R 4.5.3; ; 2026-05-14 17:25:39 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "bsicons",
+        "RemoteRef": "bsicons",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.1.2"
       }
     },
     "bslib": {
@@ -346,7 +366,7 @@
         "Maintainer": "Carson Sievert <carson@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-26 08:10:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:47:29 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 03:00:13 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "bslib",
         "RemoteRef": "bslib",
@@ -378,7 +398,7 @@
         "Maintainer": "Winston Chang <winston@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-05-16 09:50:11 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 01:06:11 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:53 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "cachem",
@@ -412,7 +432,7 @@
         "Maintainer": "Gábor Csárdi <gabor@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-04-23 13:50:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 20:21:36 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:23 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "cli",
@@ -447,7 +467,12 @@
         "Maintainer": "Matthew Lincoln <matthew.d.lincoln@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2022-02-22 00:58:45 UTC",
-        "Built": "R 4.3.1; ; 2023-08-17 00:41:56 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:26 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "clipr",
+        "RemoteRef": "clipr",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.8.0"
       }
     },
     "commonmark": {
@@ -473,8 +498,13 @@
         "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-07-07 13:40:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-05 19:21:13 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "commonmark",
+        "RemoteRef": "commonmark",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "2.0.0"
       }
     },
     "cpp11": {
@@ -503,7 +533,7 @@
         "Maintainer": "Davis Vaughan <davis@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-20 15:20:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 20:22:43 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:28 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "cpp11",
         "RemoteRef": "cpp11",
@@ -535,7 +565,7 @@
         "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2024-06-20 13:00:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 00:22:31 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:26 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "crayon",
         "RemoteRef": "crayon",
@@ -567,7 +597,7 @@
         "Maintainer": "Carson Sievert <carson@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-08-26 23:50:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:47:48 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:16 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "crosstalk",
         "RemoteRef": "crosstalk",
@@ -601,7 +631,7 @@
         "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-08-19 22:40:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 20:23:05 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:37 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "curl",
@@ -634,7 +664,7 @@
         "Maintainer": "Tyson Barrett <t.barrett88@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-27 11:40:15 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 20:24:14 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "data.table",
@@ -667,7 +697,7 @@
         "Maintainer": "Dirk Eddelbuettel <edd@debian.org>",
         "Repository": "CRAN",
         "Date/Publication": "2025-11-19 13:20:08 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 20:25:53 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "digest",
@@ -683,7 +713,7 @@
         "Type": "Package",
         "Package": "dplyr",
         "Title": "A Grammar of Data Manipulation",
-        "Version": "1.2.0",
+        "Version": "1.2.1",
         "Authors@R": "c(\n    person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = c(\"aut\", \"cre\"),\n           comment = c(ORCID = \"0000-0003-4757-117X\")),\n    person(\"Romain\", \"François\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-2444-4226\")),\n    person(\"Lionel\", \"Henry\", role = \"aut\"),\n    person(\"Kirill\", \"Müller\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-1416-3412\")),\n    person(\"Davis\", \"Vaughan\", , \"davis@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0003-4777-038X\")),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"))\n  )",
         "Description": "A fast, consistent tool for working with data frame like\n    objects, both in memory and out of memory.",
         "License": "MIT + file LICENSE",
@@ -700,18 +730,18 @@
         "LazyData": "true",
         "RoxygenNote": "7.3.3",
         "NeedsCompilation": "yes",
-        "Packaged": "2026-01-30 23:05:30 UTC; hadleywickham",
+        "Packaged": "2026-04-02 19:51:05 UTC; hadleywickham",
         "Author": "Hadley Wickham [aut, cre] (ORCID:\n    <https://orcid.org/0000-0003-4757-117X>),\n  Romain François [aut] (ORCID: <https://orcid.org/0000-0002-2444-4226>),\n  Lionel Henry [aut],\n  Kirill Müller [aut] (ORCID: <https://orcid.org/0000-0002-1416-3412>),\n  Davis Vaughan [aut] (ORCID: <https://orcid.org/0000-0003-4777-038X>),\n  Posit Software, PBC [cph, fnd]",
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2026-02-03 08:50:47 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:14:41 UTC; windows",
+        "Date/Publication": "2026-04-03 07:30:08 UTC",
+        "Built": "R 4.5.3; x86_64-w64-mingw32; 2026-04-22 02:55:26 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "dplyr",
         "RemoteRef": "dplyr",
         "RemoteRepos": "https://cran.rstudio.com",
-        "RemoteSha": "1.2.0"
+        "RemoteSha": "1.2.1"
       }
     },
     "evaluate": {
@@ -739,7 +769,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-08-27 16:40:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:06:15 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:27 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "evaluate",
         "RemoteRef": "evaluate",
@@ -770,8 +800,13 @@
         "Maintainer": "Thomas Lin Pedersen <thomas.pedersen@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-05-13 09:33:09 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2024-10-02 00:35:10 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:27 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "farver",
+        "RemoteRef": "farver",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "2.1.2"
       }
     },
     "fastmap": {
@@ -795,7 +830,7 @@
         "Maintainer": "Winston Chang <winston@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-05-15 09:00:07 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 00:22:31 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:27 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "fastmap",
@@ -830,7 +865,7 @@
         "Maintainer": "Richard Iannone <rich@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-11-16 17:30:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 01:30:58 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:16 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "fontawesome",
         "RemoteRef": "fontawesome",
@@ -868,8 +903,13 @@
         "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-04-12 10:40:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-05 19:22:24 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "fs",
+        "RemoteRef": "fs",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.6.6"
       }
     },
     "generics": {
@@ -897,7 +937,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-05-09 23:50:06 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:06:43 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:26 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "generics",
         "RemoteRef": "generics",
@@ -911,7 +951,7 @@
       "description": {
         "Package": "ggplot2",
         "Title": "Create Elegant Data Visualisations Using the Grammar of Graphics",
-        "Version": "4.0.2",
+        "Version": "4.0.3",
         "Authors@R": "c(\n    person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0003-4757-117X\")),\n    person(\"Winston\", \"Chang\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-1576-2126\")),\n    person(\"Lionel\", \"Henry\", role = \"aut\"),\n    person(\"Thomas Lin\", \"Pedersen\", , \"thomas.pedersen@posit.co\", role = c(\"aut\", \"cre\"),\n           comment = c(ORCID = \"0000-0002-5147-4711\")),\n    person(\"Kohske\", \"Takahashi\", role = \"aut\"),\n    person(\"Claus\", \"Wilke\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-7470-9261\")),\n    person(\"Kara\", \"Woo\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-5125-4188\")),\n    person(\"Hiroaki\", \"Yutani\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-3385-7233\")),\n    person(\"Dewey\", \"Dunnington\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-9415-4582\")),\n    person(\"Teun\", \"van den Brand\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-9335-7468\")),\n    person(\"Posit, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\"))\n  )",
         "Description": "A system for 'declaratively' creating graphics, based on \"The\n    Grammar of Graphics\". You provide the data, tell 'ggplot2' how to map\n    variables to aesthetics, what graphical primitives to use, and it\n    takes care of the details.",
         "License": "MIT + file LICENSE",
@@ -930,12 +970,17 @@
         "RoxygenNote": "7.3.3",
         "Collate": "'ggproto.R' 'ggplot-global.R' 'aaa-.R'\n'aes-colour-fill-alpha.R' 'aes-evaluation.R'\n'aes-group-order.R' 'aes-linetype-size-shape.R'\n'aes-position.R' 'all-classes.R' 'compat-plyr.R' 'utilities.R'\n'aes.R' 'annotation-borders.R' 'utilities-checks.R'\n'legend-draw.R' 'geom-.R' 'annotation-custom.R'\n'annotation-logticks.R' 'scale-type.R' 'layer.R'\n'make-constructor.R' 'geom-polygon.R' 'geom-map.R'\n'annotation-map.R' 'geom-raster.R' 'annotation-raster.R'\n'annotation.R' 'autolayer.R' 'autoplot.R' 'axis-secondary.R'\n'backports.R' 'bench.R' 'bin.R' 'coord-.R' 'coord-cartesian-.R'\n'coord-fixed.R' 'coord-flip.R' 'coord-map.R' 'coord-munch.R'\n'coord-polar.R' 'coord-quickmap.R' 'coord-radial.R'\n'coord-sf.R' 'coord-transform.R' 'data.R' 'docs_layer.R'\n'facet-.R' 'facet-grid-.R' 'facet-null.R' 'facet-wrap.R'\n'fortify-map.R' 'fortify-models.R' 'fortify-spatial.R'\n'fortify.R' 'stat-.R' 'geom-abline.R' 'geom-rect.R'\n'geom-bar.R' 'geom-tile.R' 'geom-bin2d.R' 'geom-blank.R'\n'geom-boxplot.R' 'geom-col.R' 'geom-path.R' 'geom-contour.R'\n'geom-point.R' 'geom-count.R' 'geom-crossbar.R'\n'geom-segment.R' 'geom-curve.R' 'geom-defaults.R'\n'geom-ribbon.R' 'geom-density.R' 'geom-density2d.R'\n'geom-dotplot.R' 'geom-errorbar.R' 'geom-freqpoly.R'\n'geom-function.R' 'geom-hex.R' 'geom-histogram.R'\n'geom-hline.R' 'geom-jitter.R' 'geom-label.R'\n'geom-linerange.R' 'geom-pointrange.R' 'geom-quantile.R'\n'geom-rug.R' 'geom-sf.R' 'geom-smooth.R' 'geom-spoke.R'\n'geom-text.R' 'geom-violin.R' 'geom-vline.R'\n'ggplot2-package.R' 'grob-absolute.R' 'grob-dotstack.R'\n'grob-null.R' 'grouping.R' 'properties.R' 'margins.R'\n'theme-elements.R' 'guide-.R' 'guide-axis.R'\n'guide-axis-logticks.R' 'guide-axis-stack.R'\n'guide-axis-theta.R' 'guide-legend.R' 'guide-bins.R'\n'guide-colorbar.R' 'guide-colorsteps.R' 'guide-custom.R'\n'guide-none.R' 'guide-old.R' 'guides-.R' 'guides-grid.R'\n'hexbin.R' 'import-standalone-obj-type.R'\n'import-standalone-types-check.R' 'labeller.R' 'labels.R'\n'layer-sf.R' 'layout.R' 'limits.R' 'performance.R'\n'plot-build.R' 'plot-construction.R' 'plot-last.R' 'plot.R'\n'position-.R' 'position-collide.R' 'position-dodge.R'\n'position-dodge2.R' 'position-identity.R' 'position-jitter.R'\n'position-jitterdodge.R' 'position-nudge.R' 'position-stack.R'\n'quick-plot.R' 'reshape-add-margins.R' 'save.R' 'scale-.R'\n'scale-alpha.R' 'scale-binned.R' 'scale-brewer.R'\n'scale-colour.R' 'scale-continuous.R' 'scale-date.R'\n'scale-discrete-.R' 'scale-expansion.R' 'scale-gradient.R'\n'scale-grey.R' 'scale-hue.R' 'scale-identity.R'\n'scale-linetype.R' 'scale-linewidth.R' 'scale-manual.R'\n'scale-shape.R' 'scale-size.R' 'scale-steps.R' 'scale-view.R'\n'scale-viridis.R' 'scales-.R' 'stat-align.R' 'stat-bin.R'\n'stat-summary-2d.R' 'stat-bin2d.R' 'stat-bindot.R'\n'stat-binhex.R' 'stat-boxplot.R' 'stat-connect.R'\n'stat-contour.R' 'stat-count.R' 'stat-density-2d.R'\n'stat-density.R' 'stat-ecdf.R' 'stat-ellipse.R'\n'stat-function.R' 'stat-identity.R' 'stat-manual.R'\n'stat-qq-line.R' 'stat-qq.R' 'stat-quantilemethods.R'\n'stat-sf-coordinates.R' 'stat-sf.R' 'stat-smooth-methods.R'\n'stat-smooth.R' 'stat-sum.R' 'stat-summary-bin.R'\n'stat-summary-hex.R' 'stat-summary.R' 'stat-unique.R'\n'stat-ydensity.R' 'summarise-plot.R' 'summary.R' 'theme.R'\n'theme-defaults.R' 'theme-current.R' 'theme-sub.R'\n'utilities-break.R' 'utilities-grid.R' 'utilities-help.R'\n'utilities-patterns.R' 'utilities-resolution.R'\n'utilities-tidy-eval.R' 'zxx.R' 'zzz.R'",
         "NeedsCompilation": "no",
-        "Packaged": "2026-02-02 09:44:19 UTC; thomas",
+        "Packaged": "2026-04-21 12:47:29 UTC; thomas",
         "Author": "Hadley Wickham [aut] (ORCID: <https://orcid.org/0000-0003-4757-117X>),\n  Winston Chang [aut] (ORCID: <https://orcid.org/0000-0002-1576-2126>),\n  Lionel Henry [aut],\n  Thomas Lin Pedersen [aut, cre] (ORCID:\n    <https://orcid.org/0000-0002-5147-4711>),\n  Kohske Takahashi [aut],\n  Claus Wilke [aut] (ORCID: <https://orcid.org/0000-0002-7470-9261>),\n  Kara Woo [aut] (ORCID: <https://orcid.org/0000-0002-5125-4188>),\n  Hiroaki Yutani [aut] (ORCID: <https://orcid.org/0000-0002-3385-7233>),\n  Dewey Dunnington [aut] (ORCID: <https://orcid.org/0000-0002-9415-4582>),\n  Teun van den Brand [aut] (ORCID:\n    <https://orcid.org/0000-0002-9335-7468>),\n  Posit, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
         "Maintainer": "Thomas Lin Pedersen <thomas.pedersen@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2026-02-03 08:50:23 UTC",
-        "Built": "R 4.3.1; ; 2026-02-06 14:42:34 UTC; windows"
+        "Date/Publication": "2026-04-22 09:10:03 UTC",
+        "Built": "R 4.5.3; ; 2026-04-25 18:08:55 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "ggplot2",
+        "RemoteRef": "ggplot2",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "4.0.3"
       }
     },
     "glue": {
@@ -965,7 +1010,7 @@
         "Maintainer": "Jennifer Bryan <jenny@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-09-30 22:30:01 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 00:22:29 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:23 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "glue",
@@ -1001,7 +1046,12 @@
         "Maintainer": "Thomas Lin Pedersen <thomas.pedersen@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-10-25 13:20:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 01:30:51 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:13 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "gtable",
+        "RemoteRef": "gtable",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.3.6"
       }
     },
     "highr": {
@@ -1029,7 +1079,7 @@
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
         "Date/Publication": "2024-05-26 20:00:03 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 01:06:10 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 02:25:56 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "highr",
         "RemoteRef": "highr",
@@ -1062,7 +1112,7 @@
         "Maintainer": "Kirill Müller <kirill@cynkra.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-10-17 05:10:11 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:48:59 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 03:00:12 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "hms",
         "RemoteRef": "hms",
@@ -1098,7 +1148,7 @@
         "Maintainer": "Carson Sievert <carson@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-12-04 11:50:09 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:24:16 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:56 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "htmltools",
@@ -1132,7 +1182,12 @@
         "Maintainer": "Carson Sievert <carson@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2023-12-06 06:00:06 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 02:34:10 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 03:32:43 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "htmlwidgets",
+        "RemoteRef": "htmlwidgets",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.6.4"
       }
     },
     "httpuv": {
@@ -1162,7 +1217,7 @@
         "Maintainer": "Winston Chang <winston@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-04-16 08:00:06 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:17:28 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 03:00:11 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "httpuv",
@@ -1177,26 +1232,31 @@
       "description": {
         "Package": "httr",
         "Title": "Tools for Working with URLs and HTTP",
-        "Version": "1.4.7",
-        "Authors@R": "c(\n    person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = c(\"aut\", \"cre\")),\n    person(\"Posit, PBC\", role = c(\"cph\", \"fnd\"))\n  )",
+        "Version": "1.4.8",
+        "Authors@R": "c(\n    person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = c(\"aut\", \"cre\")),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"))\n  )",
         "Description": "Useful tools for working with HTTP organised by HTTP verbs\n    (GET(), POST(), etc). Configuration functions make it easy to control\n    additional request components (authenticate(), add_headers() and so\n    on).",
         "License": "MIT + file LICENSE",
         "URL": "https://httr.r-lib.org/, https://github.com/r-lib/httr",
         "BugReports": "https://github.com/r-lib/httr/issues",
-        "Depends": "R (>= 3.5)",
-        "Imports": "curl (>= 5.0.2), jsonlite, mime, openssl (>= 0.8), R6",
+        "Depends": "R (>= 3.6)",
+        "Imports": "curl (>= 5.1.0), jsonlite, mime, openssl (>= 0.8), R6",
         "Suggests": "covr, httpuv, jpeg, knitr, png, readr, rmarkdown, testthat\n(>= 0.8.0), xml2",
         "VignetteBuilder": "knitr",
         "Config/Needs/website": "tidyverse/tidytemplate",
         "Encoding": "UTF-8",
-        "RoxygenNote": "7.2.3",
+        "RoxygenNote": "7.3.3",
         "NeedsCompilation": "no",
-        "Packaged": "2023-08-15 02:56:56 UTC; hadleywickham",
-        "Author": "Hadley Wickham [aut, cre],\n  Posit, PBC [cph, fnd]",
+        "Packaged": "2026-02-13 13:25:45 UTC; hadleywickham",
+        "Author": "Hadley Wickham [aut, cre],\n  Posit Software, PBC [cph, fnd]",
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2023-08-15 09:00:02 UTC",
-        "Built": "R 4.3.1; ; 2023-09-19 02:16:47 UTC; windows"
+        "Date/Publication": "2026-02-13 16:20:15 UTC",
+        "Built": "R 4.5.3; ; 2026-04-22 02:14:57 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "httr",
+        "RemoteRef": "httr",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.4.8"
       }
     },
     "isoband": {
@@ -1227,7 +1287,7 @@
         "Maintainer": "Thomas Lin Pedersen <thomas.pedersen@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-12-07 06:10:07 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:24:34 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:56 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "isoband",
@@ -1257,7 +1317,12 @@
         "Maintainer": "Carson Sievert <carson@rstudio.com>",
         "Repository": "CRAN",
         "Date/Publication": "2021-04-26 17:10:02 UTC",
-        "Built": "R 4.3.1; ; 2023-08-17 02:01:17 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:14 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "jquerylib",
+        "RemoteRef": "jquerylib",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.1.4"
       }
     },
     "jsonlite": {
@@ -1283,7 +1348,7 @@
         "Author": "Jeroen Ooms [aut, cre] (<https://orcid.org/0000-0002-4035-0289>),\n  Duncan Temple Lang [ctb],\n  Lloyd Hilaiel [cph] (author of bundled libyajl)",
         "Repository": "CRAN",
         "Date/Publication": "2025-03-27 06:40:02 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 00:22:30 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "jsonlite",
@@ -1319,7 +1384,7 @@
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
         "Date/Publication": "2025-12-20 14:30:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:25:22 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:14 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "knitr",
         "RemoteRef": "knitr",
@@ -1346,7 +1411,12 @@
         "Packaged": "2023-08-29 21:01:57 UTC; loki",
         "Repository": "CRAN",
         "Date/Publication": "2023-08-29 22:20:02 UTC",
-        "Built": "R 4.3.1; ; 2023-10-20 00:51:12 UTC; windows"
+        "Built": "R 4.5.2; ; 2025-11-01 00:30:56 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "labeling",
+        "RemoteRef": "labeling",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.4.3"
       }
     },
     "later": {
@@ -1356,7 +1426,7 @@
         "Type": "Package",
         "Package": "later",
         "Title": "Utilities for Scheduling Functions to Execute Later with Event\nLoops",
-        "Version": "1.4.5",
+        "Version": "1.4.6",
         "Authors@R": "c(\n    person(\"Winston\", \"Chang\", , \"winston@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-1576-2126\")),\n    person(\"Joe\", \"Cheng\", , \"joe@posit.co\", role = \"aut\"),\n    person(\"Charlie\", \"Gao\", , \"charlie.gao@posit.co\", role = c(\"aut\", \"cre\"),\n           comment = c(ORCID = \"0000-0002-0750-061X\")),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\")),\n    person(\"Marcus\", \"Geelnard\", role = c(\"ctb\", \"cph\"),\n           comment = \"TinyCThread library, https://tinycthread.github.io/\"),\n    person(\"Evan\", \"Nemerson\", role = c(\"ctb\", \"cph\"),\n           comment = \"TinyCThread library, https://tinycthread.github.io/\")\n  )",
         "Description": "Executes arbitrary R or C functions some time after the\n    current time, after the R execution stack has emptied. The functions\n    are scheduled in an event loop.",
         "License": "MIT + file LICENSE",
@@ -1374,18 +1444,18 @@
         "Encoding": "UTF-8",
         "RoxygenNote": "7.3.3",
         "NeedsCompilation": "yes",
-        "Packaged": "2026-01-07 15:27:55 UTC; shikokuchuo",
+        "Packaged": "2026-02-13 17:08:44 UTC; cg334",
         "Author": "Winston Chang [aut] (ORCID: <https://orcid.org/0000-0002-1576-2126>),\n  Joe Cheng [aut],\n  Charlie Gao [aut, cre] (ORCID: <https://orcid.org/0000-0002-0750-061X>),\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>),\n  Marcus Geelnard [ctb, cph] (TinyCThread library,\n    https://tinycthread.github.io/),\n  Evan Nemerson [ctb, cph] (TinyCThread library,\n    https://tinycthread.github.io/)",
         "Maintainer": "Charlie Gao <charlie.gao@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2026-01-08 06:11:06 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:25:33 UTC; windows",
+        "Date/Publication": "2026-02-13 18:00:08 UTC",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:57 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "later",
         "RemoteRef": "later",
         "RemoteRepos": "https://cran.rstudio.com",
-        "RemoteSha": "1.4.5"
+        "RemoteSha": "1.4.6"
       }
     },
     "lazyeval": {
@@ -1409,8 +1479,13 @@
         "Maintainer": "Hadley Wickham <hadley@rstudio.com>",
         "Repository": "CRAN",
         "Date/Publication": "2019-03-15 17:50:07 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2023-08-17 00:41:32 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:38 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "lazyeval",
+        "RemoteRef": "lazyeval",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.2.2"
       }
     },
     "lifecycle": {
@@ -1439,7 +1514,12 @@
         "Maintainer": "Lionel Henry <lionel@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-08 08:00:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-05 19:21:52 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 02:25:53 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "lifecycle",
+        "RemoteRef": "lifecycle",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.0.5"
       }
     },
     "lubridate": {
@@ -1473,7 +1553,7 @@
         "Author": "Vitalie Spinu [aut, cre],\n  Garrett Grolemund [aut],\n  Hadley Wickham [aut],\n  Davis Vaughan [ctb],\n  Ian Lyttle [ctb],\n  Imanuel Costigan [ctb],\n  Jason Law [ctb],\n  Doug Mitarotonda [ctb],\n  Joseph Larmarange [ctb],\n  Jonathan Boiser [ctb],\n  Chel Hee Lee [ctb]",
         "Repository": "CRAN",
         "Date/Publication": "2026-02-04 09:00:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:58:18 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:39:16 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "lubridate",
@@ -1508,7 +1588,7 @@
         "Maintainer": "Lionel Henry <lionel@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-09-12 07:20:14 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:07:05 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:24 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "magrittr",
@@ -1539,7 +1619,12 @@
         "Maintainer": "Winston Chang <winston@rstudio.com>",
         "Repository": "CRAN",
         "Date/Publication": "2021-11-26 16:11:10 UTC",
-        "Built": "R 4.3.1; ; 2023-08-17 01:36:45 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:16 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "memoise",
+        "RemoteRef": "memoise",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "2.0.1"
       }
     },
     "mime": {
@@ -1564,7 +1649,7 @@
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
         "Date/Publication": "2025-03-17 20:20:02 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-03-21 00:51:30 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2025-11-01 00:30:57 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "mime",
@@ -1598,7 +1683,7 @@
         "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-09-30 09:50:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:07:58 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:39:24 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "openssl",
@@ -1632,7 +1717,7 @@
         "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-08-29 13:30:07 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 20:15:13 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:27 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "otel",
         "RemoteRef": "otel",
@@ -1670,7 +1755,12 @@
         "Maintainer": "Kirill Müller <kirill@cynkra.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-09-17 11:20:02 UTC",
-        "Built": "R 4.3.1; ; 2026-01-26 19:58:47 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 03:00:07 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "pillar",
+        "RemoteRef": "pillar",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.11.1"
       }
     },
     "pkgconfig": {
@@ -1694,7 +1784,12 @@
         "Packaged": "2019-09-22 08:42:40 UTC; gaborcsardi",
         "Repository": "CRAN",
         "Date/Publication": "2019-09-22 09:20:02 UTC",
-        "Built": "R 4.3.1; ; 2023-08-17 00:41:30 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:24 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "pkgconfig",
+        "RemoteRef": "pkgconfig",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "2.0.3"
       }
     },
     "plotly": {
@@ -1722,7 +1817,7 @@
         "Maintainer": "Carson Sievert <cpsievert1@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-24 07:50:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 22:41:03 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 04:05:23 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "plotly",
         "RemoteRef": "plotly",
@@ -1752,7 +1847,7 @@
         "Maintainer": "Gabor Csardi <csardi.gabor@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2023-09-24 21:10:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 00:23:02 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:27 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "prettyunits",
         "RemoteRef": "prettyunits",
@@ -1785,7 +1880,7 @@
         "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2023-12-06 10:30:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 01:31:06 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 03:18:34 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "progress",
         "RemoteRef": "progress",
@@ -1822,7 +1917,7 @@
         "Maintainer": "Barret Schloerke <barret@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-11-01 06:30:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 22:00:08 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 02:39:16 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "promises",
         "RemoteRef": "promises",
@@ -1860,7 +1955,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-09 10:30:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:00:15 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 03:00:08 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "purrr",
@@ -1896,7 +1991,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-17 08:40:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:09:47 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:26 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "rappdirs",
@@ -1934,7 +2029,7 @@
         "Maintainer": "Jennifer Bryan <jenny@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-11-14 22:30:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:34:52 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-01-23 03:57:28 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "readr",
@@ -1972,7 +2067,7 @@
         "Maintainer": "Lionel Henry <lionel@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-09 12:10:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:14:37 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:27 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "rlang",
@@ -2009,7 +2104,7 @@
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
         "Date/Publication": "2025-09-28 11:30:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 22:23:18 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 03:18:37 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "rmarkdown",
         "RemoteRef": "rmarkdown",
@@ -2043,8 +2138,13 @@
         "Maintainer": "Carson Sievert <carson@rstudio.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-04-11 19:50:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-05 19:24:09 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:39:16 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "sass",
+        "RemoteRef": "sass",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.4.10"
       }
     },
     "scales": {
@@ -2074,7 +2174,12 @@
         "Maintainer": "Thomas Lin Pedersen <thomas.pedersen@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-04-24 11:00:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-06 14:40:14 UTC; windows"
+        "Built": "R 4.5.3; ; 2026-04-25 17:41:22 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "scales",
+        "RemoteRef": "scales",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.4.0"
       }
     },
     "shiny": {
@@ -2084,13 +2189,13 @@
         "Type": "Package",
         "Package": "shiny",
         "Title": "Web Application Framework for R",
-        "Version": "1.12.1",
+        "Version": "1.13.0",
         "Authors@R": "c(\n    person(\"Winston\", \"Chang\", , \"winston@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-1576-2126\")),\n    person(\"Joe\", \"Cheng\", , \"joe@posit.co\", role = \"aut\"),\n    person(\"JJ\", \"Allaire\", , \"jj@posit.co\", role = \"aut\"),\n    person(\"Carson\", \"Sievert\", , \"carson@posit.co\", role = c(\"aut\", \"cre\"),\n           comment = c(ORCID = \"0000-0002-4958-2844\")),\n    person(\"Barret\", \"Schloerke\", , \"barret@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0001-9986-114X\")),\n    person(\"Garrick\", \"Aden-Buie\", , \"garrick@adenbuie.com\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-7111-0077\")),\n    person(\"Yihui\", \"Xie\", , \"yihui@posit.co\", role = \"aut\"),\n    person(\"Jeff\", \"Allen\", role = \"aut\"),\n    person(\"Jonathan\", \"McPherson\", , \"jonathan@posit.co\", role = \"aut\"),\n    person(\"Alan\", \"Dipert\", role = \"aut\"),\n    person(\"Barbara\", \"Borges\", role = \"aut\"),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\")),\n    person(, \"jQuery Foundation\", role = \"cph\",\n           comment = \"jQuery library and jQuery UI library\"),\n    person(, \"jQuery contributors\", role = c(\"ctb\", \"cph\"),\n           comment = \"jQuery library; authors listed in inst/www/shared/jquery-AUTHORS.txt\"),\n    person(, \"jQuery UI contributors\", role = c(\"ctb\", \"cph\"),\n           comment = \"jQuery UI library; authors listed in inst/www/shared/jqueryui/AUTHORS.txt\"),\n    person(\"Mark\", \"Otto\", role = \"ctb\",\n           comment = \"Bootstrap library\"),\n    person(\"Jacob\", \"Thornton\", role = \"ctb\",\n           comment = \"Bootstrap library\"),\n    person(, \"Bootstrap contributors\", role = \"ctb\",\n           comment = \"Bootstrap library\"),\n    person(, \"Twitter, Inc\", role = \"cph\",\n           comment = \"Bootstrap library\"),\n    person(\"Prem Nawaz\", \"Khan\", role = \"ctb\",\n           comment = \"Bootstrap accessibility plugin\"),\n    person(\"Victor\", \"Tsaran\", role = \"ctb\",\n           comment = \"Bootstrap accessibility plugin\"),\n    person(\"Dennis\", \"Lembree\", role = \"ctb\",\n           comment = \"Bootstrap accessibility plugin\"),\n    person(\"Srinivasu\", \"Chakravarthula\", role = \"ctb\",\n           comment = \"Bootstrap accessibility plugin\"),\n    person(\"Cathy\", \"O'Connor\", role = \"ctb\",\n           comment = \"Bootstrap accessibility plugin\"),\n    person(, \"PayPal, Inc\", role = \"cph\",\n           comment = \"Bootstrap accessibility plugin\"),\n    person(\"Stefan\", \"Petre\", role = c(\"ctb\", \"cph\"),\n           comment = \"Bootstrap-datepicker library\"),\n    person(\"Andrew\", \"Rowls\", role = c(\"ctb\", \"cph\"),\n           comment = \"Bootstrap-datepicker library\"),\n    person(\"Brian\", \"Reavis\", role = c(\"ctb\", \"cph\"),\n           comment = \"selectize.js library\"),\n    person(\"Salmen\", \"Bejaoui\", role = c(\"ctb\", \"cph\"),\n           comment = \"selectize-plugin-a11y library\"),\n    person(\"Denis\", \"Ineshin\", role = c(\"ctb\", \"cph\"),\n           comment = \"ion.rangeSlider library\"),\n    person(\"Sami\", \"Samhuri\", role = c(\"ctb\", \"cph\"),\n           comment = \"Javascript strftime library\"),\n    person(, \"SpryMedia Limited\", role = c(\"ctb\", \"cph\"),\n           comment = \"DataTables library\"),\n    person(\"Ivan\", \"Sagalaev\", role = c(\"ctb\", \"cph\"),\n           comment = \"highlight.js library\"),\n    person(\"R Core Team\", role = c(\"ctb\", \"cph\"),\n           comment = \"tar implementation from R\")\n  )",
         "Description": "Makes it incredibly easy to build interactive web\n    applications with R. Automatic \"reactive\" binding between inputs and\n    outputs and extensive prebuilt widgets make it possible to build\n    beautiful, responsive, and powerful applications with minimal effort.",
-        "License": "GPL-3 | file LICENSE",
+        "License": "MIT + file LICENSE",
         "URL": "https://shiny.posit.co/, https://github.com/rstudio/shiny",
         "BugReports": "https://github.com/rstudio/shiny/issues",
-        "Depends": "methods, R (>= 3.0.2)",
+        "Depends": "methods, R (>= 3.1.2)",
         "Imports": "bslib (>= 0.6.0), cachem (>= 1.1.0), cli, commonmark (>=\n2.0.0), fastmap (>= 1.1.1), fontawesome (>= 0.4.0), glue (>=\n1.3.2), grDevices, htmltools (>= 0.5.4), httpuv (>= 1.5.2),\njsonlite (>= 0.9.16), later (>= 1.0.0), lifecycle (>= 0.2.0),\nmime (>= 0.3), otel, promises (>= 1.5.0), R6 (>= 2.0), rlang\n(>= 0.4.10), sourcetools, tools, utils, withr, xtable",
         "Suggests": "Cairo (>= 1.5-5), coro (>= 1.1.0), datasets, DT, dygraphs,\nfuture, ggplot2, knitr (>= 1.6), magrittr, markdown, mirai,\notelsdk (>= 0.2.0), ragg, reactlog (>= 1.0.0), rmarkdown, sass,\nshowtext, testthat (>= 3.2.1), watcher, yaml",
         "Config/Needs/check": "shinytest2",
@@ -2099,17 +2204,17 @@
         "RoxygenNote": "7.3.3",
         "Collate": "'globals.R' 'app-state.R' 'app_template.R' 'bind-cache.R'\n'bind-event.R' 'bookmark-state-local.R' 'bookmark-state.R'\n'bootstrap-deprecated.R' 'bootstrap-layout.R' 'conditions.R'\n'map.R' 'utils.R' 'bootstrap.R' 'busy-indicators-spinners.R'\n'busy-indicators.R' 'cache-utils.R' 'deprecated.R' 'devmode.R'\n'diagnose.R' 'extended-task.R' 'fileupload.R' 'graph.R'\n'reactives.R' 'reactive-domains.R' 'history.R' 'hooks.R'\n'html-deps.R' 'image-interact-opts.R' 'image-interact.R'\n'imageutils.R' 'input-action.R' 'input-checkbox.R'\n'input-checkboxgroup.R' 'input-date.R' 'input-daterange.R'\n'input-file.R' 'input-numeric.R' 'input-password.R'\n'input-radiobuttons.R' 'input-select.R' 'input-slider.R'\n'input-submit.R' 'input-text.R' 'input-textarea.R'\n'input-utils.R' 'insert-tab.R' 'insert-ui.R' 'jqueryui.R'\n'knitr.R' 'middleware-shiny.R' 'middleware.R' 'timer.R'\n'shiny.R' 'mock-session.R' 'modal.R' 'modules.R'\n'notifications.R' 'otel-attr-srcref.R' 'otel-collect.R'\n'otel-enable.R' 'otel-error.R' 'otel-label.R'\n'otel-reactive-update.R' 'otel-session.R' 'otel-shiny.R'\n'otel-with.R' 'priorityqueue.R' 'progress.R' 'react.R'\n'reexports.R' 'render-cached-plot.R' 'render-plot.R'\n'render-table.R' 'run-url.R' 'runapp.R' 'serializers.R'\n'server-input-handlers.R' 'server-resource-paths.R' 'server.R'\n'shiny-options.R' 'shiny-package.R' 'shinyapp.R' 'shinyui.R'\n'shinywrappers.R' 'showcase.R' 'snapshot.R' 'staticimports.R'\n'tar.R' 'test-export.R' 'test-server.R' 'test.R'\n'update-input.R' 'utils-lang.R' 'utils-tags.R'\n'version_bs_date_picker.R' 'version_ion_range_slider.R'\n'version_jquery.R' 'version_jqueryui.R' 'version_selectize.R'\n'version_strftime.R' 'viewer.R'",
         "NeedsCompilation": "no",
-        "Packaged": "2025-12-08 21:22:26 UTC; barret",
+        "Packaged": "2026-02-19 20:25:10 UTC; cpsievert",
         "Author": "Winston Chang [aut] (ORCID: <https://orcid.org/0000-0002-1576-2126>),\n  Joe Cheng [aut],\n  JJ Allaire [aut],\n  Carson Sievert [aut, cre] (ORCID:\n    <https://orcid.org/0000-0002-4958-2844>),\n  Barret Schloerke [aut] (ORCID: <https://orcid.org/0000-0001-9986-114X>),\n  Garrick Aden-Buie [aut] (ORCID:\n    <https://orcid.org/0000-0002-7111-0077>),\n  Yihui Xie [aut],\n  Jeff Allen [aut],\n  Jonathan McPherson [aut],\n  Alan Dipert [aut],\n  Barbara Borges [aut],\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>),\n  jQuery Foundation [cph] (jQuery library and jQuery UI library),\n  jQuery contributors [ctb, cph] (jQuery library; authors listed in\n    inst/www/shared/jquery-AUTHORS.txt),\n  jQuery UI contributors [ctb, cph] (jQuery UI library; authors listed in\n    inst/www/shared/jqueryui/AUTHORS.txt),\n  Mark Otto [ctb] (Bootstrap library),\n  Jacob Thornton [ctb] (Bootstrap library),\n  Bootstrap contributors [ctb] (Bootstrap library),\n  Twitter, Inc [cph] (Bootstrap library),\n  Prem Nawaz Khan [ctb] (Bootstrap accessibility plugin),\n  Victor Tsaran [ctb] (Bootstrap accessibility plugin),\n  Dennis Lembree [ctb] (Bootstrap accessibility plugin),\n  Srinivasu Chakravarthula [ctb] (Bootstrap accessibility plugin),\n  Cathy O'Connor [ctb] (Bootstrap accessibility plugin),\n  PayPal, Inc [cph] (Bootstrap accessibility plugin),\n  Stefan Petre [ctb, cph] (Bootstrap-datepicker library),\n  Andrew Rowls [ctb, cph] (Bootstrap-datepicker library),\n  Brian Reavis [ctb, cph] (selectize.js library),\n  Salmen Bejaoui [ctb, cph] (selectize-plugin-a11y library),\n  Denis Ineshin [ctb, cph] (ion.rangeSlider library),\n  Sami Samhuri [ctb, cph] (Javascript strftime library),\n  SpryMedia Limited [ctb, cph] (DataTables library),\n  Ivan Sagalaev [ctb, cph] (highlight.js library),\n  R Core Team [ctb, cph] (tar implementation from R)",
         "Maintainer": "Carson Sievert <carson@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2025-12-09 09:30:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 22:36:05 UTC; windows",
+        "Date/Publication": "2026-02-20 09:00:03 UTC",
+        "Built": "R 4.5.3; ; 2026-04-25 18:38:03 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "shiny",
         "RemoteRef": "shiny",
         "RemoteRepos": "https://cran.rstudio.com",
-        "RemoteSha": "1.12.1"
+        "RemoteSha": "1.13.0"
       }
     },
     "shinycssloaders": {
@@ -2135,7 +2240,7 @@
         "Maintainer": "Dean Attali <daattali@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2024-07-30 22:30:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 02:34:22 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 03:33:02 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "shinycssloaders",
         "RemoteRef": "shinycssloaders",
@@ -2164,8 +2269,13 @@
         "Packaged": "2023-01-31 18:03:04 UTC; kevin",
         "Repository": "CRAN",
         "Date/Publication": "2023-02-01 10:10:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2023-08-17 00:41:33 UTC; windows",
-        "Archs": "x64"
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:24 UTC; windows",
+        "Archs": "x64",
+        "RemoteType": "standard",
+        "RemotePkgRef": "sourcetools",
+        "RemoteRef": "sourcetools",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "0.1.7-1"
       }
     },
     "stringi": {
@@ -2195,7 +2305,7 @@
         "License_is_FOSS": "yes",
         "Repository": "CRAN",
         "Date/Publication": "2025-03-27 13:10:02 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-03-28 00:51:11 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2025-11-01 00:31:12 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "stringi",
@@ -2232,7 +2342,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-11-04 14:00:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 22:07:34 UTC; windows",
+        "Built": "R 4.5.3; ; 2026-04-25 18:08:54 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "stringr",
         "RemoteRef": "stringr",
@@ -2263,7 +2373,7 @@
         "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2024-10-04 09:40:02 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 00:22:39 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:27 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "sys",
@@ -2304,7 +2414,7 @@
         "Maintainer": "Kirill Müller <kirill@cynkra.com>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-11 10:10:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:08:01 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 03:18:31 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "tibble",
@@ -2342,7 +2452,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-12-19 09:20:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:36:43 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 03:49:13 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "tidyr",
@@ -2378,7 +2488,12 @@
         "Maintainer": "Lionel Henry <lionel@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-03-11 14:10:02 UTC",
-        "Built": "R 4.3.3; ; 2024-10-02 02:00:34 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 03:00:07 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "tidyselect",
+        "RemoteRef": "tidyselect",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.2.1"
       }
     },
     "timechange": {
@@ -2405,7 +2520,7 @@
         "Maintainer": "Vitalie Spinu <spinuvit@gmail.com>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-29 22:20:08 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:44:24 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:54 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "timechange",
@@ -2437,7 +2552,7 @@
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
         "Date/Publication": "2025-11-19 06:10:02 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:44:48 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 02:25:57 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "tinytex",
         "RemoteRef": "tinytex",
@@ -2471,7 +2586,7 @@
         "Maintainer": "Davis Vaughan <davis@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-03-15 22:50:02 UTC",
-        "Built": "R 4.3.3; x86_64-w64-mingw32; 2025-04-07 00:23:01 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:25:57 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "tzdb",
@@ -2504,7 +2619,7 @@
         "Maintainer": "Kirill Müller <kirill@cynkra.com>",
         "Repository": "CRAN",
         "Date/Publication": "2025-06-08 19:00:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:17:51 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:26 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "utf8",
@@ -2542,7 +2657,7 @@
         "Maintainer": "Davis Vaughan <davis@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-23 18:50:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:45:14 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 02:39:14 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "vctrs",
@@ -2575,7 +2690,7 @@
         "Author": "Simon Garnier [aut, cre],\n  Noam Ross [ctb, cph],\n  Bob Rudis [ctb, cph],\n  Marco Sciaini [ctb, cph],\n  Antônio Pedro Camargo [ctb, cph],\n  Cédric Scherer [ctb, cph]",
         "Repository": "CRAN",
         "Date/Publication": "2026-02-04 06:40:10 UTC",
-        "Built": "R 4.3.1; ; 2026-02-09 21:19:36 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:24 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "viridisLite",
         "RemoteRef": "viridisLite",
@@ -2615,7 +2730,7 @@
         "Maintainer": "Jennifer Bryan <jenny@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-27 11:40:02 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 22:31:27 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 03:32:41 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "vroom",
@@ -2651,7 +2766,7 @@
         "Maintainer": "Lionel Henry <lionel@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2024-10-28 13:30:02 UTC",
-        "Built": "R 4.3.3; ; 2025-04-07 00:22:31 UTC; windows",
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:24 UTC; windows",
         "RemoteType": "standard",
         "RemotePkgRef": "withr",
         "RemoteRef": "withr",
@@ -2684,7 +2799,7 @@
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
         "Date/Publication": "2026-01-18 06:10:03 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:20:08 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:28 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "xfun",
@@ -2715,7 +2830,12 @@
         "Packaged": "2019-04-21 10:56:51 UTC; dsco036",
         "Author": "David B. Dahl [aut],\n  David Scott [aut, cre],\n  Charles Roosen [aut],\n  Arni Magnusson [aut],\n  Jonathan Swinton [aut],\n  Ajay Shah [ctb],\n  Arne Henningsen [ctb],\n  Benno Puetz [ctb],\n  Bernhard Pfaff [ctb],\n  Claudio Agostinelli [ctb],\n  Claudius Loehnert [ctb],\n  David Mitchell [ctb],\n  David Whiting [ctb],\n  Fernando da Rosa [ctb],\n  Guido Gay [ctb],\n  Guido Schulz [ctb],\n  Ian Fellows [ctb],\n  Jeff Laake [ctb],\n  John Walker [ctb],\n  Jun Yan [ctb],\n  Liviu Andronic [ctb],\n  Markus Loecher [ctb],\n  Martin Gubri [ctb],\n  Matthieu Stigler [ctb],\n  Robert Castelo [ctb],\n  Seth Falcon [ctb],\n  Stefan Edwards [ctb],\n  Sven Garbade [ctb],\n  Uwe Ligges [ctb]",
         "Date/Publication": "2019-04-21 12:20:03 UTC",
-        "Built": "R 4.3.1; ; 2023-08-17 00:41:32 UTC; windows"
+        "Built": "R 4.5.2; ; 2026-02-18 01:42:27 UTC; windows",
+        "RemoteType": "standard",
+        "RemotePkgRef": "xtable",
+        "RemoteRef": "xtable",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.8-4"
       }
     },
     "yaml": {
@@ -2743,7 +2863,7 @@
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
         "Date/Publication": "2025-12-10 07:00:01 UTC",
-        "Built": "R 4.3.1; x86_64-w64-mingw32; 2026-02-09 21:21:11 UTC; windows",
+        "Built": "R 4.5.2; x86_64-w64-mingw32; 2026-02-18 01:42:27 UTC; windows",
         "Archs": "x64",
         "RemoteType": "standard",
         "RemotePkgRef": "yaml",
@@ -2755,13 +2875,13 @@
   },
   "files": {
     "app.R": {
-      "checksum": "be793f7de46d4e24a27f4eefdc56adba"
+      "checksum": "a31e17dce346d899c80f68210853ad8c"
     },
     "data/neon_swc.rds": {
       "checksum": "8dceb262af0eed45178bbdb21d847cc6"
     },
     "helpers.R": {
-      "checksum": "a1875ea664bfe4fdeda363ed654acaa6"
+      "checksum": "c7930c30326d548cc157e2954e42acf0"
     }
   },
   "users": null
