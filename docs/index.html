@@ -8,9 +8,9 @@
   <meta name="description"
     content="Explore real NEON surface-water-chemistry analytes across 34 aquatic field sites — time series, relationships, correlations, seasonality and a quick predictor. Honest statistics, instant loads." />
 
-  <!-- Open Graph / social card.  TODO: drop a real 1200x630 docs/og-image.png (a screenshot of
-     the Compare tab works well) and set the absolute URL below to your Pages domain. -->
+  <!-- Open Graph / social card. -->
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
   <meta property="og:title" content="NEON Water Chemistry — Analyte Viewer" />
   <meta property="og:description"
     content="Real NEON surface-water-chemistry across 34 aquatic sites — compare analytes, test relationships, see seasonality. Honest stats, instant loads." />
@@ -381,8 +381,9 @@
     <div class="wrap">
       Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank"
         rel="noopener">Surface Water Chemistry</a>
-      product. App &amp; concept: <b>Timothy Gilbert</b> · 2026 bslib rebuild.
-      Data: National Ecological Observatory Network (operated by Battelle, funded by NSF).
+      product by <b>Desert Data Labs</b> · Tucson, AZ.
+      Data: National Ecological Observatory Network (operated by Battelle, funded by NSF). An
+      educational data-exploration tool, not affiliated with NEON, Battelle, or the NSF.
     </div>
   </footer>
 
@@ -405,11 +406,14 @@
       launch.href=APP_URL;
 
       // Pre-warm the (possibly sleeping) app while the visitor reads, to soften cold start.
+      // Aborts after 8s so a hung request never leaves "Warming up…" stuck on screen.
       try {
         warm.textContent="Warming up the app…";
-        fetch(APP_URL,{mode: "no-cors",cache: "no-store"})
-          .then(function() {warm.textContent="Ready when you are.";})
-          .catch(function() {warm.textContent="";});
+        var ctrl=(typeof AbortController!=="undefined")?new AbortController():null;
+        var killer=ctrl?setTimeout(function() {ctrl.abort();},8000):null;
+        fetch(APP_URL,{mode: "no-cors",cache: "no-store",signal: ctrl?ctrl.signal:undefined})
+          .then(function() {if(killer) clearTimeout(killer); warm.textContent="Ready when you are.";})
+          .catch(function() {if(killer) clearTimeout(killer); warm.textContent="";});
       } catch(e) { /* ignore */}
     })();
   </script>
