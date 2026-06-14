@@ -5,7 +5,5 @@ account: t-lama
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5287213
-bundleId:
+bundleId: 12126320
 url: https://t-lama.shinyapps.io/AnalyteViewer/
-asMultiple: FALSE
-asStatic: FALSE
