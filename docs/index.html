@@ -377,6 +377,42 @@
     </div>
   </section>
 
+  <style>
+    .series { background: #0a5f78; color: #fff; padding: 56px 0; }
+    .series h2 { color: #fff; margin: 0; font-size: 1.6rem; }
+    .series-sub { color: #cfe6ee; margin: 8px 0 26px; max-width: 640px; }
+    .series-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .series-card { display: flex; flex-direction: column; gap: 5px; padding: 22px; border-radius: 16px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); color: #fff;
+      text-decoration: none; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+    .series-card:hover { transform: translateY(-3px); border-color: #FFD200; background: rgba(255,255,255,.13); }
+    .series-emoji { font-size: 1.9rem; line-height: 1; }
+    .series-name { font-weight: 800; font-size: 1.12rem; }
+    .series-tag { color: #cfe6ee; font-size: .95rem; }
+    .series-go { color: #FFD200; font-weight: 700; margin-top: 6px; }
+    @media (max-width: 640px) { .series-grid { grid-template-columns: 1fr; } }
+  </style>
+  <section class="series">
+    <div class="wrap">
+      <h2>More from the NEON series 🔭</h2>
+      <p class="series-sub">Same DNA — real NEON open data, honest statistics, instant loads, no sign-up. Pick your critter (or your chemistry).</p>
+      <div class="series-grid">
+        <a class="series-card" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" target="_blank" rel="noopener">
+          <span class="series-emoji">🐾</span>
+          <span class="series-name">NEON Small Mammal Tracker</span>
+          <span class="series-tag">Every animal NEON has box-trapped, one ear-tag at a time.</span>
+          <span class="series-go">Open&nbsp;→</span>
+        </a>
+        <a class="series-card" href="https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/" target="_blank" rel="noopener">
+          <span class="series-emoji">🪲</span>
+          <span class="series-name">NEON Ground Beetle Tracker</span>
+          <span class="series-tag">Carabid biodiversity, pitfall by pitfall.</span>
+          <span class="series-go">Open&nbsp;→</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
   <footer>
     <div class="wrap">
       Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank"
