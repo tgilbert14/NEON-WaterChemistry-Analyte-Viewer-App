@@ -363,15 +363,18 @@
       </div>
 
       <div class="honest">
-        <h2>Honest by design</h2>
+        <h2>Statistics</h2>
+        <p>The analysis is built on transparent, well-documented methods:</p>
         <ul>
-          <li>Every statistic shows its <b>sample size</b>.</li>
-          <li>Correlations default to <b>Spearman</b> (robust to skewed chemistry) with an n ≥ 8 reliability guard.</li>
-          <li>The seasonal view is a <b>real STL decomposition</b>, with interpolated months disclosed — not a synthetic
-            sine wave.</li>
-          <li>Chemistry names &amp; units are <b>correct</b> (bromide vs bicarbonate, chloride vs chlorine, ANC in
-            meq/L…).</li>
-          <li><b>Below-detection</b> values are flagged, not hidden — 15,553 of them across the record.</li>
+          <li><b>Relationships</b> use ordinary least squares with R², p and n, flagged for temporal
+            autocorrelation; correlations default to Spearman (robust to skewed chemistry) with an
+            n ≥ 8 reliability guard.</li>
+          <li><b>Seasonality</b> is a real STL decomposition, with interpolated months disclosed,
+            rather than a fitted sine wave.</li>
+          <li>Every statistic reports its <b>sample size</b>, and below-detection values are flagged
+            rather than hidden (15,553 across the record).</li>
+          <li>Analyte <b>names and units</b> are verified (bromide vs bicarbonate, chloride vs
+            chlorine, ANC in meq/L).</li>
         </ul>
       </div>
     </div>
@@ -394,19 +397,19 @@
   </style>
   <section class="series">
     <div class="wrap">
-      <h2>More from the NEON series 🔭</h2>
-      <p class="series-sub">Same DNA — real NEON open data, honest statistics, instant loads, no sign-up. Pick your critter (or your chemistry).</p>
+      <h2>Check out some of our other NEON series apps</h2>
+      <p class="series-sub">Pick another data type to explore.</p>
       <div class="series-grid">
         <a class="series-card" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" target="_blank" rel="noopener">
           <span class="series-emoji">🐾</span>
           <span class="series-name">NEON Small Mammal Tracker</span>
-          <span class="series-tag">Every animal NEON has box-trapped, one ear-tag at a time.</span>
+          <span class="series-tag">Small-mammal box-trapping across 46 NEON sites.</span>
           <span class="series-go">Open&nbsp;→</span>
         </a>
         <a class="series-card" href="https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/" target="_blank" rel="noopener">
           <span class="series-emoji">🪲</span>
           <span class="series-name">NEON Ground Beetle Tracker</span>
-          <span class="series-tag">Carabid biodiversity, pitfall by pitfall.</span>
+          <span class="series-tag">Ground-beetle (carabid) pitfall sampling across NEON sites.</span>
           <span class="series-go">Open&nbsp;→</span>
         </a>
       </div>
