@@ -288,7 +288,7 @@ ui <- page_sidebar(
           withSpinner(plotlyOutput("clim", height = 380), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
         card(full_screen = TRUE,
           card_header("Seasonal-trend decomposition (STL)"),
-          withSpinner(plotlyOutput("stl", height = 380), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+          withSpinner(plotlyOutput("stl", height = 430), type = 8, color = "#0E7C9B", hide.ui = TRUE),
           card_footer(class = "scope-note",
             "Descriptive of the real monthly record — not a calibrated forecast. Needs ≥ 24 months.")))
     ),
@@ -343,7 +343,7 @@ ui <- page_sidebar(
               span(class = "scope-note", "vs"),
               selectizeInput("site_b", NULL, choices = SITE_CHO, selected = DEF_SITE_B, width = "240px")))),
         uiOutput("two_sites_note"),
-        withSpinner(plotlyOutput("two_sites", height = 440), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        withSpinner(plotlyOutput("two_sites", height = 480), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         card_footer(class = "scope-note", "The main analyte at the selected site vs a second site, over the same date window."))
     ),
     nav_panel(
@@ -775,12 +775,11 @@ server <- function(input, output, session) {
                 line = list(color = COL$secondary, width = 1.4, dash = "dot"), opacity = .8,
                 hovertemplate = "%{y:.3g}<extra></extra>") |>
       layout(yaxis = list(title = axis_title(main_a(), df$units[1])), xaxis = list(title = ""),
-             legend = list(orientation = "h", y = -0.16, x = 0), margin = list(t = 74, b = 64),
+             legend = list(orientation = "h", y = -0.18, x = 0), margin = list(t = 46, b = 64),
              title = list(
-               text = paste0("STL — ", analyte_display(main_a()),
-                             "<br><span style='font-size:11px;color:#9aa4ad'>",
+               text = paste0("<span style='font-size:11.5px;color:#9aa4ad;font-weight:400'>",
                              n_real, " of ", n_tot, " months real · ", n_fill, " interpolated before decomposition</span>"),
-               font = list(size = 14), x = 0, xanchor = "left", y = 0.98, yanchor = "top"))
+               x = 0, xanchor = "left", y = 0.99, yanchor = "top"))
     p1 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_STL"))
   }, mode()) })
 
@@ -1028,8 +1027,9 @@ server <- function(input, output, session) {
              yaxis = list(title = axis_title(A, unit)),
              xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
                           spikethickness = 1, spikecolor = "#9aa7b0", spikedash = "dot"),
-             legend = list(orientation = "h", y = 1.1), margin = list(t = 30),
-             title = list(text = paste0(analyte_display(A), " — two sites"), font = list(size = 14), x = 0, xanchor = "left")) |>
+             legend = list(orientation = "h", y = -0.22, x = 0), margin = list(t = 48, b = 74),
+             title = list(text = paste0(analyte_display(A), " — two sites"), font = list(size = 14),
+                          x = 0, xanchor = "left", y = 0.98, yanchor = "top")) |>
       plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
   }, mode()) })
 
