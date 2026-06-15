@@ -78,11 +78,14 @@ aqua_theme <- bs_theme(
     @keyframes wcspin { to { transform:rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { #wcOverlay .wc-spin { animation:none; } }
     /* sticky current-selection breadcrumb, visible above the tabs at every width */
-    .armed-bar { position:sticky; top:0; z-index:20; background:rgba(14,124,155,.08);
+    .armed-bar { position:sticky; top:0; z-index:20; background:#e7f1f5;
                  border:1px solid rgba(14,124,155,.16); border-radius:.5rem; padding:.4rem .75rem;
                  margin:.1rem 0 .7rem; font-size:.85rem; color:#0a5f78; font-weight:600;
-                 display:flex; align-items:center; gap:.45rem; }
+                 display:flex; align-items:center; gap:.45rem;
+                 box-shadow:0 2px 6px rgba(0,0,0,.05); }
     .armed-bar .bi { color:#0E7C9B; flex:none; }
+    /* opaque so scrolled card headers never bleed through the sticky bar */
+    [data-bs-theme='dark'] .armed-bar { background:#16242b; border-color:rgba(26,160,192,.30); color:#8fd6e8; }
 
     /* --- subtle water motion (tasteful, not gaudy) --- */
     .navbar, .bslib-page-navbar > .navbar {
@@ -297,6 +300,7 @@ ui <- page_sidebar(
           uiOutput("pred_intro"), uiOutput("pred_sliders")),
         card(card_header("Prediction"),
           uiOutput("pred_out"),
+          withSpinner(plotlyOutput("pred_ctx", height = 240), type = 8, color = "#0E7C9B", hide.ui = TRUE),
           card_footer(class = "scope-note",
             "glm on the 3 best-correlated analytes; cross-validated RMSE shown. Interpolation aid, not a sensor.")))
     ),
@@ -812,36 +816,69 @@ server <- function(input, output, session) {
     })
   })
 
-  output$pred_out <- renderUI({ tryCatch({
+  # Model + cross-validation depend on site / range / main analyte / predictors —
+  # NOT on the sliders. Splitting it out means a slider drag no longer re-runs the
+  # (reps × k = 50-fit) cross-validation; only the cheap predict() re-fires.
+  pred_base <- reactive({
     preds <- pred_predictors(); w <- wide_site()
-    if (!length(preds)) return(div(class = "text-muted p-2", "—"))
+    if (!length(preds)) return(list(status = "none"))
     d <- w[, c(main_a(), preds), drop = FALSE]; names(d)[1] <- "target"
     d <- d[stats::complete.cases(d), , drop = FALSE]
-    if (nrow(d) < (length(preds) + 5)) return(div(class = "text-muted p-2",
-      "Too few complete records to fit the model here. Widen the date range."))
+    if (nrow(d) < (length(preds) + 5)) return(list(status = "few"))
     form <- stats::as.formula(paste0("target ~ ", paste(sprintf("`%s`", preds), collapse = " + ")))
     fit <- tryCatch(stats::glm(form, data = d), error = function(e) NULL)
-    if (is.null(fit)) return(div(class = "text-danger p-2", "Model could not be fit for this selection."))
-    newd <- as.data.frame(lapply(preds, function(p) input[[paste0("pred_", p)]]))
-    names(newd) <- preds
-    if (any(vapply(newd, function(x) is.null(x) || !is.finite(x), logical(1))))
-      return(div(class = "text-muted p-2", "Adjusting to the new selection…"))
-    yhat <- tryCatch(as.numeric(stats::predict(fit, newd)), error = function(e) NA_real_)
-    cv <- kfold_rmse(w, main_a(), preds)
-    skill <- if (is.na(cv$rmse) || is.na(cv$null_rmse) || cv$null_rmse == 0) NA else 1 - cv$rmse / cv$null_rmse
-    unit <- pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == main_a()][1], main_a())
+    if (is.null(fit)) return(list(status = "fit"))
+    obs <- suppressWarnings(as.numeric(w[[main_a()]])); obs <- obs[is.finite(obs)]
+    list(status = "ok", fit = fit, preds = preds, cv = kfold_rmse(w, main_a(), preds),
+         observed = obs,
+         unit = pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == main_a()][1], main_a()))
+  })
+
+  # the only slider-dependent piece: the live point estimate
+  pred_yhat <- reactive({
+    b <- pred_base(); if (b$status != "ok") return(NA_real_)
+    newd <- as.data.frame(lapply(b$preds, function(p) input[[paste0("pred_", p)]]))
+    names(newd) <- b$preds
+    if (any(vapply(newd, function(x) is.null(x) || !is.finite(x), logical(1)))) return(NA_real_)
+    tryCatch(as.numeric(stats::predict(b$fit, newd)), error = function(e) NA_real_)
+  })
+
+  output$pred_out <- renderUI({
+    b <- pred_base()
+    if (b$status == "none") return(div(class = "text-muted p-2", "—"))
+    if (b$status == "few")  return(div(class = "text-muted p-2",
+      "Too few complete records to fit the model here. Widen the date range."))
+    if (b$status == "fit")  return(div(class = "text-danger p-2", "Model could not be fit for this selection."))
+    yhat  <- pred_yhat()
+    skill <- if (is.na(b$cv$rmse) || is.na(b$cv$null_rmse) || b$cv$null_rmse == 0) NA else 1 - b$cv$rmse / b$cv$null_rmse
     tagList(
       value_box(paste0("Predicted ", analyte_display(main_a())),
-                ifelse(is.na(yhat), "—", paste0(signif(yhat, 4), " ", unit)),
+                ifelse(is.na(yhat), "—", paste0(signif(yhat, 4), " ", b$unit)),
                 "from the slider values", theme = "primary"),
       div(class = "px-2 pt-2 scope-note",
           HTML(sprintf("Cross-validated RMSE ≈ %s %s vs %s %s for a mean-only baseline (skill %s) on %d records. ",
-                  ifelse(is.na(cv$rmse), "—", signif(cv$rmse, 3)), unit,
-                  ifelse(is.na(cv$null_rmse), "—", signif(cv$null_rmse, 3)), unit,
-                  ifelse(is.na(skill), "—", sprintf("%+.0f%%", 100 * skill)), cv$n)),
-          help_pop("rmse", "RMSE & skill"))
-    )
-  }, error = function(e) div(class = "text-muted p-2", "Adjusting…")) })
+                  ifelse(is.na(b$cv$rmse), "—", signif(b$cv$rmse, 3)), b$unit,
+                  ifelse(is.na(b$cv$null_rmse), "—", signif(b$cv$null_rmse, 3)), b$unit,
+                  ifelse(is.na(skill), "—", sprintf("%+.0f%%", 100 * skill)), b$cv$n)),
+          help_pop("rmse", "RMSE & skill")))
+  })
+
+  # fills the Prediction card: where the slider-driven estimate lands within the
+  # site's own observed distribution for the main analyte (typical vs extreme?)
+  output$pred_ctx <- renderPlotly({ safe_plotly({
+    b <- pred_base()
+    if (b$status != "ok" || !length(b$observed))
+      return(plotly_message("Pick a site and main analyte to see where the estimate lands.", mode()))
+    yhat <- pred_yhat()
+    pp <- ggplot(data.frame(value = b$observed), aes(value)) +
+      geom_histogram(bins = 30, fill = COL$main, alpha = .30, color = COL$main, linewidth = .2) +
+      labs(x = axis_title(main_a(), b$unit), y = "samples",
+           title = paste0("Your estimate (dashed) vs observed ", analyte_display(main_a()))) +
+      theme_neon()
+    if (!is.na(yhat)) pp <- pp +
+      geom_vline(xintercept = yhat, color = COL$secondary, linewidth = 1, linetype = "dashed")
+    ggplotly(pp) |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_prediction_context"))
+  }, mode()) })
 
   ## ---- Data table + downloads ----
   # tidy long slice of the current site/range (the analysis-ready export)
