@@ -1,0 +1,96 @@
+name: Refresh NEON data bundle
+
+# Monthly rebuild of the surface-water-chemistry bundle (data/neon_swc.rds +
+# data/analyte_coverage.csv), then a PR. Runs late on the FIRST SATURDAY NIGHT of
+# each month (~11pm Arizona time) so any republish lands off-peak. NEON publishes
+# on a lag, so a monthly pull keeps the bundled data current. Posit Connect Cloud
+# auto-republishes when the PR merges to main.
+#
+# This app pulls the NEON PUBLIC API directly (scripts/precompute_neon_data.R) —
+# no neonUtilities, no NEON token needed. A completeness guard in
+# scripts/refresh_data.R aborts before the PR if a bad-API day produced a shrunken
+# bundle, so the committed data is never clobbered with a partial pull.
+# Trigger manually any time from the Actions tab (workflow_dispatch).
+
+on:
+  schedule:
+    # Every Sunday 06:00 UTC == Saturday 23:00 America/Phoenix (Arizona, no DST).
+    # Cron can't express "first Saturday of the month", so we fire every Saturday
+    # night and let the `gate` job below proceed only on the first one.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write          # commit the refreshed bundle to the PR branch
+  pull-requests: write     # open/update the data-refresh PR
+
+jobs:
+  # Gate: only the FIRST Saturday night (Arizona time) runs the heavy refresh.
+  # Manual runs (workflow_dispatch) always proceed.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run — proceeding."
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          dow=$(TZ='America/Phoenix' date +%u)    # 6 = Saturday
+          day=$(TZ='America/Phoenix' date +%-d)   # day-of-month, no leading zero
+          if [ "$dow" = "6" ] && [ "$day" -le 7 ]; then
+            echo "First Saturday in Arizona (day $day) — proceeding."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not the first Saturday in Arizona (dow=$dow day=$day) — skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  refresh:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # Pulls the NEON public API directly — only these light deps, no neonUtilities.
+      - name: Install R packages
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: >
+            jsonlite, dplyr, tidyr, readr
+
+      # Pull + rebuild data/neon_swc.rds, then guard against a shrunken bundle
+      # (the guard stop()s the job before the PR if the pull collapsed).
+      - name: Refresh the surface-water-chemistry bundle
+        run: Rscript scripts/refresh_data.R
+
+      # Land the refreshed bundle on main via a PR (re-uses one branch/PR each
+      # run). Connect Cloud auto-republishes the live app when this PR merges.
+      # Timestamped save_bundle backups + the API cache are gitignored, so only the
+      # live bundle + coverage table are committed.
+      - name: Open/update data-refresh PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          add-paths: |
+            data/neon_swc.rds
+            data/analyte_coverage.csv
+          branch: auto/data-refresh
+          delete-branch: true
+          commit-message: "data: monthly NEON surface-water-chemistry refresh"
+          title: "data: monthly NEON refresh"
+          body: |
+            Automated monthly refresh of NEON Surface Water Chemistry (`DP1.20093.001`)
+            → `data/neon_swc.rds` + `data/analyte_coverage.csv`.
+
+            A completeness guard (`scripts/refresh_data.R`) blocks this PR if the
+            pull came back shrunken, so the committed bundle is only ever replaced
+            by an equal-or-more-complete one. Merging to `main` triggers Posit
+            Connect Cloud to auto-republish the live app.
+          labels: automated, data
