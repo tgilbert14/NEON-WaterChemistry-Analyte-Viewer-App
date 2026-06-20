@@ -9,6 +9,10 @@ suppressWarnings(suppressMessages({
 }))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a) == 1 && is.na(a))) b else a
+# Vectorized NA-coalesce: element-wise "a unless NA, else b" (b recycled). Used
+# to apply a canonical-unit lookup while falling back to the original string for
+# any unmapped element.
+`%|na|%` <- function(a, b) { a <- as.character(a); b <- as.character(b); ifelse(is.na(a), b, a) }
 
 ## ---- Colors (Okabe-Ito CVD-safe; brand teal primary) ---------------------
 # Desert-night creative system. The brand teal stays the primary line color, but
@@ -86,6 +90,86 @@ UNIT_PRETTY <- c(
   microsiemensPerCentimeter = "µS/cm", milliequivalentsPerLiter = "meq/L",
   celsius = "°C", formazinNephelometricUnit = "FNU", quinineSulfateUnit = "QSU"
 )
+
+## ---- Canonical unit per analyte (review finding #3, units) ----------------
+# The bundle's analyte_meta took dplyr::first(units), so 20/34 analytes carry a
+# stray non-modal unit string and UV254/UV280 publish a literal NA. We DON'T
+# rebuild the bundle; instead canonical_units() picks the MODAL unit per analyte
+# from the long frame at app load and coerces every read through it. The six
+# µg/L-vs-mg/L mixers (verified mislabeled, NOT 1000× off — TP "µg/L" median
+# 0.057 vs mg/L 0.025) are forced to mg/L by label only; values are NOT scaled.
+# UV absorbance has no NEON unit string at all (it's an absorbance ratio) — we
+# stamp the canonical "absorbance units" so the dictionary stops exporting NA.
+CANON_UNIT_OVERRIDE <- c(
+  TP = "milligramsPerLiter", TDP = "milligramsPerLiter",
+  `Ortho - P` = "milligramsPerLiter", `NH4 - N` = "milligramsPerLiter",
+  `NO2 - N` = "milligramsPerLiter", `NO3+NO2 - N` = "milligramsPerLiter",
+  TPC = "microgramsPerLiter", TPN = "microgramsPerLiter",
+  `UV Absorbance (254 nm)` = "absorbance units",
+  `UV Absorbance (250 nm)` = "absorbance units",
+  `UV Absorbance (280 nm)` = "absorbance units"
+)
+# Modal (most-frequent) non-NA unit per analyte; overrides win. Returns a named
+# character vector code -> canonical NEON unit string.
+canonical_units <- function(swc_long) {
+  tab <- swc_long |>
+    dplyr::filter(!is.na(units), nzchar(units)) |>
+    dplyr::count(analyte, units, name = "k") |>
+    dplyr::group_by(analyte) |>
+    dplyr::slice_max(k, n = 1, with_ties = FALSE) |>
+    dplyr::ungroup()
+  out <- setNames(tab$units, tab$analyte)
+  ov  <- intersect(names(CANON_UNIT_OVERRIDE), unique(swc_long$analyte))
+  out[ov] <- CANON_UNIT_OVERRIDE[ov]
+  # any analyte with no usable unit string at all (pure-NA) still gets its override
+  miss <- setdiff(names(CANON_UNIT_OVERRIDE), names(out))
+  if (length(miss)) out[miss] <- CANON_UNIT_OVERRIDE[miss]
+  out
+}
+# Resolve the canonical unit for one code against a precomputed map, falling back
+# to the raw string when the analyte isn't mapped (defensive).
+canon_unit_of <- function(code, map, fallback = NA_character_) {
+  u <- unname(map[code]); ifelse(is.na(u), fallback, u)
+}
+
+## ---- Per-analyte plausibility gate (review finding #2, outlier QC) ---------
+# A single impossible singleton (ANC = 927 meq/L at CARI, site median 0.73; Fe =
+# 931 mg/L, median 0.011) must never drive a fit, an STL trend, the glm, or the
+# map colorbar. plausibility_ceilings() learns a per-analyte ceiling once at app
+# load. A value is flagged implausible only when it clears BOTH guards — the
+# review's "> p99.9 + a unit-sanity check":
+#   (a) it exceeds the analyte's p99.9 quantile, AND
+#   (b) it exceeds a generous multiple of the analyte's median (unit-sanity).
+# Requiring BOTH keeps a genuinely heavy-tailed-but-real analyte intact (PRPO
+# conductance 7,924 µS/cm stays IN — it is well within conductance's own p99.9),
+# while a lone 1000×-median artifact in an otherwise tight distribution is gated
+# OUT (ANC 927 dwarfs both its p99.9 and 50× its median). The ceiling is each
+# analyte's own max(p99.9, median×mult), so it is unit-agnostic / self-calibrating.
+plausibility_ceilings <- function(swc_long, q = 0.999, sanity_mult = 50) {
+  swc_long |>
+    dplyr::filter(is.finite(value)) |>
+    dplyr::group_by(analyte) |>
+    dplyr::summarise(
+      .groups = "drop",
+      med  = stats::median(value, na.rm = TRUE),
+      p999 = stats::quantile(value, q, na.rm = TRUE, names = FALSE),
+      sanity  = ifelse(is.finite(med) & med > 0, abs(med) * sanity_mult, Inf),
+      # ceiling = larger of the two guards; a value must clear BOTH to be flagged,
+      # which is exactly value > max(p999, sanity).
+      ceiling = pmax(p999, sanity, na.rm = TRUE)
+    )
+}
+# Named lookup analyte -> ceiling for is_plausible().
+ceiling_map <- function(ceil_tbl) setNames(ceil_tbl$ceiling, ceil_tbl$analyte)
+# Is each value plausible? TRUE = keep. NA/non-finite are treated as keep (they
+# drop out of finite filters downstream anyway). `ceil_map` is a named vector
+# analyte -> ceiling from ceiling_map(plausibility_ceilings()).
+is_plausible <- function(value, analyte, ceil_map) {
+  ceil <- ceil_map[as.character(analyte)]
+  ok <- !is.finite(value) | is.na(ceil) | (value <= ceil)
+  ok[is.na(ok)] <- TRUE
+  unname(ok)
+}
 
 analyte_display <- function(code) {
   d <- ANALYTE_TBL$display[match(code, ANALYTE_TBL$code)]
@@ -228,12 +312,18 @@ safe_plotly <- function(expr, mode = "light") {
 # Correlation of `main` vs every other numeric column of a per-site wide frame.
 # Reports n (paired), Pearson r, Spearman rho, p-value of the chosen method,
 # and an honesty flag. min_n is the reliability floor (default 8).
-correlation_table <- function(wide_site, main, method = c("spearman","pearson"), min_n = 8) {
+# censor_map (named analyte -> fraction below detection) + censor_thresh let the
+# table down-weight heavily-censored analytes (Br 57%, Mn/Fe/F ~34-39% below DL):
+# a Spearman/Pearson there is dominated by detection-limit ties, not chemistry
+# (Helsel 2012), so those rows are marked heavy_censor and greyed like low-n.
+correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
+                              min_n = 8, censor_map = NULL, censor_thresh = 0.25) {
   method <- match.arg(method)
   if (is.null(wide_site) || !main %in% names(wide_site)) return(NULL)
   m <- suppressWarnings(as.numeric(wide_site[[main]]))
   num <- names(wide_site)[vapply(wide_site, is.numeric, logical(1))]
   others <- setdiff(num, main)
+  pct_bdl <- function(a) if (!is.null(censor_map) && a %in% names(censor_map)) unname(censor_map[a]) else NA_real_
   ptest <- function(x, y, mth) suppressWarnings(tryCatch(stats::cor.test(x, y, method = mth)$p.value, error = function(e) NA_real_))
   rows <- lapply(others, function(a) {
     y <- suppressWarnings(as.numeric(wide_site[[a]]))
@@ -245,16 +335,21 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     ps <- if (n >= 4) ptest(m[ok], y[ok], "spearman") else NA_real_
     ties <- n >= 4 && (any(duplicated(m[ok])) || any(duplicated(y[ok])))
     tibble(code = a, display = analyte_display(a), n = n,
-           pearson = pe, spearman = sp, p_pearson = pp, p_spearman = ps, ties = ties)
+           pearson = pe, spearman = sp, p_pearson = pp, p_spearman = ps, ties = ties,
+           pct_below = pct_bdl(a))
   })
   out <- bind_rows(rows)
   if (!nrow(out)) return(out)
   out$coef <- if (method == "spearman") out$spearman else out$pearson
   out$p    <- if (method == "spearman") out$p_spearman else out$p_pearson
   out <- out |> filter(n >= 4, is.finite(coef)) |>
-    mutate(reliable = n >= min_n,
+    mutate(heavy_censor = is.finite(pct_below) & pct_below >= censor_thresh,
+           # reliable drives the grey-out: a row is reliable only if it clears the
+           # n floor AND isn't dominated by below-detection ties.
+           reliable = n >= min_n & !heavy_censor,
            flag = dplyr::case_when(
              n < min_n            ~ sprintf("insufficient (n=%d)", n),
+             heavy_censor         ~ sprintf("censored (%.0f%% <DL)", 100 * pct_below),
              coef >=  0.7         ~ "strong +",
              coef <= -0.7         ~ "strong −",
              abs(coef) >= 0.4     ~ "moderate",

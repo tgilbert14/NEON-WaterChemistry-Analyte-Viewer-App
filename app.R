@@ -19,6 +19,50 @@ shinyOptions(cache = cachem::cache_disk(file.path(tempdir(), "neon-cache"), max_
 ## ---- Data (loaded once, shared across sessions) --------------------------
 D <- readRDS("data/neon_swc.rds")
 
+## ---- App-side input QC (expert-review findings, applied at load — NO bundle
+##      rebuild) -------------------------------------------------------------
+# Three upstream fixes the bundle's first()-wins shortcuts left open, applied
+# once here against the in-memory long frame so EVERY downstream reactive (fits,
+# STL, glm, map mean, exports, dictionary) inherits them:
+#   (1) Canonical unit per analyte (modal, not first; UV gets a real unit) —
+#       coerce swc_long$units to one string per analyte (LABEL only; values are
+#       NOT rescaled — the µg/L mixers are mislabeled mg/L-magnitude rows).
+#   (2) Plausibility gate — flag values above the per-analyte ceiling so a lone
+#       artifact (ANC 927, Fe 931) never drives a fit/STL/glm/map mean.
+#   (3) Censoring rate per analyte (already in analyte_meta) — surfaced via click.
+CANON_MAP  <- canonical_units(D$swc_long)
+CEIL_TBL   <- plausibility_ceilings(D$swc_long)
+CEIL_MAP   <- ceiling_map(CEIL_TBL)
+
+# (1) stamp the canonical unit onto every long row (so axis/hover/export agree)
+D$swc_long$units <- unname(CANON_MAP[D$swc_long$analyte]) %|na|% D$swc_long$units
+# (2) flag plausibility on the long frame; keep the value for the audit marker,
+#     but NULL it out of the wide matrix the fits/means/STL/glm read from.
+D$swc_long$implausible <- !is_plausible(D$swc_long$value, D$swc_long$analyte, CEIL_MAP)
+# table of excluded extremes, for the clickable audit marker (small, never inline)
+EXCLUDED_EXTREMES <- D$swc_long |>
+  dplyr::filter(implausible) |>
+  dplyr::transmute(site, collectDate, analyte,
+                   display = analyte_display(analyte), value,
+                   units = unname(CANON_MAP[analyte]) %|na|% units,
+                   ceiling = unname(CEIL_MAP[analyte])) |>
+  dplyr::arrange(dplyr::desc(value))
+# (2) rebuild the wide matrix from the PLAUSIBLE long rows only — this is the
+#     single chokepoint every stats tab + the map mean pivot through, so one
+#     edit here gates fit_lm / stl / glm / the choropleth colorbar at once.
+D$swc_wide <- D$swc_long |>
+  dplyr::filter(!implausible) |>
+  dplyr::select(site, collectDate, analyte, value) |>
+  tidyr::pivot_wider(names_from = analyte, values_from = value)
+# (1)+(3) refresh analyte_meta so the dictionary export carries the canonical
+#     unit (no more NA for UV254/UV280) and a real censored fraction.
+D$analyte_meta <- D$analyte_meta |>
+  dplyr::mutate(units = unname(CANON_MAP[analyte]) %|na|% units,
+                pct_below = ifelse(is.finite(n) & n > 0, n_below / n, NA_real_))
+# (3) per-analyte below-detection fraction, for the correlation down-weighting +
+#     the clickable censoring note (Br 57%, Mn/Fe/F ~34-39% below DL).
+CENSOR_MAP <- setNames(D$analyte_meta$pct_below, D$analyte_meta$analyte)
+
 # Site choices: rich labels, only sites that actually have data
 site_tbl   <- D$sites_meta |> arrange(siteName)
 SITE_CHO   <- setNames(site_tbl$site, paste0(site_tbl$site, " — ", site_tbl$siteName))
@@ -89,6 +133,16 @@ aqua_theme <- bs_theme(
     .armed-bar .bi { color:#0E7C9B; flex:none; }
     /* opaque so scrolled card headers never bleed through the sticky bar */
     [data-bs-theme='dark'] .armed-bar { background:#0c3350; border-color:rgba(52,198,216,.30); color:#6ee6f0; }
+    /* small clickable QC pill: a flagged extreme was excluded — click to audit */
+    .qc-pill { margin-left:auto; display:inline-flex; align-items:center; gap:.3rem;
+               background:rgba(214,163,28,.16); color:#9a7314; border:1px solid rgba(214,163,28,.4);
+               border-radius:1rem; padding:.05rem .55rem; font-size:.76rem; font-weight:600;
+               cursor:pointer; text-decoration:none; line-height:1.5; }
+    .qc-pill:hover { background:rgba(214,163,28,.28); color:#7a5a10; }
+    .qc-pill .bi { color:#b8860b !important; }
+    [data-bs-theme='dark'] .qc-pill { background:rgba(110,230,196,.14); color:#6ee6c4;
+               border-color:rgba(110,230,196,.4); }
+    [data-bs-theme='dark'] .qc-pill .bi { color:#6ee6c4 !important; }
 
     /* (the navbar command band + value-box dark info-box treatment now live in
        the DESERT-NIGHT block below, replacing the old water-flow gradient) */
@@ -275,7 +329,12 @@ GLOSSARY <- list(
     to simply guessing the average: <b>+50%</b> means the model's error is half that naive baseline (and a
     negative skill means it's worse than guessing the average)."),
   stl      = HTML("<b>STL</b> splits the monthly series into a slow <b>trend</b>, a repeating <b>seasonal</b>
-    cycle, and leftover noise — computed from the real measured data.")
+    cycle, and leftover noise — computed from the real measured data."),
+  censor   = HTML("<b>Below detection (BDL)</b> means the lab couldn't measure the analyte above its
+    detection limit. We keep the reported number (drawn as an <b>open marker</b>) and never substitute a
+    zero. But when a large share of an analyte's samples are below detection, a correlation is dominated by
+    detection-limit <b>ties</b>, not real chemistry — so we <b>grey out</b> any analyte with &gt; 25% below
+    detection and treat it as <b>exploratory only</b> (Helsel 2012).")
 )
 # small (?) icon that pops a plain-language explanation on click/hover
 help_pop <- function(key, ttl = NULL)
@@ -357,7 +416,10 @@ ui <- page_sidebar(
   uiOutput("summary_strip"),
 
   # always-visible "what am I looking at" breadcrumb (the sidebar copy is hidden on phones)
-  div(class = "armed-bar", bs_icon("crosshair"), textOutput("armed_top", inline = TRUE)),
+  div(class = "armed-bar", bs_icon("crosshair"), textOutput("armed_top", inline = TRUE),
+      # clickable QC marker — only rendered when this site/analyte has an excluded
+      # implausible extreme; opens an audit modal. No inline caveat text.
+      uiOutput("qc_chip", inline = TRUE)),
 
   navset_card_tab(
     id = "main_tabs",
@@ -433,14 +495,17 @@ ui <- page_sidebar(
                             radioButtons("cor_method", NULL, inline = TRUE,
                               choices = c("Spearman" = "spearman", "Pearson" = "pearson"),
                               selected = "spearman"),
-                            help_pop("spearman", "Spearman vs Pearson"), info_link("info_correlations")))),
+                            help_pop("spearman", "Spearman vs Pearson"),
+                            help_pop("censor", "Below-detection handling"),
+                            info_link("info_correlations")))),
         withSpinner(plotlyOutput("cor_lolli", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         div(style = "min-height:340px; overflow-x:auto",
             withSpinner(DTOutput("cor_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
         card_footer(class = "scope-note", HTML(
-          "Top 18 shown above (full list in the table). <b style='color:#0E7C9B'>Teal</b> = reliable (n ≥ 8),
-           <b style='color:#9aa0a6'>grey</b> = fewer than 8 paired samples. Computed on co-sampled dates only;
-           screening many analytes at once inflates chance findings — hypothesis-generating, not confirmatory.")))
+          "Top 18 shown above (full list in the table). <b style='color:#0E7C9B'>Teal</b> = reliable,
+           <b style='color:#9aa0a6'>grey</b> = under 8 paired samples or &gt; 25% below detection. Computed on
+           co-sampled dates only; screening many analytes at once inflates chance findings — hypothesis-generating,
+           not confirmatory.")))
     ),
     nav_panel(
       "Two sites", icon = bs_icon("signpost-split"),
@@ -571,10 +636,14 @@ server <- function(input, output, session) {
   })
 
   ## ---- Core reactives ----
+  # All raw-series reactives drop implausible extremes (the gate) so no single
+  # artifact blows out a z-score, an axis, a monthly mean, or the STL trend; the
+  # excluded values are surfaced via the QC chip, never silently — and stay in
+  # the raw long-CSV export (implausible_extreme flag) for audit.
   sel_long <- reactive({
     req(input$site, main_a(), sec_a()); d <- dates_d(); req(length(d) == 2)
     D$swc_long |> filter(site == input$site, analyte %in% c(main_a(), sec_a()),
-                         collectDate >= d[1], collectDate <= d[2])
+                         collectDate >= d[1], collectDate <= d[2], !implausible)
   }) |> bindCache(input$site, main_a(), sec_a(), dates_d())
 
   wide_site <- reactive({
@@ -594,7 +663,7 @@ server <- function(input, output, session) {
   # one Pearson correlation table per (site, main, range) — reused by the table and the predictor
   cor_base <- reactive({
     correlation_table(wide_site() |> select(-collectDate, -dplyr::any_of("site")),
-                      main_a(), method = "pearson", min_n = 8)
+                      main_a(), method = "pearson", min_n = 8, censor_map = CENSOR_MAP)
   }) |> bindCache(input$site, main_a(), dates_d())
 
   preset_match <- reactive({
@@ -610,6 +679,44 @@ server <- function(input, output, session) {
   })
   output$armed     <- renderText(armed_txt())
   output$armed_top <- renderText(armed_txt())
+
+  ## ---- Plausibility audit: clickable chip + modal (no inline caveat text) ----
+  # Relevant when the current site, or either selected analyte, owns an excluded
+  # extreme — i.e. when a gate is actually affecting what the user is viewing.
+  qc_relevant <- reactive({
+    if (!nrow(EXCLUDED_EXTREMES)) return(EXCLUDED_EXTREMES[0, ])
+    EXCLUDED_EXTREMES |>
+      dplyr::filter(site == input$site | analyte %in% c(main_a(), sec_a()))
+  })
+  output$qc_chip <- renderUI({
+    rel <- qc_relevant(); if (!nrow(rel)) return(NULL)
+    n <- nrow(rel)
+    actionLink("qc_audit", class = "qc-pill",
+      title = "An implausible extreme was excluded from the fits, the seasonal trend, the predictor and the map — click to audit",
+      tagList(bs_icon("exclamation-triangle-fill"),
+              sprintf("%d extreme value%s excluded", n, if (n > 1) "s" else "")))
+  })
+  observeEvent(input$qc_audit, {
+    rel <- qc_relevant(); all_n <- nrow(EXCLUDED_EXTREMES)
+    tbl <- rel |>
+      dplyr::transmute(Site = site, Date = format(collectDate, "%Y-%m-%d"),
+                       Analyte = display,
+                       Value = paste0(signif(value, 4), ifelse(nzchar(pretty_unit(units, analyte)), paste0(" ", pretty_unit(units, analyte)), "")),
+                       `Plausible ceiling` = signif(ceiling, 4))
+    showModal(modalDialog(
+      title = tagList(bs_icon("shield-check"), " Excluded extreme values"),
+      easyClose = TRUE, size = "l", footer = modalButton("Close"),
+      tags$p(HTML(
+        "These values exceed a per-analyte plausibility ceiling (above the 99.9th percentile <i>and</i>
+         50× the analyte median) — almost certainly unit or decimal artifacts, not real chemistry.
+         They are <b>excluded from every fit, the seasonal decomposition, the predictor, and the map's
+         colour scale</b>, but kept here for audit. The reported number is preserved in the raw record.")),
+      DT::datatable(tbl, rownames = FALSE,
+                    options = list(dom = "t", pageLength = 25, ordering = FALSE)),
+      if (all_n > nrow(rel)) tags$p(class = "scope-note",
+        sprintf("Showing the %d relevant to your current site/analytes; %d total excluded across the dataset.",
+                nrow(rel), all_n))))
+  })
 
   output$preset_reason <- renderUI({
     pm <- preset_match(); if (is.na(pm)) return(NULL)
@@ -776,14 +883,22 @@ server <- function(input, output, session) {
                             ifelse(f$p < .001, "&lt; 0.001", signif(f$p, 3)))), help_pop("pval", "p-value")),
         tags$p(HTML(sprintf("<b>Temporal autocorrelation (lag-1):</b> %s (%s) — %s",
                             ifelse(is.na(ac), "—", sprintf("%.2f", ac)), ac_flag,
-                            "high values mean the p-value above is optimistic."))))
+                            "high values mean the p-value above is optimistic.")))),
+      # clickable censoring badge — only when a fitted analyte is heavily below DL;
+      # one short clause + a (?) that opens the existing explanation (no wall of text)
+      { cen <- CENSOR_MAP[c(main_a(), sec_a())]; cen <- cen[is.finite(cen) & cen >= 0.25]
+        if (length(cen)) div(class = "px-2 pb-2 scope-note",
+          bs_icon("exclamation-triangle"),
+          sprintf(" %s heavily below detection — exploratory only ",
+                  paste(analyte_display(names(cen)), collapse = " & ")),
+          help_pop("censor", "Below-detection handling")) }
     )
   })
 
   ## ---- Correlations ----
   cor_tbl <- reactive({
     correlation_table(wide_site() |> select(-collectDate, -dplyr::any_of("site")),
-                      main_a(), method = input$cor_method, min_n = 8)
+                      main_a(), method = input$cor_method, min_n = 8, censor_map = CENSOR_MAP)
   }) |> bindCache(input$site, main_a(), input$cor_method, dates_d())
 
   output$cor_lolli <- renderPlotly({ safe_plotly({
@@ -795,7 +910,9 @@ server <- function(input, output, session) {
       geom_vline(xintercept = 0, color = "rgba(0,0,0,.3)") +
       geom_segment(aes(x = 0, xend = coef, yend = display, color = reliable), linewidth = .9) +
       geom_point(aes(color = reliable, text = paste0(display, "<br>", input$cor_method, " = ", signif(coef, 3),
-                     "<br>n = ", n, ifelse(reliable, "", "<br>⚠ low n — interpret with care"))), size = 3.2) +
+                     "<br>n = ", n,
+                     ifelse(heavy_censor, sprintf("<br>⚠ %.0f%% below detection — exploratory only", 100 * pct_below), ""),
+                     ifelse(!reliable & !heavy_censor, "<br>⚠ low n — interpret with care", ""))), size = 3.2) +
       scale_color_manual(values = c(`TRUE` = COL$main, `FALSE` = "#BBBBBB")) +
       scale_x_continuous(limits = c(-1, 1), breaks = seq(-1, 1, .5)) +
       labs(x = paste0(tools::toTitleCase(input$cor_method), " correlation with ", analyte_display(main_a())), y = NULL) +
@@ -810,23 +927,26 @@ server <- function(input, output, session) {
       return(datatable(data.frame(Note = "No co-sampled analytes in this window — widen the date range."),
                        rownames = FALSE, options = list(dom = "t")))
     fmtp <- function(p) ifelse(is.na(p), "—", ifelse(p < 1e-4, "<0.0001", formatC(p, format = "g", digits = 2)))
+    fmtbdl <- function(x) ifelse(is.na(x) | x < 0.005, "—", sprintf("%.0f%%", 100 * x))
     show <- ct |> transmute(Analyte = display, n,
                             `Spearman ρ` = round(spearman, 3), `p (ρ)` = fmtp(p_spearman),
                             `Pearson r` = round(pearson, 3),  `p (r)` = fmtp(p_pearson),
+                            BDL = fmtbdl(pct_below),
                             Reading = ifelse(ties, paste0(flag, " †"), flag))
     datatable(show, rownames = FALSE, options = list(pageLength = 8, dom = "tip"),
               caption = htmltools::tags$caption(style = "caption-side:top",
-                "Each p-value pairs with the coefficient in the same colour group. † = tied ranks, Spearman p is approximate.")) |>
+                htmltools::HTML("Each p-value pairs with the coefficient in the same colour group. † = tied ranks, Spearman p is approximate. <b>BDL</b> = % below detection; rows over 25% are exploratory only."))) |>
       formatStyle("Reading", target = "cell",
-                  backgroundColor = styleEqual(c("strong +", "strong −", "moderate", "strong + †", "strong − †", "moderate †"),
-                                               c("#dff0e8", "#fde7e3", "#fdf3e0", "#dff0e8", "#fde7e3", "#fdf3e0")))
+                  backgroundColor = styleEqual(
+                    c("strong +", "strong −", "moderate", "strong + †", "strong − †", "moderate †"),
+                    c("#dff0e8", "#fde7e3", "#fdf3e0", "#dff0e8", "#fde7e3", "#fdf3e0")))
   })
 
   ## ---- Seasonal: climatology + STL ----
   main_monthly <- reactive({
     d <- dates_d()
     D$swc_long |> filter(site == input$site, analyte == main_a(),
-                         collectDate >= d[1], collectDate <= d[2])
+                         collectDate >= d[1], collectDate <= d[2], !implausible)
   })
 
   output$clim <- renderPlotly({ safe_plotly({
@@ -995,6 +1115,7 @@ server <- function(input, output, session) {
       filter(site == input$site, collectDate >= d[1], collectDate <= d[2]) |>
       transmute(site, collectDate, analyte, analyte_label = analyte_display(analyte),
                 value, units, n_reps, value_sd, below_detection = belowDetection == 1,
+                implausible_extreme = implausible,   # kept in raw export, excluded from fits/maps
                 lab_flag = labFlag, source, product = D$built$product) |>
       arrange(collectDate, analyte)
   })
@@ -1011,8 +1132,17 @@ server <- function(input, output, session) {
   })
 
   fn_base <- reactive({ sp <- dates_d(); paste0(input$site, "-SWC-", format(sp[1], "%Y"), "-", format(sp[2], "%Y")) })
-  provenance <- function() sprintf("# NEON Surface Water Chemistry %s | site %s | built %s | data through %s | values are replicate means (n_reps); below_detection = reported below the analytical detection limit",
-                                   D$built$product, input$site, substr(D$built$when, 1, 10), D$built$data_through)
+  # legacy/format-change fraction of the exported site-window slice (~30% of the
+  # record predates a NEON method/format standardization — a method boundary an
+  # analyst comparing pre/post trends should be told about, in the export header).
+  pct_legacy_slice <- function() {
+    d <- dates_d()
+    s <- D$swc_long |> filter(site == input$site, collectDate >= d[1], collectDate <= d[2])
+    if (!nrow(s)) return(0)
+    mean(grepl("formatChange|legacyData", s$labFlag), na.rm = TRUE)
+  }
+  provenance <- function() sprintf("# NEON Surface Water Chemistry %s | site %s | built %s | data through %s | values are replicate means (n_reps); below_detection = reported below the analytical detection limit | implausible extremes (> per-analyte p99.9 & 50x median) excluded from fits/maps | %.0f%% of rows carry a legacy/formatChange method-standardization flag",
+                                   D$built$product, input$site, substr(D$built$when, 1, 10), D$built$data_through, 100 * pct_legacy_slice())
 
   output$dl_long <- downloadHandler(
     filename = function() paste0(fn_base(), "-long.csv"),
@@ -1030,10 +1160,22 @@ server <- function(input, output, session) {
   output$dl_dict <- downloadHandler(
     filename = function() "NEON-SWC-data-dictionary.csv",
     content = function(file) {
+      # Canonical units now flow from D$analyte_meta (modal, UV no longer NA);
+      # carry the below-detection fraction + the plausibility ceiling so the
+      # exported codebook is self-describing (the FAIR codebook gap).
       dict <- ANALYTE_TBL |>
-        left_join(D$analyte_meta |> select(code = analyte, units, n, n_sites, n_below, source), by = "code") |>
-        transmute(code, display, group, indicator, units, n_obs = n, n_sites, n_below, source)
-      readr::write_excel_csv(dict, file)
+        left_join(D$analyte_meta |> select(code = analyte, units, n, n_sites, n_below, pct_below, source), by = "code") |>
+        left_join(CEIL_TBL |> select(code = analyte, plausibility_ceiling = ceiling), by = "code") |>
+        transmute(code, display, group, indicator, units, n_obs = n, n_sites,
+                  n_below, pct_below = round(pct_below, 4), plausibility_ceiling = signif(plausibility_ceiling, 4),
+                  source)
+      # provenance header documents the below-detection convention + the gate
+      writeLines(c(
+        "# NEON Surface Water Chemistry data dictionary (DP1.20093.001)",
+        "# units = canonical (modal) unit per analyte; below_detection rows keep the reported number (never substituted)",
+        "# n_below / pct_below = count / fraction of below-detection samples; plausibility_ceiling = per-analyte max(p99.9, 50x median) above which a value is excluded as an artifact"),
+        file)
+      readr::write_excel_csv(dict, file, append = TRUE, col_names = TRUE)
     })
 
   ## ---- One-click PDF site report (self-contained, base pdf() + ggplot) ----
@@ -1078,8 +1220,8 @@ server <- function(input, output, session) {
                  label = paste0("Generated ", substr(D$built$when, 1, 10), " from a precomputed read-only dataset (no live API)."))
       print(cover)
 
-      # Page 2 — time series (both analytes, faceted, real units)
-      sl <- D$swc_long |> filter(site == st, analyte %in% c(A, B), collectDate >= d[1], collectDate <= d[2]) |>
+      # Page 2 — time series (both analytes, faceted, real units); drop implausible extremes
+      sl <- D$swc_long |> filter(site == st, analyte %in% c(A, B), collectDate >= d[1], collectDate <= d[2], !implausible) |>
         mutate(lab = factor(ifelse(analyte == A, axis_title(A, uA), axis_title(B, uB)),
                             levels = c(axis_title(A, uA), axis_title(B, uB))))
       if (nrow(sl)) print(
@@ -1101,8 +1243,8 @@ server <- function(input, output, session) {
                title = paste0(analyte_display(B), " vs ", analyte_display(A)), subtitle = sub) + th)
       }
 
-      # Page 4 — seasonal climatology of the main analyte
-      cl <- D$swc_long |> filter(site == st, analyte == A, collectDate >= d[1], collectDate <= d[2]) |>
+      # Page 4 — seasonal climatology of the main analyte; drop implausible extremes
+      cl <- D$swc_long |> filter(site == st, analyte == A, collectDate >= d[1], collectDate <= d[2], !implausible) |>
         mutate(month = lubridate::month(collectDate, label = TRUE))
       if (nrow(cl) >= 6) print(
         ggplot(cl, aes(month, value)) +
@@ -1122,7 +1264,7 @@ server <- function(input, output, session) {
   output$two_sites <- renderPlotly({ safe_plotly({
     d <- dates_d(); A <- main_a(); s1 <- input$site; s2 <- input$site_b %||% DEF_SITE_B
     df <- D$swc_long |> filter(analyte == A, site %in% c(s1, s2),
-                               collectDate >= d[1], collectDate <= d[2]) |> arrange(collectDate)
+                               collectDate >= d[1], collectDate <= d[2], !implausible) |> arrange(collectDate)
     if (!nrow(df)) return(plotly_message("No data for this analyte at these sites in this window.", mode()))
     unit <- df$units[1]
     lab <- function(s) paste0(s, " — ", D$sites_meta$siteName[match(s, D$sites_meta$site)])
@@ -1144,8 +1286,10 @@ server <- function(input, output, session) {
   ## ---- Explore map: markers coloured by the main analyte; click -> select + Compare ----
   output$map <- renderPlotly({ safe_plotly({
     d <- dates_d(); ana <- main_a()
+    # exclude implausible singletons so one artifact (ANC 927) can't blow out the
+    # continent-wide YlGnBu colorbar and floor every other site
     site_avg <- D$swc_long |>
-      filter(analyte == ana, collectDate >= d[1], collectDate <= d[2]) |>
+      filter(analyte == ana, collectDate >= d[1], collectDate <= d[2], !implausible) |>
       group_by(site) |> summarise(avg = mean(value, na.rm = TRUE), nobs = dplyr::n(), .groups = "drop")
     m <- D$sites_meta |> filter(is.finite(lat), is.finite(long)) |>
       left_join(site_avg, by = "site") |> mutate(sel = site == input$site)
