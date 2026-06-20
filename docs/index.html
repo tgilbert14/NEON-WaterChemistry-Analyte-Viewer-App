@@ -210,8 +210,34 @@
       padding:14px 16px; justify-content:flex-start; animation:none }
     html:not(.js) .cnode-lab { font-size:.95rem; margin-top:0 }
 
+    /* ---------- cute creature (top-right hero accent) ---------- */
+    .flybird { position:absolute; top:-6px; right:-6px; width:clamp(150px,23vw,290px);
+      z-index:-1; pointer-events:none; animation: cbBob 4.6s ease-in-out infinite; }
+    .flybird svg { width:100%; height:auto; overflow:visible; display:block }
+    .flybird .halo { transform-box:fill-box; transform-origin:center; animation: cbHalo 5s ease-in-out infinite }
+    .flybird .bird { transform-box:fill-box; transform-origin:50% 72%;
+      filter:drop-shadow(0 7px 14px rgba(3,8,20,.5)) drop-shadow(0 0 13px rgba(52,198,216,.42));
+      animation: cbSquish 4.6s ease-in-out infinite }
+    .flybird .eyes { transform-box:fill-box; transform-origin:center; animation: cbBlink 5.4s ease-in-out infinite }
+    .flybird .ear-l { transform-box:fill-box; transform-origin:55% 88%; animation: cbEarL 3.6s ease-in-out infinite }
+    .flybird .ear-r { transform-box:fill-box; transform-origin:45% 88%; animation: cbEarR 3.6s ease-in-out infinite }
+    .flybird .tail { transform-box:fill-box; transform-origin:12% 60%; animation: cbTail 4.2s ease-in-out infinite }
+    .flybird .spark { transform-box:fill-box; transform-origin:center; animation: cbTwinkle 3.2s ease-in-out infinite }
+    .flybird .s2 { animation-delay:-1.1s } .flybird .s3 { animation-delay:-2.2s } .flybird .s4 { animation-delay:-.6s }
+    @keyframes cbBob { 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-8px) } }
+    @keyframes cbSquish { 0%,100%{ transform:scale(1,1) } 50%{ transform:scale(1.02,.98) } }
+    @keyframes cbHalo { 0%,100%{ opacity:.4; transform:scale(1) } 50%{ opacity:.7; transform:scale(1.06) } }
+    @keyframes cbBlink { 0%,88%,100%{ transform:scaleY(1) } 93%{ transform:scaleY(.08) } }
+    @keyframes cbEarL { 0%,100%{ transform:rotate(0deg) } 50%{ transform:rotate(-7deg) } }
+    @keyframes cbEarR { 0%,100%{ transform:rotate(0deg) } 50%{ transform:rotate(7deg) } }
+    @keyframes cbTail { 0%,100%{ transform:rotate(-3deg) } 50%{ transform:rotate(6deg) } }
+    @keyframes cbTwinkle { 0%,100%{ opacity:.25; transform:scale(.7) } 50%{ opacity:1; transform:scale(1.2) } }
+    @media (max-width:760px){ .flybird{ width:150px; top:-2px; right:-8px; opacity:.75 } }
+    @media (max-width:430px){ .flybird{ display:none } }
+
     @media (prefers-reduced-motion: reduce){
       .sky::before, .launch, .ccore, .constel.lit .cnode-orb, .constel.lit .ctraces line, .frung.pip-on::before { animation:none !important }
+      .flybird, .flybird .halo, .flybird .bird, .flybird .eyes, .flybird .ear-l, .flybird .ear-r, .flybird .tail, .flybird .spark { animation:none !important }
       .launch::after { display:none }
     }
   </style>
@@ -222,6 +248,33 @@
 
   <header class="hero">
     <div class="wrap">
+      <div class="flybird" aria-hidden="true">
+        <svg viewBox="0 0 300 250" role="img" aria-label="A cute water droplet">
+          <defs>
+            <radialGradient id="cbHalo" cx="50%" cy="48%" r="55%"><stop offset="0%" stop-color="#34c6d8" stop-opacity=".5"/><stop offset="46%" stop-color="#2a7f9a" stop-opacity=".2"/><stop offset="100%" stop-color="#2a7f9a" stop-opacity="0"/></radialGradient>
+            <radialGradient id="cbBody" cx="42%" cy="30%" r="74%"><stop offset="0%" stop-color="#aef1f6"/><stop offset="50%" stop-color="#46c6da"/><stop offset="100%" stop-color="#2a90b2"/></radialGradient>
+          </defs>
+          <circle class="halo" cx="150" cy="138" r="104" fill="url(#cbHalo)"/>
+          <g class="bird">
+            <g class="ear-l"><ellipse cx="92" cy="156" rx="13" ry="10" fill="#46c6da"/></g>
+            <g class="ear-r"><ellipse cx="208" cy="156" rx="13" ry="10" fill="#46c6da"/></g>
+            <path d="M150,58 C112,108 98,146 150,196 C202,146 188,108 150,58 Z" fill="url(#cbBody)"/>
+            <ellipse cx="128" cy="118" rx="13" ry="20" fill="#ffffff" opacity=".4" transform="rotate(-18 128 118)"/>
+            <g fill="#7cf0dd" opacity=".5"><ellipse cx="123" cy="158" rx="10" ry="7"/><ellipse cx="177" cy="158" rx="10" ry="7"/></g>
+            <path d="M138,166 Q150,176 162,166" fill="none" stroke="#1f6f86" stroke-width="2.4" stroke-linecap="round" opacity=".65"/>
+            <g class="eyes">
+              <circle cx="132" cy="142" r="12.5" fill="#0a2230"/><circle cx="168" cy="142" r="12.5" fill="#0a2230"/>
+              <circle cx="127" cy="137" r="4.6" fill="#ffffff"/><circle cx="163" cy="137" r="4.6" fill="#ffffff"/>
+              <circle cx="136" cy="147" r="2" fill="#ffffff" opacity=".75"/><circle cx="172" cy="147" r="2" fill="#ffffff" opacity=".75"/>
+            </g>
+          </g>
+          <g>
+            <circle class="spark s1" cx="64" cy="80" r="3.2" fill="#7cf0dd"/><circle class="spark s2" cx="240" cy="88" r="2.6" fill="#aef1f6"/>
+            <circle class="spark s3" cx="214" cy="48" r="2.2" fill="#6ee6c4"/><circle class="spark s4" cx="84" cy="188" r="2.2" fill="#aef1f6"/>
+            <circle class="spark s2" cx="238" cy="162" r="2.4" fill="#6ee6c4"/>
+          </g>
+        </svg>
+      </div>
       <span class="brand">
         <svg viewBox="0 0 100 100" aria-hidden="true">
           <path class="stroke" d="M50 14 L64 30 L50 46 L36 30 Z" />
