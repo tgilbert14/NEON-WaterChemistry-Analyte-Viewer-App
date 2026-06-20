@@ -88,7 +88,7 @@ aqua_theme <- bs_theme(
                  box-shadow:0 2px 6px rgba(0,0,0,.05); }
     .armed-bar .bi { color:#0E7C9B; flex:none; }
     /* opaque so scrolled card headers never bleed through the sticky bar */
-    [data-bs-theme='dark'] .armed-bar { background:#16242b; border-color:rgba(26,160,192,.30); color:#8fd6e8; }
+    [data-bs-theme='dark'] .armed-bar { background:#0c3350; border-color:rgba(52,198,216,.30); color:#6ee6f0; }
 
     /* (the navbar command band + value-box dark info-box treatment now live in
        the DESERT-NIGHT block below, replacing the old water-flow gradient) */
@@ -100,31 +100,31 @@ aqua_theme <- bs_theme(
        'light page, dark hero' cascade look). Toggling dark swaps the tokens.
        ===================================================================== */
     :root {
-      --pine: #149086; --pine2: #0f6f66; --terra: #e0685a; --cardinal: #e0685a;
-      --gold: #d6a31c; --gold-ink: #9a7314; --sky: #2f8fc4; --green: #3f9a52;
-      --ink: #16243a; --muted: #5a6a82; --bg: #eef3fb; --paper: #ffffff;
-      --line: #d6e0ee; --shadow: rgba(20,144,134,.10);
+      --pine: #1a9fb0; --pine2: #0e7c9b; --terra: #2f8fc4; --cardinal: #4aa3e0;
+      --gold: #c79a1c; --gold-ink: #9a7314; --sky: #2f8fc4; --green: #3f9aa0;
+      --ink: #122636; --muted: #5a6a82; --bg: #eef5fb; --paper: #ffffff;
+      --line: #d6e0ee; --shadow: rgba(52,198,216,.10);
     }
     [data-bs-theme='dark'] {
-      --pine: #2dd4bf; --pine2: #5eead4; --terra: #fb8a7e; --cardinal: #fb8a7e;
-      --gold: #ffd24a; --gold-ink: #ffd24a; --sky: #43b8e8; --green: #5fb56a;
-      --ink: #eaf2ff; --muted: #9fb0cf; --bg: #070d1f; --paper: #0e1d40;
+      --pine: #34c6d8; --pine2: #6ee6f0; --terra: #4aa3e0; --cardinal: #4aa3e0;
+      --gold: #6ee6c4; --gold-ink: #6ee6c4; --sky: #4aa3e0; --green: #6ee6c4;
+      --ink: #e6f4fb; --muted: #9fc2d6; --bg: #04111e; --paper: #0c3350;
       --line: rgba(255,255,255,.12); --shadow: rgba(0,0,0,.5);
     }
-    /* body aurora gradients (teal/coral), both modes */
+    /* body aurora gradients (aqua/blue), both modes */
     body {
       background:
-        radial-gradient(1100px 520px at 8% -8%, rgba(20,144,134,.05), transparent 60%),
-        radial-gradient(900px 460px at 102% 2%, rgba(224,104,90,.04), transparent 55%),
-        linear-gradient(180deg, #eef3fb 0%, #e7eef8 100%);
+        radial-gradient(1100px 520px at 8% -8%, rgba(52,198,216,.05), transparent 60%),
+        radial-gradient(900px 460px at 102% 2%, rgba(74,163,224,.04), transparent 55%),
+        linear-gradient(180deg, #eef5fb 0%, #e6eef8 100%);
       background-attachment: fixed;
     }
     [data-bs-theme='dark'] body {
       background:
-        radial-gradient(1100px 520px at 8% -8%, rgba(45,212,191,.12), transparent 60%),
-        radial-gradient(900px 460px at 102% 2%, rgba(251,138,126,.10), transparent 55%),
-        radial-gradient(900px 600px at 50% 120%, rgba(255,210,74,.06), transparent 60%),
-        linear-gradient(180deg, #070d1f 0%, #05080f 100%);
+        radial-gradient(1100px 520px at 8% -8%, rgba(52,198,216,.12), transparent 60%),
+        radial-gradient(900px 460px at 102% 2%, rgba(74,163,224,.10), transparent 55%),
+        radial-gradient(900px 600px at 50% 120%, rgba(110,230,196,.06), transparent 60%),
+        linear-gradient(180deg, #04111e 0%, #020a13 100%);
     }
 
     /* ====================================================================== *
@@ -134,12 +134,13 @@ aqua_theme <- bs_theme(
      * ====================================================================== */
     @keyframes wcStars { to { background-position: 0 220px, 0 220px, 0 220px, 0 220px; } }
     @keyframes wcSheen { 0% { left:-65%; opacity:0; } 12% { opacity:.85; } 100% { left:135%; opacity:0; } }
+    @keyframes wcFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
     .navbar, .bslib-page-navbar > .navbar {
       position: relative; overflow: hidden;
-      background-image: radial-gradient(125% 150% at 16% -12%, #15425f 0%, #0b1733 46%, #070d1f 100%) !important;
+      background-image: radial-gradient(125% 150% at 16% -12%, #0e4a66 0%, #08233a 46%, #04111e 100%) !important;
       background-size: auto !important; animation: none !important;        /* swap the old water-flow for the command band */
-      box-shadow: 0 14px 40px rgba(3,8,20,.42), inset 0 -1px 0 rgba(45,212,191,.18) !important;
+      box-shadow: 0 14px 40px rgba(3,8,20,.42), inset 0 -1px 0 rgba(52,198,216,.20) !important;
     }
     .navbar > * { position: relative; z-index: 1; }
     .navbar::before {                /* drifting starfield */
@@ -147,20 +148,21 @@ aqua_theme <- bs_theme(
       background-repeat: repeat; background-size: 210px 220px,210px 220px,210px 220px,210px 220px;
       background-image:
         radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.6), transparent),
-        radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,220,255,.5), transparent),
-        radial-gradient(1.5px 1.5px at 90px 175px, rgba(255,210,74,.4), transparent),
-        radial-gradient(1.1px 1.1px at 175px 28px, rgba(94,234,212,.5), transparent);
+        radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,230,255,.5), transparent),
+        radial-gradient(1.5px 1.5px at 90px 175px, rgba(74,163,224,.4), transparent),
+        radial-gradient(1.1px 1.1px at 175px 28px, rgba(110,230,196,.5), transparent);
       animation: wcStars 120s linear infinite;
     }
-    .navbar::after {                 /* teal/coral/gold nebula */
+    .navbar::after {                 /* aqua/blue/mint nebula */
       content:''; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.6;
       background:
-        radial-gradient(120px 120px at 8% 40%, rgba(45,212,191,.16), transparent 70%),
-        radial-gradient(150px 150px at 88% 24%, rgba(251,138,126,.12), transparent 70%),
-        radial-gradient(120px 120px at 60% 96%, rgba(255,210,74,.10), transparent 70%);
+        radial-gradient(120px 120px at 8% 40%, rgba(52,198,216,.16), transparent 70%),
+        radial-gradient(150px 150px at 88% 24%, rgba(74,163,224,.12), transparent 70%),
+        radial-gradient(120px 120px at 60% 96%, rgba(110,230,196,.10), transparent 70%);
     }
-    .navbar .navbar-brand, .navbar .navbar-brand * { color: #ffd24a !important; }
-    .navbar .navbar-brand .bi { color: #5eead4 !important; }
+    .navbar .navbar-brand, .navbar .navbar-brand * { color: #6ee6f0 !important; }
+    .navbar .navbar-brand .bi { color: #34c6d8 !important;
+      display:inline-block; animation: wcFloat 4.5s ease-in-out infinite; }
 
     /* ---- DARK 'info-box' value boxes on the LIGHT page (the cascade look) ---- *
      * bslib value_box() renders as .value-box with a bg-{theme} utility. We
@@ -168,25 +170,25 @@ aqua_theme <- bs_theme(
      * + a per-theme accent rail, in BOTH modes, then add a sheen-sweep + lift. */
     .value-box, .bslib-value-box {
       position: relative; overflow: hidden; isolation: isolate;
-      background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%) !important;
+      background: linear-gradient(180deg, #0c3350 0%, #04111e 100%) !important;
       border: 1px solid rgba(255,255,255,.10) !important;
-      border-top: 3px solid var(--vb-accent, #2dd4bf) !important;
+      border-top: 3px solid var(--vb-accent, #34c6d8) !important;
       box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) !important;
       transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .28s ease;
     }
     /* per-theme accent rail, mapped from bslib's bg-{theme} class on the box */
-    .value-box.bg-primary   { --vb-accent: #2dd4bf; }
-    .value-box.bg-secondary { --vb-accent: #9fb0cf; }
-    .value-box.bg-success   { --vb-accent: #5fb56a; }
-    .value-box.bg-warning   { --vb-accent: #ffd24a; }
-    .value-box.bg-info      { --vb-accent: #43b8e8; }
+    .value-box.bg-primary   { --vb-accent: #34c6d8; }
+    .value-box.bg-secondary { --vb-accent: #9fc2d6; }
+    .value-box.bg-success   { --vb-accent: #6ee6c4; }
+    .value-box.bg-warning   { --vb-accent: #6ee6f0; }
+    .value-box.bg-info      { --vb-accent: #4aa3e0; }
     .value-box.bg-danger    { --vb-accent: #fb8a7e; }
-    .value-box.bg-dark      { --vb-accent: #5eead4; }
+    .value-box.bg-dark      { --vb-accent: #6ee6f0; }
     /* force light text inside every value box (bslib's text-bg-* utilities vary) */
     .value-box, .value-box * { color: #ffffff !important; }
-    .value-box .value-box-title { color: #9fb0cf !important; font-weight: 600; }
+    .value-box .value-box-title { color: #9fc2d6 !important; font-weight: 600; }
     .value-box .value-box-value { color: #ffffff !important; }
-    .value-box .help-q { color: #9fb0cf !important; }
+    .value-box .help-q { color: #9fc2d6 !important; }
     .value-box::after {              /* keep the soft top sheen */
       content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
       background: radial-gradient(130% 90% at 12% -10%, rgba(255,255,255,.10), transparent 55%); }
@@ -198,10 +200,11 @@ aqua_theme <- bs_theme(
       transform: skewX(-18deg); pointer-events:none; opacity:0; }
     .vb-door:hover .value-box::before { animation: wcSheen .85s ease; }
     .value-box:hover {
-      box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(45,212,191,.32) !important; }
+      box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(52,198,216,.32) !important; }
 
     @media (prefers-reduced-motion: reduce) {
       .navbar::before, .vb-door .value-box::before { animation: none !important; }
+      .navbar .navbar-brand .bi { animation: none !important; }
       .value-box:hover, .vb-door:hover { transform: none; }
     }
   ")
@@ -636,7 +639,7 @@ server <- function(input, output, session) {
     layout_columns(
       col_widths = breakpoints(sm = 6, lg = 3), fill = FALSE,
       value_box(analyte_display(A), latestA, paste0("latest of ", nrow(ma), " samples"),
-                showcase = spark(ma$collectDate, ma$value, "#9fd6e6"),
+                showcase = spark(ma$collectDate, ma$value, "#6ee6f0"),
                 showcase_layout = "bottom", theme = "primary"),
       value_box(analyte_display(B), latestB, paste0("latest of ", nrow(sb), " samples"),
                 showcase = spark(sb$collectDate, sb$value, "#f0c08a"),

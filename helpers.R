@@ -21,7 +21,7 @@ COL <- list(
   good      = "#2E8B6F",   # strong relationship
   warn      = "#C98A1E",   # caveat amber
   grid_l    = "rgba(0,0,0,.07)", grid_d = "rgba(255,255,255,.12)",
-  bg_l = "#ffffff", bg_d = "#0e1d40", fg_l = "#13242c", fg_d = "#eaf2ff"
+  bg_l = "#ffffff", bg_d = "#0c3350", fg_l = "#13242c", fg_d = "#e6f4fb"
 )
 
 ## ---- PDF report palette (PRINTS ON WHITE PAPER — stays LIGHT) -------------
@@ -174,8 +174,8 @@ plotly_theme <- function(p, mode = "light", big = FALSE) {
   grid <- if (dark) COL$grid_d else COL$grid_l
   # tooltip: teal-edged dark glass on dark, clean white on light
   hl <- if (dark)
-    list(font = list(size = if (big) 15 else 12, color = "#eaf2ff"),
-         bgcolor = "rgba(14,29,64,.96)", bordercolor = "#2dd4bf")
+    list(font = list(size = if (big) 15 else 12, color = "#e6f4fb"),
+         bgcolor = "rgba(4,17,30,.96)", bordercolor = "#34c6d8")
   else
     list(font = list(size = if (big) 15 else 12))
   plotly::layout(p,
