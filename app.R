@@ -121,6 +121,8 @@ aqua_theme <- bs_theme(
                  align-items:center; justify-content:center; flex-direction:column; gap:.7rem; }
     #wcOverlay .wc-spin { width:46px; height:46px; border:4px solid rgba(14,124,155,.2); border-top-color:#0E7C9B;
                           border-radius:50%; animation:wcspin .8s linear infinite; }
+    /* mascot variant of the loader: drop the circle-border spinner, let the droplet bob */
+    #wcOverlay .wc-spin.mascot-spin { border:none; border-radius:0; width:92px; height:auto; animation:none; }
     #wcOverlay .wc-msg { font-weight:600; color:#0E7C9B; letter-spacing:.2px; }
     @keyframes wcspin { to { transform:rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { #wcOverlay .wc-spin { animation:none; } }
@@ -261,6 +263,50 @@ aqua_theme <- bs_theme(
       .navbar .navbar-brand .bi { animation: none !important; }
       .value-box:hover, .vb-door:hover { transform: none; }
     }
+
+    /* ============ in-app mascot — loader · splash guide · celebration ============ */
+    .mascot { display:block; width:100%; height:auto; overflow:visible; }
+    .mascot-ear-l, .mascot-ear-r { transform-box:fill-box; transform-origin:50% 88%; }
+    .mascot-eyes { transform-box:fill-box; transform-origin:center; }
+    @keyframes mascotBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+    @keyframes mascotEarL { 0%,100% { transform: rotate(0); } 50% { transform: rotate(-9deg); } }
+    @keyframes mascotEarR { 0%,100% { transform: rotate(0); } 50% { transform: rotate(9deg); } }
+    @keyframes mascotBlink { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+    /* loader: the droplet bobs + blinks while data loads */
+    .load-spin.mascot-spin { font-size:0; width:92px; height:auto; margin:0 auto 6px; animation:none; }
+    .mascot-spin .mascot { animation: mascotBob 1.5s ease-in-out infinite; }
+    .mascot-spin .mascot-ear-l { animation: mascotEarL 1.5s ease-in-out infinite; }
+    .mascot-spin .mascot-ear-r { animation: mascotEarR 1.5s ease-in-out infinite; }
+    .mascot-spin .mascot-eyes { animation: mascotBlink 3.4s ease-in-out infinite; }
+    /* splash guide: a friendly nudge in the corner while no site is loaded */
+    .splash-guide { position:fixed; right:18px; bottom:16px; z-index:30; display:flex; align-items:flex-end; gap:6px; pointer-events:none; }
+    .splash-guide .sg-mascot { width:74px; flex:none; }
+    .splash-guide .sg-mascot .mascot { animation: mascotBob 2.6s ease-in-out infinite; }
+    .splash-guide .sg-mascot .mascot-ear-l { animation: mascotEarL 2.6s ease-in-out infinite; }
+    .splash-guide .sg-mascot .mascot-ear-r { animation: mascotEarR 2.6s ease-in-out infinite; }
+    .splash-guide .sg-mascot .mascot-eyes { animation: mascotBlink 4.2s ease-in-out infinite; }
+    .splash-guide .sg-bubble { margin-bottom:34px; background:var(--paper); border:1px solid var(--line); color:var(--pine);
+      font-size:12.5px; font-weight:700; padding:6px 11px; border-radius:12px 12px 2px 12px;
+      box-shadow:0 8px 20px -8px var(--shadow); white-space:nowrap; }
+    .splash-guide.wave .sg-mascot { transform-box:fill-box; transform-origin:50% 90%; animation: mascotWave 1s ease 3; }
+    @keyframes mascotWave { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
+    /* celebration: the droplet hops up + fades on a notable find */
+    .mascot-cheer { position:fixed; left:50%; bottom:7%; width:118px; z-index:5000; pointer-events:none;
+      transform:translateX(-50%); animation: mascotCheerPop 1.7s ease forwards; }
+    @keyframes mascotCheerPop {
+      0% { opacity:0; transform:translate(-50%,42px) scale(.6); }
+      20% { opacity:1; transform:translate(-50%,-12px) scale(1.06); }
+      45% { transform:translate(-50%,-34px) scale(1); }
+      72% { transform:translate(-50%,-24px) scale(1); }
+      100% { opacity:0; transform:translate(-50%,-66px) scale(.9); }
+    }
+    @media (max-width:640px) { .splash-guide { display:none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .mascot-spin .mascot, .mascot-spin .mascot-ear-l, .mascot-spin .mascot-ear-r, .mascot-spin .mascot-eyes,
+      .splash-guide .sg-mascot .mascot, .splash-guide .sg-mascot .mascot-ear-l, .splash-guide .sg-mascot .mascot-ear-r,
+      .splash-guide .sg-mascot .mascot-eyes, .splash-guide.wave .sg-mascot { animation:none !important; }
+      .mascot-cheer { display:none; }
+    }
   ")
 
 ## ---- Per-tab info-modal content (progressive disclosure) -----------------
@@ -365,7 +411,56 @@ var WC_HEAVY=['site','analyte_main','analyte_secondary','dates','preset','cor_me
 $(document).on('shiny:inputchanged', function(e){ if(WC_HEAVY.indexOf(e.name)>=0) wcVeilOn(); });
 $(document).on('mousedown', '#map', function(){ wcVeilOn(); });   /* map dot -> select + jump */
 $(document).on('shiny:idle', function(){ wcVeilOff(); });
+
+/* ---- mascot celebration: the droplet hops up + fades on a notable find ----
+   This app has no confetti yet, so mascotCheer() is wired but unused; it clones
+   the loader mascot into a transient .mascot-cheer, ready for any future call. */
+function mascotCheer(big){
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var src = document.querySelector('#wcOverlay .mascot');
+    if (!src) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'mascot-cheer';
+    wrap.appendChild(src.cloneNode(true));
+    document.body.appendChild(wrap);
+    setTimeout(function(){ if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 1700);
+  } catch (e) {}
+}
+
+/* ---- first-visit: the splash mascot waves hello once (localStorage-gated) ---- */
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    if (localStorage.getItem('smtMascotSeen') === '1') return;
+    var g = document.querySelector('.splash-guide');
+    if (g) {
+      g.classList.add('wave');
+      localStorage.setItem('smtMascotSeen', '1');
+      setTimeout(function(){ g.classList.remove('wave'); }, 3300);
+    }
+  } catch (e) {}
+});
+/* dismiss the corner nudge once the user actually engages a site (so it isn't permanent) */
+$(document).on('shiny:inputchanged', function(e){
+  if (e.name === 'site' || e.name === 'preset') {
+    var g = document.getElementById('splashGuide'); if (g) g.style.display = 'none';
+  }
+});
+$(document).on('mousedown', '#map', function(){
+  var g = document.getElementById('splashGuide'); if (g) g.style.display = 'none';
+});
 ")
+
+# The app mascot — a flat (no-gradient, no-id so it's safely reusable) cute water
+# droplet in the aqua accent. Used as the loading spinner, the splash guide, and
+# the celebration hop. The eyes are classed so the CSS can blink them.
+MASCOT_CRITTER <- htmltools::HTML(paste0(
+  '<svg class="mascot" viewBox="0 0 120 120" aria-hidden="true">',
+  '<path d="M60,16 C36,52 28,72 60,98 C92,72 84,52 60,16 Z" fill="#46c6da"/>',
+  '<ellipse cx="48" cy="54" rx="6" ry="11" fill="#ffffff" opacity=".4" transform="rotate(-18 48 54)"/>',
+  '<g class="mascot-eyes"><circle cx="50" cy="64" r="6.5" fill="#0a2230"/><circle cx="70" cy="64" r="6.5" fill="#0a2230"/>',
+  '<circle cx="48" cy="61.5" r="2.4" fill="#ffffff"/><circle cx="68" cy="61.5" r="2.4" fill="#ffffff"/></g>',
+  '</svg>'))
 
 #======================================================================
 # UI
@@ -383,7 +478,12 @@ ui <- page_sidebar(
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1")),
 
   # client-side 'working' overlay (shown on heavy interactions, hidden on idle)
-  tags$div(id = "wcOverlay", tags$div(class = "wc-spin"), tags$div(class = "wc-msg", "Updating…")),
+  tags$div(id = "wcOverlay", tags$div(class = "wc-spin mascot-spin", MASCOT_CRITTER), tags$div(class = "wc-msg", "Updating…")),
+
+  # in-app mascot splash guide — a friendly corner nudge; first-visit wave + dismiss on first interaction (JS below)
+  tags$div(id = "splashGuide", class = "splash-guide",
+           tags$div(class = "sg-bubble", "Pick a site to start!"),
+           tags$div(class = "sg-mascot", MASCOT_CRITTER)),
 
   sidebar = sidebar(
     title = "Controls", width = 340, open = "desktop",
