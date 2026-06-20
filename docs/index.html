@@ -4,22 +4,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>NEON Water Chemistry — the Explorer Suite by Desert Data Labs</title>
+  <title>NEON Water Chemistry, the Explorer Suite by Desert Data Labs</title>
   <meta name="description"
-    content="Stream and lake chemistry made legible: pick an analyte and watch it move through time at each NEON aquatic site, then compare sites and seasons side by side. Real NEON data, honest statistics, instant loads." />
+    content="See what is dissolved in the water at NEON's streams and lakes. Pick a site, pick something like nitrogen or salt, and watch it change through the seasons. Then compare sites across the country. Free, no account, real NEON data." />
   <meta name="theme-color" content="#04111e" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
-  <meta property="og:title" content="NEON Water Chemistry — Desert Data Labs" />
+  <meta property="og:title" content="NEON Water Chemistry, Desert Data Labs" />
   <meta property="og:description"
-    content="Real NEON surface-water chemistry across 34 aquatic sites — pick an analyte, watch it move through time, compare sites and seasons. Honest stats, instant loads." />
+    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Pick a site, pick something like nitrogen or salt, watch it change through the seasons, and compare sites. Free, real NEON data." />
   <meta property="og:image"
     content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="NEON Water Chemistry — Desert Data Labs" />
+  <meta name="twitter:title" content="NEON Water Chemistry, Desert Data Labs" />
   <meta name="twitter:description"
-    content="Real NEON surface-water chemistry across 34 aquatic sites. Honest stats, instant loads." />
+    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Free, real NEON data." />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -303,11 +303,14 @@
         <b>Desert Data Labs</b>
       </span>
 
-      <div class="eyebrow">The NEON Explorer Suite · Climate &amp; water</div>
+      <div class="eyebrow">Part of the NEON Explorer Suite · Water</div>
       <h1>NEON Water Chemistry</h1>
-      <p class="lead">Stream and lake chemistry made legible: pick an <b>analyte</b> and watch it move
-        through <b>time</b> at each NEON aquatic site, then <b>compare</b> sites and seasons side by side.
-        Real surface-water chemistry, with the statistics shown at every step.</p>
+      <p class="lead">See what is dissolved in a stream or a lake, and how it changes through the year.
+        <b>NEON</b> is a network of research sites across the United States, paid for by the National
+        Science Foundation, that measures water, plants, animals, and weather the same way everywhere,
+        year after year. This free app lets you explore the chemistry of the water at those sites. Pick a
+        spot, pick something like <b>nitrogen, salt, or acidity</b>, and watch it rise and fall with the
+        seasons. Then <b>compare sites</b> across the country. No account, just pick a site and start.</p>
 
       <div class="cta-row">
         <a id="launch" class="launch" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
@@ -343,40 +346,44 @@
   <!-- how the viewer reads: sample -> analyte panel -> trend -> compare -->
   <section class="cascade-band">
     <div class="wrap">
-      <span class="kick">How the viewer reads</span>
-      <h2>One analyte. Through time, then across sites.</h2>
-      <p>Every reading starts as a grab sample or sensor value at a field site. The viewer lines those up
-        so you can pick an analyte, watch its trend, and compare sites and seasons — with the statistics
-        shown at every step.</p>
+      <span class="kick">What you can do here</span>
+      <h2>Pick one thing in the water. Watch it through the year, then across sites.</h2>
+      <p>It starts with a real water sample at a field site, either scooped by hand or read by a sensor in
+        the stream. The app lines all of those up so you can pick one thing that is dissolved in the water,
+        see how it changes over time, and compare one site to another. The numbers behind every chart are
+        always shown.</p>
       <div class="flow" data-flow>
-        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Sample</b> &middot; <span>grab &amp; sensor readings, below-detection flagged</span></span></div>
+        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Take a sample</b> &middot; <span>water scooped by hand or read by a sensor, with amounts too low to measure marked clearly</span></span></div>
         <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Analyte panel</b> &middot; <span>ions, nutrients &amp; carbon, named and unit-checked</span></span></div>
+        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Pick what to look at</b> &middot; <span>anything dissolved in the water, like salts, nutrients, or carbon, each one named with its units</span></span></div>
         <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>Trend</b> &middot; <span>over time, with STL seasonality &amp; relationships</span></span></div>
+        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>See how it changes</b> &middot; <span>its trend over time, its seasonal rhythm, and how it tracks with other things in the water</span></span></div>
         <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Compare</b> &middot; <span>sites &amp; seasons, side by side</span></span></div>
+        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Compare</b> &middot; <span>one site against another, and one season against another, side by side</span></span></div>
       </div>
 
       <div class="stats">
-        <div class="stat"><div class="n">34</div><div class="l">aquatic sites</div></div>
-        <div class="stat"><div class="n">34</div><div class="l">analytes</div></div>
-        <div class="stat"><div class="n">~197k</div><div class="l">real observations</div></div>
-        <div class="stat"><div class="n">instant</div><div class="l">no API waits</div></div>
+        <div class="stat"><div class="n">34</div><div class="l">streams &amp; lakes</div></div>
+        <div class="stat"><div class="n">34</div><div class="l">things measured</div></div>
+        <div class="stat"><div class="n">~197k</div><div class="l">real measurements</div></div>
+        <div class="stat"><div class="n">instant</div><div class="l">no waiting, free</div></div>
       </div>
 
       <details class="more">
         <summary>How it stays honest</summary>
         <div class="mbody">
-          The app loads a pre-bundled snapshot of real NEON Surface Water Chemistry, so there are no
-          live-API waits, and leads with transparent, well-sourced methods. <b>Every statistic reports
-          its sample size.</b> Relationships use ordinary least squares with R², p and n, flagged for
-          temporal autocorrelation; correlations default to Spearman (robust to skewed chemistry) with
-          an n &ge; 8 reliability guard and a multiple-comparisons caveat. Seasonality is a real STL
-          decomposition of the measured record, not a fitted sine wave. Below-detection values are
-          flagged rather than hidden, and analyte names and units are chemically verified (bromide vs
-          bicarbonate, chloride vs chlorine, ANC in meq/L). <b>An educational data-exploration tool,
-          not affiliated with NEON, Battelle, or the NSF.</b>
+          Everything here is real NEON data, saved ahead of time so the app loads right away with nothing
+          to wait for. <b>Every number tells you how many measurements it is based on,</b> so you can see
+          when a result rests on plenty of data and when it rests on only a little. When the app draws a
+          line between two things, it shows how well the line fits and warns when readings taken close
+          together in time can make a link look stronger than it is. When it checks whether two things move
+          together, it uses a method that holds up even when the numbers are lopsided, treats anything based
+          on fewer than 8 measurements as shaky, and reminds you that checking many things at once turns up
+          some matches by luck. The seasonal pattern is pulled straight from the real record, not a smooth
+          curve made up to look nice. Amounts too low for the instruments to measure are marked, not hidden.
+          Each thing in the water is named and labeled correctly (bromide is not bicarbonate, chloride is
+          not chlorine). <b>This is a free tool for learning and exploring. It is not affiliated with NEON,
+          Battelle, or the NSF.</b>
         </div>
       </details>
     </div>
@@ -384,10 +391,10 @@
 
   <footer>
     <div class="wrap">
-      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Want a custom data app like these for your project?</a><br>
-      Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water Chemistry</a>
-      product by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data: National Ecological Observatory Network
-      (operated by Battelle, funded by NSF). Educational tool, not affiliated with NEON, Battelle, or the NSF.
+      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Want a custom data app like this for your project?</a><br>
+      Built on NEON's <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water Chemistry</a>
+      data by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data comes from the National Ecological Observatory
+      Network (run by Battelle, funded by the NSF). A free tool for learning, not affiliated with NEON, Battelle, or the NSF.
     </div>
   </footer>
 
