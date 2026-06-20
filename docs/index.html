@@ -20,6 +20,7 @@
   <meta name="twitter:title" content="NEON Water Chemistry — Analyte Viewer" />
   <meta name="twitter:description"
     content="Real NEON water chemistry across 34 aquatic sites. Honest stats, instant loads." />
+  <meta name="theme-color" content="#070d1f" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -28,13 +29,16 @@
     rel="stylesheet" />
   <style>
     :root {
-      --teal: #0E7C9B;
-      --teal-d: #0a5f78;
-      --amber: #D55E00;
-      --ink: #0B2A3A;
-      --slate: #5B7A8C;
-      --bg: #FBFDFE;
-      --card: #ffffff;
+      --teal: #2dd4bf;
+      --teal-bright: #5eead4;
+      --teal-d: #0b1733;
+      --amber: #fb8a7e;
+      --gold: #ffd24a;
+      --ink: #eaf2ff;
+      --slate: #9fb0cf;
+      --bg: #070d1f;
+      --card: #0e1d40;
+      --line: rgba(255, 255, 255, .12);
     }
 
     * {
@@ -47,7 +51,45 @@
       color: var(--ink);
       background: var(--bg);
       -webkit-font-smoothing: antialiased;
-      line-height: 1.55
+      line-height: 1.55;
+      position: relative;
+      overflow-x: hidden
+    }
+
+    /* drifting starfield across the whole page */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: .5;
+      background-repeat: repeat;
+      background-size: 220px 230px, 220px 230px, 220px 230px, 220px 230px;
+      background-image:
+        radial-gradient(1.4px 1.4px at 30px 40px, rgba(255, 255, 255, .6), transparent),
+        radial-gradient(1.2px 1.2px at 160px 90px, rgba(150, 220, 255, .5), transparent),
+        radial-gradient(1.5px 1.5px at 90px 185px, rgba(255, 210, 74, .4), transparent),
+        radial-gradient(1.1px 1.1px at 185px 28px, rgba(94, 234, 212, .5), transparent);
+      animation: starDrift 140s linear infinite
+    }
+
+    @keyframes starDrift {
+      to {
+        background-position: 0 230px, 0 230px, 0 230px, 0 230px
+      }
+    }
+
+    .wrap,
+    section,
+    header,
+    footer {
+      position: relative;
+      z-index: 1
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      body::before { animation: none }
     }
 
     h1,
@@ -68,24 +110,25 @@
       padding: 0 22px
     }
 
-    /* Hero */
+    /* Hero — dark desert-night command band */
     .hero {
       position: relative;
       overflow: hidden;
       color: #fff;
-      background: radial-gradient(120% 140% at 20% 0%, #1597b8 0%, var(--teal) 42%, var(--teal-d) 100%)
+      background: radial-gradient(125% 150% at 16% -12%, #15425f 0%, #0b1733 46%, #070d1f 100%);
+      box-shadow: inset 0 -1px 0 rgba(45, 212, 191, .18)
     }
 
     .hero::after {
       content: "";
       position: absolute;
       inset: 0;
-      opacity: .5;
+      opacity: .6;
       pointer-events: none;
       background:
-        radial-gradient(40px 40px at 12% 30%, rgba(255, 255, 255, .10), transparent 70%),
-        radial-gradient(60px 60px at 82% 22%, rgba(255, 255, 255, .08), transparent 70%),
-        radial-gradient(50px 50px at 65% 78%, rgba(255, 255, 255, .07), transparent 70%)
+        radial-gradient(140px 140px at 12% 30%, rgba(45, 212, 191, .16), transparent 70%),
+        radial-gradient(170px 170px at 82% 22%, rgba(251, 138, 126, .12), transparent 70%),
+        radial-gradient(150px 150px at 65% 78%, rgba(255, 210, 74, .10), transparent 70%)
     }
 
     .hero .wrap {
@@ -111,7 +154,12 @@
       font-size: clamp(2.1rem, 5vw, 3.3rem);
       font-weight: 800;
       margin: 18px 0 10px;
-      letter-spacing: -.02em
+      letter-spacing: -.02em;
+      background: linear-gradient(100deg, #ffffff 0%, var(--teal-bright) 52%, var(--amber) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent
     }
 
     .hero p.lead {
@@ -141,14 +189,25 @@
     }
 
     .btn-primary {
-      background: #fff;
-      color: var(--teal-d);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, .18)
+      background: linear-gradient(100deg, #149086 0%, #2dd4bf 50%, #149086 100%);
+      background-size: 220% 100%;
+      color: #06231f;
+      box-shadow: 0 10px 28px rgba(45, 212, 191, .28);
+      animation: ctaFlow 8s ease-in-out infinite
+    }
+
+    @keyframes ctaFlow {
+      0%, 100% { background-position: 0% 50% }
+      50% { background-position: 100% 50% }
     }
 
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, .24)
+      box-shadow: 0 14px 34px rgba(45, 212, 191, .42)
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .btn-primary { animation: none }
     }
 
     .btn-ghost {
@@ -178,17 +237,18 @@
     }
 
     .stat {
-      background: var(--card);
+      background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%);
+      border: 1px solid var(--line);
       border-radius: 14px;
       padding: 18px 16px;
-      box-shadow: 0 6px 22px rgba(11, 42, 58, .08)
+      box-shadow: 0 12px 28px -12px rgba(3, 8, 20, .6)
     }
 
     .stat .n {
       font-family: "Inter Tight";
       font-weight: 800;
       font-size: 1.7rem;
-      color: var(--teal)
+      color: var(--teal-bright)
     }
 
     .stat .l {
@@ -218,32 +278,33 @@
     }
 
     .feat {
-      background: var(--card);
-      border: 1px solid #eef3f5;
-      border-top: 3px solid #cfe2e8;
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid var(--line);
+      border-top: 3px solid rgba(45, 212, 191, .35);
       border-radius: 12px;
       padding: 20px
     }
 
     .feat-star {
       border-top: 3px solid var(--teal);
-      background: linear-gradient(180deg, rgba(14, 124, 155, .04), #fff 40%)
+      background: linear-gradient(180deg, rgba(45, 212, 191, .10), rgba(255, 255, 255, .04) 45%)
     }
 
     .feat h3 {
       font-size: 1.08rem;
-      margin-bottom: 6px
+      margin-bottom: 6px;
+      color: var(--teal-bright)
     }
 
     .feat p {
       margin: 0;
-      color: #42606e;
+      color: #c3d0e6;
       font-size: .95rem
     }
 
     .honest {
       margin: 40px 0;
-      background: rgba(14, 124, 155, .06);
+      background: rgba(45, 212, 191, .08);
       border-left: 4px solid var(--teal);
       border-radius: 10px;
       padding: 20px 22px
@@ -251,24 +312,33 @@
 
     .honest h2 {
       font-size: 1.25rem;
-      margin-bottom: 10px
+      margin-bottom: 10px;
+      color: var(--teal-bright)
     }
 
     .honest ul {
       margin: 0;
       padding-left: 18px;
-      color: #3b5563
+      color: #c3d0e6
     }
 
     .honest li {
       margin: 6px 0
     }
 
+    .honest b {
+      color: #eaf2ff
+    }
+
     footer {
-      border-top: 1px solid #e7eef1;
+      border-top: 1px solid var(--line);
       padding: 26px 0 50px;
       color: var(--slate);
       font-size: .9rem
+    }
+
+    footer b {
+      color: #eaf2ff
     }
 
     footer a {
@@ -381,18 +451,19 @@
   </section>
 
   <style>
-    .series { background: #0a5f78; color: #fff; padding: 56px 0; }
-    .series h2 { color: #fff; margin: 0; font-size: 1.6rem; }
-    .series-sub { color: #cfe6ee; margin: 8px 0 26px; max-width: 640px; }
+    .series { background: linear-gradient(180deg, #0b1733 0%, #070d1f 100%); color: #fff; padding: 56px 0;
+      border-top: 1px solid rgba(45,212,191,.18); }
+    .series h2 { color: #5eead4; margin: 0; font-size: 1.6rem; }
+    .series-sub { color: #9fb0cf; margin: 8px 0 26px; max-width: 640px; }
     .series-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
     .series-card { display: flex; flex-direction: column; gap: 5px; padding: 22px; border-radius: 16px;
-      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); color: #fff;
+      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #fff;
       text-decoration: none; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
-    .series-card:hover { transform: translateY(-3px); border-color: #FFD200; background: rgba(255,255,255,.13); }
+    .series-card:hover { transform: translateY(-3px); border-color: #ffd24a; background: rgba(255,255,255,.10); }
     .series-emoji { font-size: 1.9rem; line-height: 1; }
     .series-name { font-weight: 800; font-size: 1.12rem; }
-    .series-tag { color: #cfe6ee; font-size: .95rem; }
-    .series-go { color: #FFD200; font-weight: 700; margin-top: 6px; }
+    .series-tag { color: #9fb0cf; font-size: .95rem; }
+    .series-go { color: #ffd24a; font-weight: 700; margin-top: 6px; }
     @media (max-width: 640px) { .series-grid { grid-template-columns: 1fr; } }
   </style>
   <section class="series">

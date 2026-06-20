@@ -41,9 +41,12 @@ DEF_SITE_B <- (setdiff(site_tbl$site, DEF_SITE))[1]   # a different site for the
 ## ---- Theme ---------------------------------------------------------------
 aqua_theme <- bs_theme(
   version = 5,
-  bg = "#FBFDFE", fg = "#13242c",
+  # Light "desert-day" base (the app DEFAULTS to light); the brand teal #0E7C9B is
+  # kept as primary for chart/cover cohesion. The dark-mode system + the dark
+  # command-band / value-box info-boxes are carried in the bs_add_rules() CSS below.
+  bg = "#FBFDFE", fg = "#16243a",
   primary = "#0E7C9B", secondary = "#5B7A8C",
-  success = "#2E8B6F", info = "#3E92CC", warning = "#C98A1E", danger = "#C44536",
+  success = "#3f9a52", info = "#2f8fc4", warning = "#d6a31c", danger = "#e0685a",
   base_font = font_google("Inter"), heading_font = font_google("Inter Tight"),
   "border-radius" = "0.6rem"
 ) |>
@@ -87,18 +90,120 @@ aqua_theme <- bs_theme(
     /* opaque so scrolled card headers never bleed through the sticky bar */
     [data-bs-theme='dark'] .armed-bar { background:#16242b; border-color:rgba(26,160,192,.30); color:#8fd6e8; }
 
-    /* --- subtle water motion (tasteful, not gaudy) --- */
-    .navbar, .bslib-page-navbar > .navbar {
-      background-image: linear-gradient(110deg,#0a5f78 0%,#0E7C9B 28%,#1aa0c0 50%,#0E7C9B 72%,#0a5f78 100%) !important;
-      background-size: 280% 100%; animation: waterflow 22s ease-in-out infinite;
+    /* (the navbar command band + value-box dark info-box treatment now live in
+       the DESERT-NIGHT block below, replacing the old water-flow gradient) */
+
+    /* =====================================================================
+       DESERT-NIGHT design tokens. The app DEFAULTS to light (:root = desert-
+       day), but the prominent INFO BOXES — the command-band navbar + the
+       value boxes — wear the dark desert-night scheme in BOTH modes (the
+       'light page, dark hero' cascade look). Toggling dark swaps the tokens.
+       ===================================================================== */
+    :root {
+      --pine: #149086; --pine2: #0f6f66; --terra: #e0685a; --cardinal: #e0685a;
+      --gold: #d6a31c; --gold-ink: #9a7314; --sky: #2f8fc4; --green: #3f9a52;
+      --ink: #16243a; --muted: #5a6a82; --bg: #eef3fb; --paper: #ffffff;
+      --line: #d6e0ee; --shadow: rgba(20,144,134,.10);
     }
-    @keyframes waterflow { 0%,100% { background-position:0% 50%; } 50% { background-position:100% 50%; } }
-    /* soft light-on-water sheen across the coloured value boxes */
-    .value-box { position:relative; overflow:hidden; }
-    .value-box::after { content:''; position:absolute; inset:0; pointer-events:none;
-      background: radial-gradient(130% 90% at 12% -10%, rgba(255,255,255,.14), transparent 55%); }
-    /* respect reduced-motion preference */
-    @media (prefers-reduced-motion: reduce) { .navbar { animation:none !important; } }
+    [data-bs-theme='dark'] {
+      --pine: #2dd4bf; --pine2: #5eead4; --terra: #fb8a7e; --cardinal: #fb8a7e;
+      --gold: #ffd24a; --gold-ink: #ffd24a; --sky: #43b8e8; --green: #5fb56a;
+      --ink: #eaf2ff; --muted: #9fb0cf; --bg: #070d1f; --paper: #0e1d40;
+      --line: rgba(255,255,255,.12); --shadow: rgba(0,0,0,.5);
+    }
+    /* body aurora gradients (teal/coral), both modes */
+    body {
+      background:
+        radial-gradient(1100px 520px at 8% -8%, rgba(20,144,134,.05), transparent 60%),
+        radial-gradient(900px 460px at 102% 2%, rgba(224,104,90,.04), transparent 55%),
+        linear-gradient(180deg, #eef3fb 0%, #e7eef8 100%);
+      background-attachment: fixed;
+    }
+    [data-bs-theme='dark'] body {
+      background:
+        radial-gradient(1100px 520px at 8% -8%, rgba(45,212,191,.12), transparent 60%),
+        radial-gradient(900px 460px at 102% 2%, rgba(251,138,126,.10), transparent 55%),
+        radial-gradient(900px 600px at 50% 120%, rgba(255,210,74,.06), transparent 60%),
+        linear-gradient(180deg, #070d1f 0%, #05080f 100%);
+    }
+
+    /* ====================================================================== *
+     *  PREMIUM DESERT-NIGHT — the navbar becomes a dark COMMAND BAND with a   *
+     *  drifting starfield + teal/coral/gold nebula, in BOTH modes. Every      *
+     *  animation is prefers-reduced-motion gated at the bottom.               *
+     * ====================================================================== */
+    @keyframes wcStars { to { background-position: 0 220px, 0 220px, 0 220px, 0 220px; } }
+    @keyframes wcSheen { 0% { left:-65%; opacity:0; } 12% { opacity:.85; } 100% { left:135%; opacity:0; } }
+
+    .navbar, .bslib-page-navbar > .navbar {
+      position: relative; overflow: hidden;
+      background-image: radial-gradient(125% 150% at 16% -12%, #15425f 0%, #0b1733 46%, #070d1f 100%) !important;
+      background-size: auto !important; animation: none !important;        /* swap the old water-flow for the command band */
+      box-shadow: 0 14px 40px rgba(3,8,20,.42), inset 0 -1px 0 rgba(45,212,191,.18) !important;
+    }
+    .navbar > * { position: relative; z-index: 1; }
+    .navbar::before {                /* drifting starfield */
+      content:''; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.55;
+      background-repeat: repeat; background-size: 210px 220px,210px 220px,210px 220px,210px 220px;
+      background-image:
+        radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.6), transparent),
+        radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,220,255,.5), transparent),
+        radial-gradient(1.5px 1.5px at 90px 175px, rgba(255,210,74,.4), transparent),
+        radial-gradient(1.1px 1.1px at 175px 28px, rgba(94,234,212,.5), transparent);
+      animation: wcStars 120s linear infinite;
+    }
+    .navbar::after {                 /* teal/coral/gold nebula */
+      content:''; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.6;
+      background:
+        radial-gradient(120px 120px at 8% 40%, rgba(45,212,191,.16), transparent 70%),
+        radial-gradient(150px 150px at 88% 24%, rgba(251,138,126,.12), transparent 70%),
+        radial-gradient(120px 120px at 60% 96%, rgba(255,210,74,.10), transparent 70%);
+    }
+    .navbar .navbar-brand, .navbar .navbar-brand * { color: #ffd24a !important; }
+    .navbar .navbar-brand .bi { color: #5eead4 !important; }
+
+    /* ---- DARK 'info-box' value boxes on the LIGHT page (the cascade look) ---- *
+     * bslib value_box() renders as .value-box with a bg-{theme} utility. We
+     * override ALL of them to the dark navy-glass command scheme with light text
+     * + a per-theme accent rail, in BOTH modes, then add a sheen-sweep + lift. */
+    .value-box, .bslib-value-box {
+      position: relative; overflow: hidden; isolation: isolate;
+      background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%) !important;
+      border: 1px solid rgba(255,255,255,.10) !important;
+      border-top: 3px solid var(--vb-accent, #2dd4bf) !important;
+      box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) !important;
+      transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .28s ease;
+    }
+    /* per-theme accent rail, mapped from bslib's bg-{theme} class on the box */
+    .value-box.bg-primary   { --vb-accent: #2dd4bf; }
+    .value-box.bg-secondary { --vb-accent: #9fb0cf; }
+    .value-box.bg-success   { --vb-accent: #5fb56a; }
+    .value-box.bg-warning   { --vb-accent: #ffd24a; }
+    .value-box.bg-info      { --vb-accent: #43b8e8; }
+    .value-box.bg-danger    { --vb-accent: #fb8a7e; }
+    .value-box.bg-dark      { --vb-accent: #5eead4; }
+    /* force light text inside every value box (bslib's text-bg-* utilities vary) */
+    .value-box, .value-box * { color: #ffffff !important; }
+    .value-box .value-box-title { color: #9fb0cf !important; font-weight: 600; }
+    .value-box .value-box-value { color: #ffffff !important; }
+    .value-box .help-q { color: #9fb0cf !important; }
+    .value-box::after {              /* keep the soft top sheen */
+      content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+      background: radial-gradient(130% 90% at 12% -10%, rgba(255,255,255,.10), transparent 55%); }
+    .value-box > * { position: relative; z-index: 1; }
+    /* sheen-sweep on hover for the clickable value-box 'doors' */
+    .vb-door .value-box::before {
+      content:''; position:absolute; top:0; left:-65%; width:55%; height:100%; z-index:2;
+      background: linear-gradient(100deg, transparent, rgba(255,255,255,.45), transparent);
+      transform: skewX(-18deg); pointer-events:none; opacity:0; }
+    .vb-door:hover .value-box::before { animation: wcSheen .85s ease; }
+    .value-box:hover {
+      box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(45,212,191,.32) !important; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .navbar::before, .vb-door .value-box::before { animation: none !important; }
+      .value-box:hover, .vb-door:hover { transform: none; }
+    }
   ")
 
 ## ---- Per-tab info-modal content (progressive disclosure) -----------------
@@ -241,7 +346,7 @@ ui <- page_sidebar(
     div(class = "scope-note", style = "margin-top:-.4rem", "Sets both analytes to a meaningful pair."),
     hr(),
     div(class = "d-flex justify-content-between align-items-center",
-        input_dark_mode(id = "color_mode"),
+        input_dark_mode(id = "color_mode", mode = "light"),   # DEFAULT LIGHT (dark info-boxes on a light page)
         actionLink("about", "About & data", class = "info-link"))
   ),
 
@@ -961,7 +1066,7 @@ server <- function(input, output, session) {
         if (!is.null(f)) sprintf("OLS R-squared: %.3f   ·   p %s", f$r2, ifelse(f$p < .001, "< 0.001", paste0("= ", signif(f$p, 2)))) else "OLS: insufficient data",
         sprintf("Source: NEON Surface Water Chemistry %s · data through %s", D$built$product, D$built$data_through))
       cover <- ggplot() + xlim(0, 1) + ylim(0, 1) + theme_void() +
-        annotate("text", x = 0.04, y = 0.92, hjust = 0, fontface = "bold", size = 8, color = COL$main,
+        annotate("text", x = 0.04, y = 0.92, hjust = 0, fontface = "bold", size = 8, color = PG$main,
                  label = "NEON Water Chemistry") +
         annotate("text", x = 0.04, y = 0.85, hjust = 0, size = 6, label = "Site report") +
         annotate("text", x = 0.04, y = seq(0.72, 0.72 - 0.06 * (length(lines) - 1), by = -0.06),
@@ -977,7 +1082,7 @@ server <- function(input, output, session) {
       if (nrow(sl)) print(
         ggplot(sl, aes(collectDate, value)) +
           geom_line(aes(color = lab), linewidth = .6) + geom_point(aes(color = lab), size = 1.3) +
-          scale_color_manual(values = setNames(c(COL$main, COL$secondary), levels(sl$lab)), guide = "none") +
+          scale_color_manual(values = setNames(c(PG$main, PG$secondary), levels(sl$lab)), guide = "none") +
           facet_wrap(~lab, ncol = 1, scales = "free_y", strip.position = "left") +
           labs(x = NULL, y = NULL, title = paste0(sm$siteName %||% st, " — analytes through time")) +
           th + theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 90)))
@@ -987,8 +1092,8 @@ server <- function(input, output, session) {
         sub <- sprintf("OLS · R² = %.3f · p %s · n = %d", f$r2,
                        ifelse(f$p < .001, "< 0.001", paste0("= ", signif(f$p, 2))), nrow(pair))
         print(ggplot(pair, aes(x, y)) +
-          geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = COL$main, fill = COL$main, alpha = .15) +
-          geom_point(color = COL$secondary, alpha = .8, size = 2) +
+          geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = PG$main, fill = PG$main, alpha = .15) +
+          geom_point(color = PG$secondary, alpha = .8, size = 2) +
           labs(x = axis_title(A, uA), y = axis_title(B, uB),
                title = paste0(analyte_display(B), " vs ", analyte_display(A)), subtitle = sub) + th)
       }
@@ -998,8 +1103,8 @@ server <- function(input, output, session) {
         mutate(month = lubridate::month(collectDate, label = TRUE))
       if (nrow(cl) >= 6) print(
         ggplot(cl, aes(month, value)) +
-          geom_boxplot(outlier.shape = NA, fill = COL$main, alpha = .18, color = COL$main) +
-          geom_jitter(width = .15, height = 0, color = COL$main, alpha = .5, size = 1.4) +
+          geom_boxplot(outlier.shape = NA, fill = PG$main, alpha = .18, color = PG$main) +
+          geom_jitter(width = .15, height = 0, color = PG$main, alpha = .5, size = 1.4) +
           labs(x = NULL, y = axis_title(A, uA), title = paste0("Monthly climatology — ", analyte_display(A))) + th)
     })
 

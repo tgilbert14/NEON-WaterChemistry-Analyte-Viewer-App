@@ -11,13 +11,28 @@ suppressWarnings(suppressMessages({
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a) == 1 && is.na(a))) b else a
 
 ## ---- Colors (Okabe-Ito CVD-safe; brand teal primary) ---------------------
+# Desert-night creative system. The brand teal stays the primary line color, but
+# the dark-mode chart surfaces (bg_d / fg_d / grid_d) now read the desert-night
+# navy so charts re-theme with the page. The data palettes (SEASON_PAL, the map
+# YlGnBu colorscale, the lolli reliable/grey) are CVD-safe and stay as-is.
 COL <- list(
-  main      = "#0E7C9B",   # main analyte (brand teal)
+  main      = "#0E7C9B",   # main analyte (brand teal — primary line)
   secondary = "#D55E00",   # secondary analyte (Okabe-Ito vermillion)
   good      = "#2E8B6F",   # strong relationship
   warn      = "#C98A1E",   # caveat amber
-  grid_l    = "rgba(0,0,0,.07)", grid_d = "rgba(255,255,255,.10)",
-  bg_l = "#ffffff", bg_d = "#161d26", fg_l = "#13242c", fg_d = "#e8eef2"
+  grid_l    = "rgba(0,0,0,.07)", grid_d = "rgba(255,255,255,.12)",
+  bg_l = "#ffffff", bg_d = "#0e1d40", fg_l = "#13242c", fg_d = "#eaf2ff"
+)
+
+## ---- PDF report palette (PRINTS ON WHITE PAPER — stays LIGHT) -------------
+# The one-click site report (app.R output$dl_report) renders to a base pdf()
+# device on white paper. It is DECOUPLED from the desert-night chart palette:
+# reading the dark navy chart hexes here would print near-invisible on white.
+# These are the LIGHT house hexes, kept legible on paper.
+PG <- list(
+  main      = "#0E7C9B",   # teal — same family, dark enough to read on white
+  secondary = "#C44536",   # cardinal/terracotta accent for the second series
+  ink       = "#13242c"
 )
 SEASON_PAL <- c(Winter = "#56B4E9", Spring = "#009E73", Summer = "#E69F00", Fall = "#CC79A7")
 
@@ -157,10 +172,16 @@ plotly_theme <- function(p, mode = "light", big = FALSE) {
   bg <- if (dark) COL$bg_d else COL$bg_l
   fg <- if (dark) COL$fg_d else COL$fg_l
   grid <- if (dark) COL$grid_d else COL$grid_l
+  # tooltip: teal-edged dark glass on dark, clean white on light
+  hl <- if (dark)
+    list(font = list(size = if (big) 15 else 12, color = "#eaf2ff"),
+         bgcolor = "rgba(14,29,64,.96)", bordercolor = "#2dd4bf")
+  else
+    list(font = list(size = if (big) 15 else 12))
   plotly::layout(p,
     paper_bgcolor = bg, plot_bgcolor = bg,
     font = list(family = "Inter", color = fg, size = if (big) 15 else 12),
-    hoverlabel = list(font = list(size = if (big) 15 else 12)),
+    hoverlabel = hl,
     xaxis = list(gridcolor = grid, zerolinecolor = grid),
     yaxis = list(gridcolor = grid, zerolinecolor = grid))
 }
