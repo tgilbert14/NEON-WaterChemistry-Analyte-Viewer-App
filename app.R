@@ -130,13 +130,13 @@ aqua_theme <- bs_theme(
     .armed-bar { position:sticky; top:0; z-index:20; background:#e7f1f5;
                  border:1px solid rgba(14,124,155,.16); border-radius:.5rem; padding:.4rem .75rem;
                  margin:.1rem 0 .7rem; font-size:.85rem; color:#0a5f78; font-weight:600;
-                 display:flex; align-items:center; gap:.45rem;
+                 display:flex; align-items:center; flex-wrap:wrap; gap:.35rem;
                  box-shadow:0 2px 6px rgba(0,0,0,.05); }
     .armed-bar .bi { color:#0E7C9B; flex:none; }
     /* opaque so scrolled card headers never bleed through the sticky bar */
     [data-bs-theme='dark'] .armed-bar { background:#0c3350; border-color:rgba(52,198,216,.30); color:#6ee6f0; }
     /* small clickable QC pill: a flagged extreme was excluded — click to audit */
-    .qc-pill { margin-left:auto; display:inline-flex; align-items:center; gap:.3rem;
+    .qc-pill { margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:.3rem;
                background:rgba(214,163,28,.16); color:#9a7314; border:1px solid rgba(214,163,28,.4);
                border-radius:1rem; padding:.05rem .55rem; font-size:.76rem; font-weight:600;
                cursor:pointer; text-decoration:none; line-height:1.5; }
@@ -1275,7 +1275,9 @@ server <- function(input, output, session) {
         "# units = canonical (modal) unit per analyte; below_detection rows keep the reported number (never substituted)",
         "# n_below / pct_below = count / fraction of below-detection samples; plausibility_ceiling = per-analyte max(p99.9, 50x median) above which a value is excluded as an artifact"),
         file)
-      readr::write_excel_csv(dict, file, append = TRUE, col_names = TRUE)
+      # write_csv (no BOM) for the appended block: write_excel_csv would emit a
+      # second UTF-8 BOM mid-file, right before the header row, breaking strict CSV readers
+      readr::write_csv(dict, file, append = TRUE, col_names = TRUE)
     })
 
   ## ---- One-click PDF site report (self-contained, base pdf() + ggplot) ----
