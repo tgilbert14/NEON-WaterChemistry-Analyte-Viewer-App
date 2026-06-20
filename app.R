@@ -307,6 +307,46 @@ aqua_theme <- bs_theme(
       .splash-guide .sg-mascot .mascot-eyes, .splash-guide.wave .sg-mascot { animation:none !important; }
       .mascot-cheer { display:none; }
     }
+
+    /* ====================================================================== *
+     *  'Browse all 46 sites' — a CLOSED-by-default collapsible site list      *
+     *  under the Explore map. Matches the canonical sibling pattern (Small    *
+     *  Mammal .picker-list / Birds .site-browse) but wears THIS app's aqua    *
+     *  accent (--pine2 #0E7C9B / --pine #1a9fb0 from the desert-night tokens).*
+     * ====================================================================== */
+    .site-browse { margin: 12px 0 2px; text-align: left; }
+    /* kill the native disclosure triangle */
+    .site-browse > summary { list-style: none; }
+    .site-browse > summary::-webkit-details-marker { display: none; }
+    .site-browse > summary:focus-visible { outline: none; }
+    .site-browse-summary {
+      display: flex; align-items: center; gap: .55rem; min-height: 40px;
+      padding: .5rem .85rem; cursor: pointer; user-select: none;
+      background: var(--paper); border: 1px solid var(--line); border-radius: .6rem;
+      color: var(--pine2); font-weight: 600; font-size: .92rem;
+      box-shadow: 0 1px 4px var(--shadow); transition: background .15s ease, border-color .15s ease;
+    }
+    .site-browse-summary:hover { background: var(--bg); border-color: var(--pine); }
+    .site-browse > summary:focus-visible .site-browse-summary {
+      border-color: var(--pine); box-shadow: 0 0 0 3px rgba(14,124,155,.25); }
+    .site-browse-summary .bi { color: var(--pine2); }
+    .sb-chevron { display: inline-flex; margin-left: auto; color: var(--pine);
+      opacity: .85; transition: transform .2s ease; }
+    .site-browse[open] .sb-chevron { transform: rotate(180deg); }
+    .site-browse-grid {
+      margin-top: 8px; max-height: 340px; overflow-y: auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px;
+      padding: 8px; border: 1px solid var(--line); border-radius: .6rem;
+      background: var(--paper);
+    }
+    .site-browse-link {
+      display: block; padding: 6px 9px; border-radius: 8px; min-height: 38px;
+      color: var(--ink); font-size: 13px; text-decoration: none; }
+    .site-browse-link:hover { background: var(--bg); color: var(--pine2); }
+    .site-browse-link b { color: var(--pine2); }
+    .sb-meta { color: var(--muted); font-size: 11.5px; }
+    @media (max-width: 900px) { .site-browse-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .site-browse-grid { grid-template-columns: 1fr; } }
   ")
 
 ## ---- Per-tab info-modal content (progressive disclosure) -----------------
@@ -531,6 +571,27 @@ ui <- page_sidebar(
                         span(class = "scope-note d-none d-md-inline",
                              "Markers are coloured by the main analyte's site average — tap any marker"))),
         withSpinner(plotlyOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        # Browse-all-sites — a CLOSED-by-default collapsible list under the map.
+        # Each row sets input$pickFromList = <site code>; the server observer
+        # (same path as the map click) selects that site and jumps to Compare.
+        tags$details(class = "site-browse",
+          tags$summary(
+            tags$span(class = "site-browse-summary",
+              bs_icon("list-ul"),
+              tags$span(paste0("Browse all ", nrow(site_tbl), " sites")),
+              tags$span(class = "sb-chevron", bs_icon("chevron-down")))),
+          div(class = "site-browse-grid",
+            lapply(seq_len(nrow(site_tbl)), function(i)
+              tags$a(class = "site-browse-link", href = "#",
+                onclick = sprintf(
+                  "if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('pickFromList','%s',{priority:'event'});return false;",
+                  site_tbl$site[i]),
+                tags$b(site_tbl$site[i]),
+                sprintf(" — %s ", site_tbl$siteName[i]),
+                tags$span(class = "sb-meta",
+                  paste0(site_tbl$state[i] %|na|% site_tbl$domain[i] %|na|% "NEON",
+                         " · ", format(ifelse(is.na(site_tbl$n_obs[i]), 0L, site_tbl$n_obs[i]),
+                                       big.mark = ","), " obs")))))),
         card_footer(class = "scope-note", uiOutput("map_footer")))
     ),
     nav_panel(
@@ -1437,6 +1498,17 @@ server <- function(input, output, session) {
   observeEvent(event_data("plotly_click", source = "sitemap"), {
     ev <- event_data("plotly_click", source = "sitemap")
     site <- ev$customdata
+    if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site) {
+      updateSelectizeInput(session, "site", selected = site)
+      nav_select("main_tabs", "Compare")
+    }
+  })
+
+  # Browse-all-sites list (under the Explore map) -> same load path as a map click:
+  # select the site and jump to Compare. Wired to the same input$site selectize the
+  # rest of the app observes.
+  observeEvent(input$pickFromList, {
+    site <- input$pickFromList
     if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site) {
       updateSelectizeInput(session, "site", selected = site)
       nav_select("main_tabs", "Compare")
