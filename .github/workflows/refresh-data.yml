@@ -88,7 +88,7 @@ jobs:
         run: |
           git config user.name  "neon-data-bot"
           git config user.email "neon-data-bot@users.noreply.github.com"
-          git add data/neon_swc.rds data/analyte_coverage.csv
+          git add data/neon_swc.rds   # analyte_coverage.csv is gitignored (not deployed); only the bundle is committed
           if git diff --cached --quiet; then
             echo "No data changes - nothing to commit or deploy."
           else
