@@ -1,10 +1,10 @@
 name: Refresh NEON data bundle
 
 # Monthly rebuild of the surface-water-chemistry bundle (data/neon_swc.rds +
-# data/analyte_coverage.csv), then a PR. Runs late on the FIRST SATURDAY NIGHT of
-# each month (~11pm Arizona time) so any republish lands off-peak. NEON publishes
-# on a lag, so a monthly pull keeps the bundled data current. Posit Connect Cloud
-# auto-republishes when the PR merges to main.
+# data/analyte_coverage.csv), then a direct push to main. Runs late on the FIRST
+# SATURDAY NIGHT of each month (~11pm Arizona time) so any republish lands off-peak.
+# NEON publishes on a lag, so a monthly pull keeps the bundled data current. Posit
+# Connect Cloud auto-republishes on every push to main.
 #
 # This app pulls the NEON PUBLIC API directly (scripts/precompute_neon_data.R) —
 # no neonUtilities, no NEON token needed. A completeness guard in
@@ -19,6 +19,11 @@ on:
     # night and let the `gate` job below proceed only on the first one.
     - cron: "0 6 * * 0"
   workflow_dispatch:
+    inputs:
+      skip_download:
+        description: "Skip the NEON re-pull; just redeploy the committed bundle to main (fast test)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write          # commit the refreshed bundle to the PR branch
@@ -54,6 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}   # push to main -> Connect Cloud auto-redeploys
 
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -68,29 +75,24 @@ jobs:
 
       # Pull + rebuild data/neon_swc.rds, then guard against a shrunken bundle
       # (the guard stop()s the job before the PR if the pull collapsed).
-      - name: Refresh the surface-water-chemistry bundle
+      - name: Refresh the surface-water-chemistry bundle (full NEON re-pull)
+        if: ${{ github.event.inputs.skip_download != 'true' }}
         run: Rscript scripts/refresh_data.R
 
-      # Land the refreshed bundle on main via a PR (re-uses one branch/PR each
-      # run). Connect Cloud auto-republishes the live app when this PR merges.
-      # Timestamped save_bundle backups + the API cache are gitignored, so only the
-      # live bundle + coverage table are committed.
-      - name: Open/update data-refresh PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          add-paths: |
-            data/neon_swc.rds
-            data/analyte_coverage.csv
-          branch: auto/data-refresh
-          delete-branch: true
-          commit-message: "data: monthly NEON surface-water-chemistry refresh"
-          title: "data: monthly NEON refresh"
-          body: |
-            Automated monthly refresh of NEON Surface Water Chemistry (`DP1.20093.001`)
-            → `data/neon_swc.rds` + `data/analyte_coverage.csv`.
-
-            A completeness guard (`scripts/refresh_data.R`) blocks this PR if the
-            pull came back shrunken, so the committed bundle is only ever replaced
-            by an equal-or-more-complete one. Merging to `main` triggers Posit
-            Connect Cloud to auto-republish the live app.
-          labels: automated, data
+      # Commit + push refreshed data DIRECTLY to main. THIS is the deploy: the push
+      # makes Connect Cloud auto-republish (matching the SM / Veg / Plant / Beetle
+      # siblings, and the suite standard of auto-push to the watched branch, not
+      # PR-merge). The completeness guard in refresh_data.R already stop()s before
+      # here if the pull came back shrunken. Guarded so it no-ops when nothing changed.
+      - name: Commit & push refreshed data to main
+        run: |
+          git config user.name  "neon-data-bot"
+          git config user.email "neon-data-bot@users.noreply.github.com"
+          git add data/neon_swc.rds data/analyte_coverage.csv
+          if git diff --cached --quiet; then
+            echo "No data changes - nothing to commit or deploy."
+          else
+            git commit -m "data: monthly NEON surface-water-chemistry refresh [bot]"
+            git push origin HEAD:main
+            echo "Pushed refreshed data to main - Connect Cloud will redeploy."
+          fi
