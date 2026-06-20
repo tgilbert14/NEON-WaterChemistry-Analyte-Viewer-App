@@ -3,546 +3,403 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NEON Water Chemistry — Analyte Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NEON Water Chemistry — the Explorer Suite by Desert Data Labs</title>
   <meta name="description"
-    content="Explore real NEON surface-water-chemistry analytes across 34 aquatic field sites — time series, relationships, correlations, seasonality and a quick predictor. Honest statistics, instant loads." />
+    content="Stream and lake chemistry made legible: pick an analyte and watch it move through time at each NEON aquatic site, then compare sites and seasons side by side. Real NEON data, honest statistics, instant loads." />
+  <meta name="theme-color" content="#04111e" />
 
-  <!-- Open Graph / social card. -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
-  <meta property="og:title" content="NEON Water Chemistry — Analyte Viewer" />
+  <meta property="og:title" content="NEON Water Chemistry — Desert Data Labs" />
   <meta property="og:description"
-    content="Real NEON surface-water-chemistry across 34 aquatic sites — compare analytes, test relationships, see seasonality. Honest stats, instant loads." />
+    content="Real NEON surface-water chemistry across 34 aquatic sites — pick an analyte, watch it move through time, compare sites and seasons. Honest stats, instant loads." />
   <meta property="og:image"
     content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="NEON Water Chemistry — Analyte Viewer" />
+  <meta name="twitter:title" content="NEON Water Chemistry — Desert Data Labs" />
   <meta name="twitter:description"
-    content="Real NEON water chemistry across 34 aquatic sites. Honest stats, instant loads." />
-  <meta name="theme-color" content="#04111e" />
+    content="Real NEON surface-water chemistry across 34 aquatic sites. Honest stats, instant loads." />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- promote to JS layout before paint so there is no flash of the fallback list -->
+  <script>document.documentElement.className += ' js';</script>
+
   <style>
     :root {
-      --teal: #34c6d8;
-      --teal-bright: #6ee6f0;
-      --teal-d: #08233a;
-      --amber: #4aa3e0;
-      --gold: #6ee6c4;
-      --ink: #e6f4fb;
-      --slate: #9fc2d6;
-      --bg: #04111e;
-      --card: #0c3350;
-      --line: rgba(255, 255, 255, .12);
+      --bg-0:#04111e; --bg-1:#08233a; --bg-2:#0c3350;
+      --teal:#34c6d8; --teal-rgb:52,198,216; --bright:#6ee6f0;
+      --coral:#4aa3e0; --coral-rgb:74,163,224;
+      --gold:#6ee6c4; --gold-rgb:110,230,196;
+      --ink:#e6f4fb; --dim:#9fc2d6; --line:rgba(255,255,255,.12); --card:rgba(255,255,255,.045);
+      /* analyte-flow layer hues (light -> deep aqua) */
+      --clim:#6ee6f0; --phen:#34c6d8; --prod:#4aa3e0; --cons:#2f7fb8;
     }
-
-    * {
-      box-sizing: border-box
-    }
-
+    * { box-sizing: border-box }
+    html,body { margin:0 }
     body {
-      margin: 0;
-      font-family: Inter, system-ui, sans-serif;
-      color: var(--ink);
-      background: var(--bg);
-      -webkit-font-smoothing: antialiased;
-      line-height: 1.55;
-      position: relative;
-      overflow-x: hidden
+      font-family: Rubik, system-ui, sans-serif; color: var(--ink); background: var(--bg-0);
+      -webkit-font-smoothing: antialiased; line-height: 1.55; overflow-x:hidden;
     }
+    h1,h2,h3 { font-family: Rubik, sans-serif; line-height: 1.12; margin:0; font-weight:800 }
+    a { color: var(--bright); text-decoration:none }
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px; position:relative; z-index:2 }
 
-    /* drifting starfield across the whole page */
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      opacity: .5;
-      background-repeat: repeat;
-      background-size: 220px 230px, 220px 230px, 220px 230px, 220px 230px;
-      background-image:
-        radial-gradient(1.4px 1.4px at 30px 40px, rgba(255, 255, 255, .6), transparent),
-        radial-gradient(1.2px 1.2px at 160px 90px, rgba(150, 230, 255, .5), transparent),
-        radial-gradient(1.5px 1.5px at 90px 185px, rgba(74, 163, 224, .4), transparent),
-        radial-gradient(1.1px 1.1px at 185px 28px, rgba(110, 230, 196, .5), transparent);
-      animation: starDrift 140s linear infinite
-    }
-
-    @keyframes starDrift {
-      to {
-        background-position: 0 230px, 0 230px, 0 230px, 0 230px
-      }
-    }
-
-    .wrap,
-    section,
-    header,
-    footer {
-      position: relative;
-      z-index: 1
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      body::before { animation: none }
-    }
-
-    h1,
-    h2,
-    h3 {
-      font-family: "Inter Tight", Inter, sans-serif;
-      line-height: 1.15;
-      margin: 0
-    }
-
-    a {
-      color: var(--teal)
-    }
-
-    .wrap {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 0 22px
-    }
-
-    /* Hero — dark desert-night command band */
-    .hero {
-      position: relative;
-      overflow: hidden;
-      color: #fff;
-      background: radial-gradient(125% 150% at 16% -12%, #0e4a66 0%, #08233a 46%, #04111e 100%);
-      box-shadow: inset 0 -1px 0 rgba(52, 198, 216, .20)
-    }
-
-    .hero::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      opacity: .6;
-      pointer-events: none;
+    /* ---------- desert-night / circuit sky ---------- */
+    .sky { position: fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;
       background:
-        radial-gradient(140px 140px at 12% 30%, rgba(52, 198, 216, .16), transparent 70%),
-        radial-gradient(170px 170px at 82% 22%, rgba(74, 163, 224, .12), transparent 70%),
-        radial-gradient(150px 150px at 65% 78%, rgba(110, 230, 196, .10), transparent 70%)
+        radial-gradient(120% 90% at 50% -8%, var(--bg-2), transparent 58%),
+        radial-gradient(140% 120% at 50% 120%, #0e4a66 0%, var(--bg-1) 45%, var(--bg-0) 100%); }
+    .sky::before { content:""; position:absolute; inset:-50%; opacity:.45;
+      background-repeat:repeat; background-size:240px 240px;
+      background-image:
+        radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.5), transparent),
+        radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,230,255,.45), transparent),
+        radial-gradient(1.5px 1.5px at 90px 170px, rgba(110,230,196,.4), transparent);
+      animation: drift 140s linear infinite; }
+    @keyframes drift { to { transform: translateY(240px) } }
+
+    /* ---------- hero ---------- */
+    .hero { position:relative; z-index:2; padding: 46px 0 6px }
+    .brand { display:inline-flex; align-items:center; gap:10px; }
+    .brand svg { width:26px; height:26px; overflow:visible }
+    .brand .stroke { stroke:var(--teal); stroke-width:7; fill:none; stroke-linecap:round }
+    .brand .pip { fill:var(--bright) }
+    .brand b { font-weight:700; font-size:.82rem; letter-spacing:.16em; text-transform:uppercase; color:var(--dim) }
+    .eyebrow { margin-top:18px; font-family: ui-monospace,Menlo,Consolas,monospace; font-size:.72rem;
+      letter-spacing:.26em; text-transform:uppercase; color:var(--teal); }
+    .hero h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); margin:.5rem 0 .6rem; letter-spacing:-.02em;
+      background:linear-gradient(100deg,#fff 10%, var(--bright) 45%, var(--coral) 95%);
+      -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .lead { font-size: clamp(1.05rem,2.2vw,1.24rem); max-width:60ch; margin:0 0 24px; color:var(--ink) }
+    .lead b { color:var(--bright); font-weight:600 }
+
+    /* ---------- standout launch button (the one thing to click) ---------- */
+    .cta-row { display:flex; flex-wrap:wrap; gap:14px; align-items:center }
+    .launch {
+      position:relative; display:inline-flex; align-items:center; gap:11px;
+      font-weight:800; font-size:1.06rem; padding:15px 28px; border-radius:14px;
+      color:#06121a; border:1px solid rgba(255,255,255,.5); overflow:hidden; isolation:isolate;
+      background:linear-gradient(100deg, var(--bright), var(--teal) 45%, #7fe9ff 80%, var(--bright));
+      background-size:220% 100%;
+      box-shadow:0 10px 34px rgba(var(--teal-rgb),.5), 0 0 0 6px rgba(var(--teal-rgb),.08);
+      transition: transform .16s ease, box-shadow .25s ease;
+      animation: ctaFlow 7s linear infinite;
     }
+    @keyframes ctaFlow { to { background-position:220% 0 } }
+    .launch::after { content:""; position:absolute; inset:0; z-index:-1; mix-blend-mode:soft-light;
+      background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%);
+      transform:translateX(-120%); transition:transform .6s ease; }
+    .launch:hover { transform: translateY(-2px) scale(1.015);
+      box-shadow:0 16px 46px rgba(var(--teal-rgb),.65), 0 0 0 6px rgba(var(--teal-rgb),.12) }
+    .launch:hover::after { transform:translateX(120%) }
+    .launch .arrow { font-size:1.1em; transition:transform .2s ease }
+    .launch:hover .arrow { transform:translateX(4px) }
+    .ghost { display:inline-flex; align-items:center; gap:8px; padding:14px 22px; border-radius:14px;
+      color:#fff; border:1.5px solid var(--line); font-weight:600; transition:background .2s, border-color .2s }
+    .ghost:hover { background:rgba(255,255,255,.07); border-color:rgba(var(--teal-rgb),.5) }
+    .warm { font-size:.82rem; color:var(--dim); margin-top:14px; min-height:1.2em }
 
-    .hero .wrap {
-      position: relative;
-      padding: 70px 22px 64px
+    /* ---------- the constellation (suite hub + signature motion) ---------- */
+    .constel-sec { position:relative; z-index:2; padding: 26px 0 8px }
+    .constel { position:relative; width:100%; max-width:680px; margin:0 auto;
+      aspect-ratio:1/1; max-height:74vh; }
+    .ctraces { position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:1; pointer-events:none }
+    .ctraces line { stroke:rgba(var(--teal-rgb),.5); stroke-width:1.4; stroke-linecap:round;
+      stroke-dasharray:5 9; opacity:0; transition:opacity .5s ease; }
+    .constel.lit .ctraces line { opacity:.6; animation: cascadeFlow 1.5s linear infinite; }
+    @keyframes cascadeFlow { to { stroke-dashoffset:-28 } }    /* energy flows outward from the core */
+
+    /* core = the launch */
+    .ccore {
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      z-index:4; width:var(--core,150px); height:var(--core,150px); --core:clamp(120px,21vmin,168px);
+      display:grid; place-items:center; border-radius:50%; text-align:center; color:#06121a; cursor:pointer;
+      background:radial-gradient(circle at 42% 36%, #eafdff 0%, var(--bright) 30%, var(--teal) 64%, #0a5a66 100%);
+      border:2px solid rgba(255,255,255,.65);
+      box-shadow:0 0 0 7px rgba(var(--teal-rgb),.10), 0 0 46px 6px rgba(var(--teal-rgb),.5), inset 0 0 30px rgba(255,255,255,.4);
+      animation: corePulse 3.6s ease-in-out infinite;
     }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: .78rem;
-      font-weight: 600;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-      background: rgba(255, 255, 255, .16);
-      padding: 6px 12px;
-      border-radius: 999px;
-      backdrop-filter: blur(4px)
+    @keyframes corePulse {
+      0%,100% { box-shadow:0 0 0 7px rgba(var(--teal-rgb),.10), 0 0 46px 6px rgba(var(--teal-rgb),.5), inset 0 0 30px rgba(255,255,255,.4) }
+      50% { box-shadow:0 0 0 12px rgba(var(--teal-rgb),.04), 0 0 66px 12px rgba(var(--teal-rgb),.62), inset 0 0 34px rgba(255,255,255,.5) }
     }
+    .ccore:hover,.ccore:focus-visible { outline:none; transform:translate(-50%,-50%) scale(1.05) }
+    .ccore .clabel { font-weight:800; font-size:clamp(.86rem,2vw,1.02rem); line-height:1.1; padding:0 .5rem }
+    .ccore .csub { display:block; font-weight:700; font-size:.64em; letter-spacing:.14em; text-transform:uppercase;
+      color:#0a4a52; margin-top:.25rem }
 
-    .hero h1 {
-      font-size: clamp(2.1rem, 5vw, 3.3rem);
-      font-weight: 800;
-      margin: 18px 0 10px;
-      letter-spacing: -.02em;
-      background: linear-gradient(100deg, #ffffff 0%, var(--teal-bright) 52%, var(--amber) 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      color: transparent
-    }
+    /* explorer nodes */
+    .cnode { position:absolute; left:0; top:0; z-index:3;
+      transform:translate(calc(var(--x,0px) - 50%), calc(var(--y,0px) - 50%)); }
+    html.js .cnode { opacity:0 }
+    .constel.lit .cnode { opacity:1 }
+    .cnode-orb { display:grid; place-items:center; width:var(--ns,72px); height:var(--ns,72px); border-radius:50%;
+      color:var(--ink); text-align:center; padding:6px;
+      background:radial-gradient(circle at 38% 32%, rgba(255,255,255,.5), rgba(var(--h,52 198 216),.0) 60%), rgba(8,28,46,.85);
+      border:1.5px solid rgba(var(--hc,var(--teal-rgb)),.6);
+      box-shadow:0 0 16px rgba(var(--hc,var(--teal-rgb)),.35), inset 0 0 12px rgba(255,255,255,.12);
+      transition: transform .22s cubic-bezier(.22,1,.36,1), box-shadow .22s ease, border-color .2s ease; }
+    .constel.lit .cnode-orb { animation: bob 6s ease-in-out infinite; animation-delay: calc(var(--i,0) * -.5s) }
+    @keyframes bob { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-6px) } }
+    .cnode:hover, .cnode:focus-visible { outline:none; z-index:9 }
+    .cnode:hover .cnode-orb, .cnode:focus-visible .cnode-orb {
+      transform:scale(1.16); border-color:#fff;
+      box-shadow:0 0 28px rgba(var(--hc,var(--teal-rgb)),.7), inset 0 0 16px rgba(255,255,255,.22) }
+    .cnode-dot { width:9px; height:9px; border-radius:50%; background:rgb(var(--hc,var(--teal-rgb)));
+      box-shadow:0 0 10px rgb(var(--hc,var(--teal-rgb))) }
+    .cnode-lab { font-size:.68rem; font-weight:700; line-height:1.05; margin-top:4px }
 
-    .hero p.lead {
-      font-size: clamp(1.05rem, 2.2vw, 1.28rem);
-      max-width: 62ch;
-      margin: 0 0 28px;
-      color: rgba(255, 255, 255, .92)
-    }
+    /* ---------- the analyte-flow band (what the viewer does) ---------- */
+    .cascade-band { position:relative; z-index:2; margin: 30px 0 6px; padding:26px 0 }
+    .kick { font-family: ui-monospace,Menlo,Consolas,monospace; font-size:.72rem; letter-spacing:.22em;
+      text-transform:uppercase; color:var(--dim) }
+    .cascade-band h2 { font-size:clamp(1.4rem,3.4vw,1.9rem); margin:.4rem 0 4px;
+      background:linear-gradient(100deg,#fff, var(--bright)); -webkit-background-clip:text; background-clip:text; color:transparent }
+    .cascade-band > .wrap > p { color:var(--dim); margin:0 0 20px; max-width:64ch }
+    .flow { display:grid; gap:0 }
+    .frung { position:relative; display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:14px;
+      background:var(--card); border:1px solid var(--line); border-left:4px solid var(--lc); overflow:hidden }
+    .frung + .frung { margin-top:10px }
+    .frung::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.0;
+      background:linear-gradient(100deg, transparent, rgba(var(--lrgb),.16), transparent); }
+    .frung.pip-on::before { animation: pip 2.4s ease-in-out; }     /* energy pulse sweeps each rung in turn */
+    @keyframes pip { 0%{opacity:0; transform:translateX(-30%)} 40%{opacity:1} 100%{opacity:0; transform:translateX(30%)} }
+    .frung .fmark { width:34px; height:34px; flex:0 0 auto; border-radius:9px; position:relative;
+      background:rgba(var(--lrgb),.16); border:1px solid rgba(var(--lrgb),.5) }
+    .frung .fmark::after { content:""; position:absolute; inset:0; margin:auto; width:12px; height:12px; border-radius:50%;
+      background:var(--lc); box-shadow:0 0 12px var(--lc) }
+    .frung .ftxt b { font-weight:800; font-size:1rem } .frung .ftxt span { color:var(--dim); font-size:.86rem }
+    .frung.r1 { --lc:var(--clim); --lrgb:110,230,240 }
+    .frung.r2 { --lc:var(--phen); --lrgb:52,198,216; margin-left:14px }
+    .frung.r3 { --lc:var(--prod); --lrgb:74,163,224; margin-left:28px }
+    .frung.r4 { --lc:var(--cons); --lrgb:47,127,184; margin-left:42px }
+    .farrow { color:rgba(255,255,255,.32); text-align:center; margin:2px 0 2px 17px; font-size:1.05rem }
 
-    .cta-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      align-items: center
-    }
+    /* ---------- stats + about ---------- */
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:26px 0 0; position:relative; z-index:2 }
+    .stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 14px; text-align:center }
+    .stat .n { font-weight:800; font-size:1.5rem; color:var(--bright) } .stat .l { font-size:.78rem; color:var(--dim) }
+    details.more { margin:30px 0 0; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden }
+    details.more > summary { cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between;
+      gap:1rem; padding:1rem 1.3rem; font-weight:700; color:var(--bright) }
+    details.more > summary::-webkit-details-marker { display:none }
+    details.more > summary::after { content:"+"; color:var(--coral); font-weight:800; font-size:1.2rem }
+    details.more[open] > summary::after { content:"\2212" }
+    details.more[open] { border-color:rgba(var(--teal-rgb),.4) }
+    details.more .mbody { padding:0 1.3rem 1.2rem; color:var(--dim) }
+    details.more .mbody b { color:var(--ink) }
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-      font-size: 1.05rem;
-      padding: 14px 26px;
-      border-radius: 12px;
-      text-decoration: none;
-      transition: transform .12s ease, box-shadow .12s ease
-    }
+    footer { position:relative; z-index:2; border-top:1px solid var(--line); margin-top:34px; padding:26px 0 54px;
+      color:var(--dim); font-size:.9rem }
+    .cta-foot { display:inline-block; margin-bottom:10px; font-weight:700; color:var(--coral) }
 
-    .btn-primary {
-      background: linear-gradient(100deg, #0e7c9b 0%, #34c6d8 50%, #0e7c9b 100%);
-      background-size: 220% 100%;
-      color: #06231f;
-      box-shadow: 0 10px 28px rgba(52, 198, 216, .28);
-      animation: ctaFlow 8s ease-in-out infinite
-    }
+    @media (max-width:560px){ .stats { grid-template-columns:repeat(2,1fr) } .frung { margin-left:0 !important } }
 
-    @keyframes ctaFlow {
-      0%, 100% { background-position: 0% 50% }
-      50% { background-position: 100% 50% }
-    }
+    /* ---------- no-JS fallback: a plain reachable grid of the suite ---------- */
+    html:not(.js) .ctraces, html:not(.js) .ccore .csub { display:none }
+    html:not(.js) .constel { aspect-ratio:auto; max-width:100%; display:grid;
+      grid-template-columns:repeat(2,1fr); gap:12px; padding:8px 0 }
+    html:not(.js) .ccore { position:static; transform:none; width:auto; height:auto; border-radius:14px;
+      grid-column:1/-1; padding:18px; animation:none }
+    html:not(.js) .cnode { position:static; transform:none; opacity:1 }
+    html:not(.js) .cnode-orb { width:auto; height:auto; flex-direction:row; gap:10px; border-radius:14px;
+      padding:14px 16px; justify-content:flex-start; animation:none }
+    html:not(.js) .cnode-lab { font-size:.95rem; margin-top:0 }
 
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 14px 34px rgba(52, 198, 216, .42)
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .btn-primary { animation: none }
-    }
-
-    .btn-ghost {
-      color: #fff;
-      border: 1.5px solid rgba(255, 255, 255, .6)
-    }
-
-    .btn-ghost:hover {
-      background: rgba(255, 255, 255, .12)
-    }
-
-    .warm {
-      font-size: .82rem;
-      color: rgba(255, 255, 255, .82);
-      margin-top: 14px;
-      min-height: 1.2em
-    }
-
-    /* Stats strip */
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
-      margin: -34px auto 0;
-      position: relative;
-      z-index: 2
-    }
-
-    .stat {
-      background: linear-gradient(180deg, #0c3350 0%, #04111e 100%);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 18px 16px;
-      box-shadow: 0 12px 28px -12px rgba(3, 8, 20, .6)
-    }
-
-    .stat .n {
-      font-family: "Inter Tight";
-      font-weight: 800;
-      font-size: 1.7rem;
-      color: var(--teal-bright)
-    }
-
-    .stat .l {
-      font-size: .82rem;
-      color: var(--slate);
-      font-weight: 500
-    }
-
-    /* Features */
-    section.body {
-      padding: 54px 0 10px
-    }
-
-    .sub {
-      color: var(--slate);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      font-size: .78rem
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 18px;
-      margin-top: 22px
-    }
-
-    .feat {
-      background: rgba(255, 255, 255, .05);
-      border: 1px solid var(--line);
-      border-top: 3px solid rgba(52, 198, 216, .35);
-      border-radius: 12px;
-      padding: 20px
-    }
-
-    .feat-star {
-      border-top: 3px solid var(--teal);
-      background: linear-gradient(180deg, rgba(52, 198, 216, .10), rgba(255, 255, 255, .04) 45%)
-    }
-
-    .feat h3 {
-      font-size: 1.08rem;
-      margin-bottom: 6px;
-      color: var(--teal-bright)
-    }
-
-    .feat p {
-      margin: 0;
-      color: #c3d0e6;
-      font-size: .95rem
-    }
-
-    .honest {
-      margin: 40px 0;
-      background: rgba(52, 198, 216, .08);
-      border-left: 4px solid var(--teal);
-      border-radius: 10px;
-      padding: 20px 22px
-    }
-
-    .honest h2 {
-      font-size: 1.25rem;
-      margin-bottom: 10px;
-      color: var(--teal-bright)
-    }
-
-    .honest ul {
-      margin: 0;
-      padding-left: 18px;
-      color: #c3d0e6
-    }
-
-    .honest li {
-      margin: 6px 0
-    }
-
-    .honest b {
-      color: #eaf2ff
-    }
-
-    footer {
-      border-top: 1px solid var(--line);
-      padding: 26px 0 50px;
-      color: var(--slate);
-      font-size: .9rem
-    }
-
-    footer b {
-      color: #eaf2ff
-    }
-
-    footer a {
-      font-weight: 600;
-      text-decoration: none
-    }
-
-    @media(max-width:760px) {
-      .stats {
-        grid-template-columns: repeat(2, 1fr)
-      }
-
-      .grid {
-        grid-template-columns: 1fr
-      }
+    @media (prefers-reduced-motion: reduce){
+      .sky::before, .launch, .ccore, .constel.lit .cnode-orb, .constel.lit .ctraces line, .frung.pip-on::before { animation:none !important }
+      .launch::after { display:none }
     }
   </style>
 </head>
 
 <body>
+  <div class="sky" aria-hidden="true"></div>
 
   <header class="hero">
     <div class="wrap">
-      <span class="badge">NEON · Surface Water Chemistry · DP1.20093.001</span>
-      <h1>NEON Water Chemistry<br>Analyte Viewer</h1>
-      <p class="lead">Compare two water-chemistry analytes at any of 34 NEON aquatic field sites,
-        then explore how they move together through time, how they relate, what else they correlate
-        with, and their seasonal pattern — on real data, with statistics that show their work.</p>
+      <span class="brand">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <path class="stroke" d="M50 14 L64 30 L50 46 L36 30 Z" />
+          <line class="stroke" x1="50" y1="46" x2="50" y2="86" />
+          <line class="stroke" x1="34" y1="86" x2="66" y2="86" />
+          <circle class="pip" cx="50" cy="62" r="7.5" />
+        </svg>
+        <b>Desert Data Labs</b>
+      </span>
+
+      <div class="eyebrow">The NEON Explorer Suite · Climate &amp; water</div>
+      <h1>NEON Water Chemistry</h1>
+      <p class="lead">Stream and lake chemistry made legible: pick an <b>analyte</b> and watch it move
+        through <b>time</b> at each NEON aquatic site, then <b>compare</b> sites and seasons side by side.
+        Real surface-water chemistry, with the statistics shown at every step.</p>
+
       <div class="cta-row">
-        <a id="launch" class="btn btn-primary" href="#">Launch the app&nbsp;→</a>
-        <a class="btn btn-ghost" href="https://github.com/tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App"
-          target="_blank" rel="noopener">View on GitHub</a>
+        <a id="launch" class="launch" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
+          Launch the Water Chemistry app <span class="arrow" aria-hidden="true">&rarr;</span>
+        </a>
+        <a class="ghost" href="https://github.com/tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App" target="_blank" rel="noopener">View on GitHub</a>
       </div>
       <div class="warm" id="warm"></div>
     </div>
   </header>
 
-  <div class="wrap">
-    <div class="stats">
-      <div class="stat">
-        <div class="n">34</div>
-        <div class="l">aquatic field sites</div>
-      </div>
-      <div class="stat">
-        <div class="n">~197k</div>
-        <div class="l">real observations</div>
-      </div>
-      <div class="stat">
-        <div class="n">34</div>
-        <div class="l">analytes</div>
-      </div>
-      <div class="stat">
-        <div class="n">0</div>
-        <div class="l">live API waits</div>
-      </div>
-    </div>
-  </div>
-
-  <section class="body">
+  <!-- the suite, as a living constellation. The core launches Water Chemistry; each node opens an explorer. -->
+  <section class="constel-sec" aria-label="The NEON Explorer Suite">
     <div class="wrap">
-      <span class="sub">What you can do</span>
-      <div class="grid">
-        <div class="feat">
-          <h3>Compare through time</h3>
-          <p>Two analytes on a shared time axis — normalized to compare shape honestly, or raw on dual axes with an
-            explicit caveat.</p>
-        </div>
-        <div class="feat feat-star">
-          <h3>See the seasonal pattern</h3>
-          <p>Monthly climatology and a real STL decomposition of the measured record — trend and seasonal cycle pulled
-            from the actual data, with no fabricated forecasts.</p>
-        </div>
-        <div class="feat feat-star">
-          <h3>Predict an analyte</h3>
-          <p>A model that estimates the main analyte from its three best-correlated analytes, scored against a mean-only
-            baseline so you can see whether it actually adds anything.</p>
-        </div>
-        <div class="feat">
-          <h3>Test the relationship</h3>
-          <p>Least-squares fit with a confidence band, R²/p/n, and a temporal-autocorrelation flag so the p-value isn't
-            oversold.</p>
-        </div>
-        <div class="feat">
-          <h3>Screen correlations</h3>
-          <p>Main analyte vs every other — Spearman by default, n shown per row, low-n flagged, multiple-comparisons
-            caveat printed.</p>
-        </div>
-        <div class="feat">
-          <h3>Place it on the map</h3>
-          <p>All 34 NEON aquatic sites, from desert streams to Alaskan lakes to Puerto Rican rivers.</p>
-        </div>
-      </div>
+      <div class="constel is-noscript" data-constel style="--n:7;">
+        <svg class="ctraces" viewBox="-340 -340 680 680" aria-hidden="true"><g data-traces></g></svg>
 
-      <div class="honest">
-        <h2>Statistics</h2>
-        <p>The analysis is built on transparent, well-documented methods:</p>
-        <ul>
-          <li><b>Relationships</b> use ordinary least squares with R², p and n, flagged for temporal
-            autocorrelation; correlations default to Spearman (robust to skewed chemistry) with an
-            n ≥ 8 reliability guard.</li>
-          <li><b>Seasonality</b> is a real STL decomposition, with interpolated months disclosed,
-            rather than a fitted sine wave.</li>
-          <li>Every statistic reports its <b>sample size</b>, and below-detection values are flagged
-            rather than hidden (15,553 across the record).</li>
-          <li>Analyte <b>names and units</b> are verified (bromide vs bicarbonate, chloride vs
-            chlorine, ANC in meq/L).</li>
-        </ul>
+        <a class="ccore" data-core href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/" aria-label="Launch the NEON Water Chemistry app">
+          <span class="clabel">Water Chemistry<span class="csub">launch &rarr;</span></span>
+        </a>
+
+        <a class="cnode" style="--i:0; --hc:45,212,191" href="https://tgilbert14.github.io/NEON-Driver-Cascade/" aria-label="NEON Driver Cascade"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Driver Cascade</span></span></a>
+        <a class="cnode" style="--i:1; --hc:56,168,232" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" aria-label="NEON Small Mammal Tracker"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Small Mammals</span></span></a>
+        <a class="cnode" style="--i:2; --hc:245,177,63" href="https://tgilbert14.github.io/NEON-Breeding-Birds/" aria-label="NEON Breeding Birds"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Breeding Birds</span></span></a>
+        <a class="cnode" style="--i:3; --hc:54,217,138" href="https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/" aria-label="NEON Ground Beetle Tracker"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Ground Beetles</span></span></a>
+        <a class="cnode" style="--i:4; --hc:95,209,106" href="https://tgilbert14.github.io/NEON-Plant-Diversity/" aria-label="NEON Plant Diversity"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Plant Diversity</span></span></a>
+        <a class="cnode" style="--i:5; --hc:106,191,90" href="https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/" aria-label="NEON Plant Phenology"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Plant Phenology</span></span></a>
+        <a class="cnode" style="--i:6; --hc:78,184,106" href="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/" aria-label="NEON Vegetation Structure"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Veg Structure</span></span></a>
       </div>
     </div>
   </section>
 
-  <style>
-    .series { background: linear-gradient(180deg, #08233a 0%, #04111e 100%); color: #fff; padding: 56px 0;
-      border-top: 1px solid rgba(52,198,216,.20); }
-    .series h2 { color: #6ee6f0; margin: 0; font-size: 1.6rem; }
-    .series-sub { color: #9fc2d6; margin: 8px 0 26px; max-width: 640px; }
-    .series-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-    .series-card { display: flex; flex-direction: column; gap: 5px; padding: 22px; border-radius: 16px;
-      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #fff;
-      text-decoration: none; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
-    .series-card:hover { transform: translateY(-3px); border-color: #6ee6c4; background: rgba(255,255,255,.10); }
-    .series-emoji { font-size: 1.9rem; line-height: 1; }
-    .series-name { font-weight: 800; font-size: 1.12rem; }
-    .series-tag { color: #9fc2d6; font-size: .95rem; }
-    .series-go { color: #6ee6c4; font-weight: 700; margin-top: 6px; }
-    @media (max-width: 640px) { .series-grid { grid-template-columns: 1fr; } }
-  </style>
-  <section class="series">
+  <!-- how the viewer reads: sample -> analyte panel -> trend -> compare -->
+  <section class="cascade-band">
     <div class="wrap">
-      <h2>Check out some of our other NEON series apps</h2>
-      <p class="series-sub">Pick another data type to explore.</p>
-      <div class="series-grid">
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Plant-Diversity/" target="_blank" rel="noopener">
-          <span class="series-emoji">🌿</span>
-          <span class="series-name">NEON Plant Diversity Explorer</span>
-          <span class="series-tag">Cover, native vs invasive, and Hill diversity across 46 terrestrial sites.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" target="_blank" rel="noopener">
-          <span class="series-emoji">🐾</span>
-          <span class="series-name">NEON Small Mammal Tracker</span>
-          <span class="series-tag">Small-mammal box-trapping across 46 NEON sites.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/" target="_blank" rel="noopener">
-          <span class="series-emoji">🪲</span>
-          <span class="series-name">NEON Ground Beetle Tracker</span>
-          <span class="series-tag">Ground-beetle (carabid) pitfall sampling across NEON sites.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/" target="_blank" rel="noopener">
-          <span class="series-emoji">🌳</span>
-          <span class="series-name">NEON Vegetation Structure Explorer</span>
-          <span class="series-tag">Every tagged tree &amp; desert shrub — diameter, height &amp; growth across 42 NEON sites, every biome.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/" target="_blank" rel="noopener">
-          <span class="series-emoji">🍃</span>
-          <span class="series-name">NEON Plant Phenology Explorer</span>
-          <span class="series-tag">Green-up, flowering &amp; leaf-off timing for 9,500+ tagged plants across 46 sites.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
+      <span class="kick">How the viewer reads</span>
+      <h2>One analyte. Through time, then across sites.</h2>
+      <p>Every reading starts as a grab sample or sensor value at a field site. The viewer lines those up
+        so you can pick an analyte, watch its trend, and compare sites and seasons — with the statistics
+        shown at every step.</p>
+      <div class="flow" data-flow>
+        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Sample</b> &middot; <span>grab &amp; sensor readings, below-detection flagged</span></span></div>
+        <div class="farrow" aria-hidden="true">&darr;</div>
+        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Analyte panel</b> &middot; <span>ions, nutrients &amp; carbon, named and unit-checked</span></span></div>
+        <div class="farrow" aria-hidden="true">&darr;</div>
+        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>Trend</b> &middot; <span>over time, with STL seasonality &amp; relationships</span></span></div>
+        <div class="farrow" aria-hidden="true">&darr;</div>
+        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Compare</b> &middot; <span>sites &amp; seasons, side by side</span></span></div>
       </div>
+
+      <div class="stats">
+        <div class="stat"><div class="n">34</div><div class="l">aquatic sites</div></div>
+        <div class="stat"><div class="n">34</div><div class="l">analytes</div></div>
+        <div class="stat"><div class="n">~197k</div><div class="l">real observations</div></div>
+        <div class="stat"><div class="n">instant</div><div class="l">no API waits</div></div>
+      </div>
+
+      <details class="more">
+        <summary>How it stays honest</summary>
+        <div class="mbody">
+          The app loads a pre-bundled snapshot of real NEON Surface Water Chemistry, so there are no
+          live-API waits, and leads with transparent, well-sourced methods. <b>Every statistic reports
+          its sample size.</b> Relationships use ordinary least squares with R², p and n, flagged for
+          temporal autocorrelation; correlations default to Spearman (robust to skewed chemistry) with
+          an n &ge; 8 reliability guard and a multiple-comparisons caveat. Seasonality is a real STL
+          decomposition of the measured record, not a fitted sine wave. Below-detection values are
+          flagged rather than hidden, and analyte names and units are chemically verified (bromide vs
+          bicarbonate, chloride vs chlorine, ANC in meq/L). <b>An educational data-exploration tool,
+          not affiliated with NEON, Battelle, or the NSF.</b>
+        </div>
+      </details>
     </div>
   </section>
 
   <footer>
     <div class="wrap">
-      Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank"
-        rel="noopener">Surface Water Chemistry</a>
-      product by <b>Desert Data Labs</b> · Tucson, AZ.
-      Data: National Ecological Observatory Network (operated by Battelle, funded by NSF). An
-      educational data-exploration tool, not affiliated with NEON, Battelle, or the NSF.
+      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Want a custom data app like these for your project?</a><br>
+      Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water Chemistry</a>
+      product by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data: National Ecological Observatory Network
+      (operated by Battelle, funded by NSF). Educational tool, not affiliated with NEON, Battelle, or the NSF.
     </div>
   </footer>
 
   <script>
-    // ── Set this to your deployed app URL (Connect Cloud) or "app/" for a shinylive build ──
-    const APP_URL="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/";
-
-    (function() {
-      const placeholder=APP_URL.indexOf("REPLACE-WITH")!==-1;
-      const launch=document.getElementById("launch");
-      const warm=document.getElementById("warm");
-
-      if(placeholder) {
-        launch.addEventListener("click",function(e) {
-          e.preventDefault();
-          warm.textContent="⚠ Set APP_URL in docs/index.html to your deployed app URL, then re-publish.";
-        });
-        return;
-      }
-      launch.href=APP_URL;
-
-      // Pre-warm the (possibly sleeping) app while the visitor reads, to soften cold start.
-      // Aborts after 8s so a hung request never leaves "Warming up…" stuck on screen.
+    // ---- the Water Chemistry app (Connect Cloud share URL); pre-warm on load ----
+    var APP_URL = "https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/";
+    (function () {
+      var launch = document.getElementById("launch");
+      var warm = document.getElementById("warm");
+      if (launch) launch.href = APP_URL;
       try {
-        warm.textContent="Warming up the app…";
-        var ctrl=(typeof AbortController!=="undefined")?new AbortController():null;
-        var killer=ctrl?setTimeout(function() {ctrl.abort();},8000):null;
-        fetch(APP_URL,{mode: "no-cors",cache: "no-store",signal: ctrl?ctrl.signal:undefined})
-          .then(function() {if(killer) clearTimeout(killer); warm.textContent="Ready when you are.";})
-          .catch(function() {if(killer) clearTimeout(killer); warm.textContent="";});
-      } catch(e) { /* ignore */}
+        if (warm) warm.textContent = "Warming up the app…";
+        var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+        var killer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
+        fetch(APP_URL, { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
+          .then(function () { if (warm) warm.textContent = "Ready when you are."; })
+          .catch(function () { if (warm) warm.textContent = ""; })
+          .finally(function () { if (killer) clearTimeout(killer); });
+      } catch (e) {}
+    })();
+
+    // ---- the constellation: lay the 7 explorers on a ring, draw energy traces ----
+    (function () {
+      var root = document.querySelector("[data-constel]");
+      if (!root) return;
+      var nodes = Array.prototype.slice.call(root.querySelectorAll(".cnode"));
+      var tracesG = root.querySelector("[data-traces]");
+      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      root.classList.remove("is-noscript");
+
+      var n = nodes.length, TR = 300; // trace viewBox radius
+      // build a trace from center to each node
+      if (tracesG) {
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < n; i++) {
+          var th = (i * (360 / n) - 90) * Math.PI / 180;
+          var ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          ln.setAttribute("x1", "0"); ln.setAttribute("y1", "0");
+          ln.setAttribute("x2", (Math.cos(th) * TR).toFixed(1));
+          ln.setAttribute("y2", (Math.sin(th) * TR).toFixed(1));
+          frag.appendChild(ln);
+        }
+        tracesG.appendChild(frag);
+      }
+
+      function place(landed) {
+        var r = root.getBoundingClientRect();
+        var cx = r.width / 2, cy = r.height / 2;
+        var unit = Math.min(r.width, r.height);
+        var rad = unit * 0.40, ns = Math.max(58, unit * 0.135);
+        nodes.forEach(function (nd, i) {
+          nd.style.setProperty("--ns", ns.toFixed(0) + "px");
+          var th = (i * (360 / n) - 90) * Math.PI / 180;
+          var f = landed ? 1 : 0.18;            // start near the core, fly out on land
+          nd.style.setProperty("--x", (cx + Math.cos(th) * rad * f).toFixed(1) + "px");
+          nd.style.setProperty("--y", (cy + Math.sin(th) * rad * f).toFixed(1) + "px");
+        });
+      }
+
+      place(false);
+      // light it up (fly the nodes out + start the energy flow) after a beat
+      function lite() { place(true); root.classList.add("lit"); }
+      if (reduce) { lite(); }
+      else { requestAnimationFrame(function () { requestAnimationFrame(lite); }); setTimeout(lite, 400); }
+
+      var rt;
+      window.addEventListener("resize", function () {
+        clearTimeout(rt); rt = setTimeout(function () { place(root.classList.contains("lit")); }, 120);
+      }, { passive: true });
+    })();
+
+    // ---- the analyte flow: pulse each rung in turn (the reading moving through) ----
+    (function () {
+      var rungs = Array.prototype.slice.call(document.querySelectorAll("[data-flow] .frung"));
+      if (!rungs.length || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var i = 0;
+      setInterval(function () {
+        rungs.forEach(function (r) { r.classList.remove("pip-on"); });
+        var el = rungs[i % rungs.length];
+        // force reflow so the animation restarts each cycle
+        void el.offsetWidth; el.classList.add("pip-on");
+        i++;
+      }, 900);
     })();
   </script>
 </body>
