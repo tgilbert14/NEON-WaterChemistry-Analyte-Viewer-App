@@ -6,20 +6,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>NEON Water Chemistry, the Explorer Suite by Desert Data Labs</title>
   <meta name="description"
-    content="See what is dissolved in the water at NEON's streams and lakes. Pick a site, pick something like nitrogen or salt, and watch it change through the seasons. Then compare sites across the country. Free, no account, real NEON data." />
+    content="See what is dissolved in the water at NEON's streams and lakes. Pick a site, pick something like nitrogen or salt, and watch it change through the seasons. Then compare sites across the country, using real NEON data." />
   <meta name="theme-color" content="#04111e" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
   <meta property="og:title" content="NEON Water Chemistry, Desert Data Labs" />
   <meta property="og:description"
-    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Pick a site, pick something like nitrogen or salt, watch it change through the seasons, and compare sites. Free, real NEON data." />
+    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Pick a site, pick something like nitrogen or salt, watch it change through the seasons, and compare sites. Real NEON data." />
   <meta property="og:image"
     content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="NEON Water Chemistry, Desert Data Labs" />
   <meta name="twitter:description"
-    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Free, real NEON data." />
+    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Real NEON data." />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -308,9 +308,9 @@
       <p class="lead">See what is dissolved in a stream or a lake, and how it changes through the year.
         <b>NEON</b> is a network of research sites across the United States, paid for by the National
         Science Foundation, that measures water, plants, animals, and weather the same way everywhere,
-        year after year. This free app lets you explore the chemistry of the water at those sites. Pick a
+        year after year. This app lets you explore the chemistry of the water at those sites. Pick a
         spot, pick something like <b>nitrogen, salt, or acidity</b>, and watch it rise and fall with the
-        seasons. Then <b>compare sites</b> across the country. No account, just pick a site and start.</p>
+        seasons. Then <b>compare sites</b> across the country.</p>
 
       <div class="cta-row">
         <a id="launch" class="launch" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
@@ -366,14 +366,13 @@
         <div class="stat"><div class="n">34</div><div class="l">streams &amp; lakes</div></div>
         <div class="stat"><div class="n">34</div><div class="l">things measured</div></div>
         <div class="stat"><div class="n">~197k</div><div class="l">real measurements</div></div>
-        <div class="stat"><div class="n">instant</div><div class="l">no waiting, free</div></div>
+        <div class="stat"><div class="n">NEON</div><div class="l">published data</div></div>
       </div>
 
       <details class="more">
         <summary>How it stays honest</summary>
         <div class="mbody">
-          Everything here is real NEON data, saved ahead of time so the app loads right away with nothing
-          to wait for. <b>Every number tells you how many measurements it is based on,</b> so you can see
+          Everything here is real NEON data, saved ahead of time and bundled with the app. <b>Every number tells you how many measurements it is based on,</b> so you can see
           when a result rests on plenty of data and when it rests on only a little. When the app draws a
           line between two things, it shows how well the line fits and warns when readings taken close
           together in time can make a link look stronger than it is. When it checks whether two things move
@@ -382,7 +381,7 @@
           some matches by luck. The seasonal pattern is pulled straight from the real record, not a smooth
           curve made up to look nice. Amounts too low for the instruments to measure are marked, not hidden.
           Each thing in the water is named and labeled correctly (bromide is not bicarbonate, chloride is
-          not chlorine). <b>This is a free tool for learning and exploring. It is not affiliated with NEON,
+          not chlorine). <b>This is a tool for learning and exploring. It is not affiliated with NEON,
           Battelle, or the NSF.</b>
         </div>
       </details>
@@ -391,10 +390,10 @@
 
   <footer>
     <div class="wrap">
-      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Want a custom data app like this for your project?</a><br>
+      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Get in touch with Desert Data Labs →</a><br>
       Built on NEON's <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water Chemistry</a>
       data by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data comes from the National Ecological Observatory
-      Network (run by Battelle, funded by the NSF). A free tool for learning, not affiliated with NEON, Battelle, or the NSF.
+      Network (run by Battelle, funded by the NSF). A tool for learning, not affiliated with NEON, Battelle, or the NSF.
     </div>
   </footer>
 
@@ -410,7 +409,7 @@
         var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
         var killer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
         fetch(APP_URL, { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
-          .then(function () { if (warm) warm.textContent = "Ready when you are."; })
+          .then(function () { if (warm) warm.textContent = "The app is ready."; })
           .catch(function () { if (warm) warm.textContent = ""; })
           .finally(function () { if (killer) clearTimeout(killer); });
       } catch (e) {}

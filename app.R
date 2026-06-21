@@ -233,18 +233,18 @@ aqua_theme <- bs_theme(
       transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .28s ease;
     }
     /* per-theme accent rail, mapped from bslib's bg-{theme} class on the box */
-    .value-box.bg-primary   { --vb-accent: #34c6d8; }
-    .value-box.bg-secondary { --vb-accent: #9fc2d6; }
-    .value-box.bg-success   { --vb-accent: #6ee6c4; }
-    .value-box.bg-warning   { --vb-accent: #6ee6f0; }
-    .value-box.bg-info      { --vb-accent: #4aa3e0; }
-    .value-box.bg-danger    { --vb-accent: #fb8a7e; }
-    .value-box.bg-dark      { --vb-accent: #6ee6f0; }
+    .value-box.bg-primary,   .bslib-value-box.bg-primary,   .bslib-value-box.text-bg-primary   { --vb-accent: #34c6d8; }
+    .value-box.bg-secondary, .bslib-value-box.bg-secondary, .bslib-value-box.text-bg-secondary { --vb-accent: #9fc2d6; }
+    .value-box.bg-success,   .bslib-value-box.bg-success,   .bslib-value-box.text-bg-success   { --vb-accent: #6ee6c4; }
+    .value-box.bg-warning,   .bslib-value-box.bg-warning,   .bslib-value-box.text-bg-warning   { --vb-accent: #6ee6f0; }
+    .value-box.bg-info,      .bslib-value-box.bg-info,      .bslib-value-box.text-bg-info      { --vb-accent: #4aa3e0; }
+    .value-box.bg-danger,    .bslib-value-box.bg-danger,    .bslib-value-box.text-bg-danger    { --vb-accent: #fb8a7e; }
+    .value-box.bg-dark,      .bslib-value-box.bg-dark,      .bslib-value-box.text-bg-dark      { --vb-accent: #6ee6f0; }
     /* force light text inside every value box (bslib's text-bg-* utilities vary) */
-    .value-box, .value-box * { color: #ffffff !important; }
-    .value-box .value-box-title { color: #9fc2d6 !important; font-weight: 600; }
-    .value-box .value-box-value { color: #ffffff !important; }
-    .value-box .help-q { color: #9fc2d6 !important; }
+    .value-box, .value-box *, .bslib-value-box, .bslib-value-box * { color: #ffffff !important; }
+    .value-box .value-box-title, .bslib-value-box .value-box-title { color: #9fc2d6 !important; font-weight: 600; }
+    .value-box .value-box-value, .bslib-value-box .value-box-value { color: #ffffff !important; }
+    .value-box .help-q, .bslib-value-box .help-q { color: #9fc2d6 !important; }
     .value-box::after {              /* keep the soft top sheen */
       content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
       background: radial-gradient(130% 90% at 12% -10%, rgba(255,255,255,.10), transparent 55%); }
@@ -716,9 +716,9 @@ server <- function(input, output, session) {
           tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte) — or use the sidebar — to begin.")),
           tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against — or start from a preset.")),
           tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons."))),
-        tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled for instant results.")),
+        tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled with the app so it is ready to use.")),
         checkboxInput("dont_show", "Don't show this again", FALSE),
-        footer = actionButton("start", "Start exploring", class = "btn-primary")))
+        footer = actionButton("start", "Start", class = "btn-primary")))
     }
   })
   observeEvent(input$start, {
@@ -743,7 +743,7 @@ server <- function(input, output, session) {
          then explore the time series, their relationship, a correlation screen, seasonality, and a
          glm-based predictor.</p>
          <p><b>Data:</b> %s observations · %s sites · %s analytes, pulled directly from the NEON API and
-         bundled as a read-only dataset (built %s, data through %s). No live downloads — results are instant.</p>
+         bundled as a read-only dataset (built %s, data through %s). The app reads this bundled data rather than downloading from NEON at runtime.</p>
          %s
          <p class='scope-note'>Honesty notes: every statistic shows its sample size; correlations default to
          Spearman with an n ≥ 8 reliability flag; the seasonal view is a real STL decomposition of the
