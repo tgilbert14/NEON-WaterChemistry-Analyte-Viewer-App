@@ -225,9 +225,9 @@ PRESETS <- list(
   "Redox metals (iron ↔ manganese)"        = c("Fe", "Mn")
 )
 PRESET_REASON <- c(
-  "Ionic strength ↔ buffering (flagship)" = "Specific conductance integrates all dissolved ions; in carbonate terrain it tracks ANC tightly — the README's Sycamore Creek example.",
+  "Ionic strength ↔ buffering (flagship)" = "Specific conductance integrates all dissolved ions; in carbonate terrain it tracks ANC tightly, the README's Sycamore Creek example.",
   "Ionic strength ↔ calcium"               = "Conductance should rise with the dominant cation; calcium is a primary driver of ionic strength in most streams.",
-  "Inorganic vs total dissolved N"             = "Nitrate+nitrite is the oxidized fraction within total dissolved N — the relationship shows how much of the N pool is inorganic.",
+  "Inorganic vs total dissolved N"             = "Nitrate+nitrite is the oxidized fraction within total dissolved N; the relationship shows how much of the N pool is inorganic.",
   "Total vs bioavailable phosphorus"           = "Orthophosphate (SRP) is the bioavailable fraction of total P; the ratio diagnoses dissolved-reactive vs particle-bound P.",
   "DOM quantity ↔ quality (SUVA)"          = "UV absorbance per unit DOC (SUVA) indexes aromaticity / terrestrial origin of organic matter (Weishaar et al. 2003).",
   "Carbonate system (alkalinity ↔ pH)"     = "Bicarbonate dominance and pH are coupled through carbonate equilibria; together they define the buffering regime.",
@@ -303,7 +303,7 @@ plotly_message <- function(msg, mode = "light") {
 safe_plotly <- function(expr, mode = "light") {
   tryCatch(force(expr), error = function(e) {
     message("plot render error: ", conditionMessage(e))
-    plotly_message("This view hit a snag — nudge a control to reload.", mode)
+    plotly_message("This view hit a snag. Nudge a control to reload.", mode)
   })
 }
 

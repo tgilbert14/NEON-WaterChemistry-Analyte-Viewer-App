@@ -65,7 +65,7 @@ CENSOR_MAP <- setNames(D$analyte_meta$pct_below, D$analyte_meta$analyte)
 
 # Site choices: rich labels, only sites that actually have data
 site_tbl   <- D$sites_meta |> arrange(siteName)
-SITE_CHO   <- setNames(site_tbl$site, paste0(site_tbl$site, " — ", site_tbl$siteName))
+SITE_CHO   <- setNames(site_tbl$site, paste0(site_tbl$site, " · ", site_tbl$siteName))
 DEF_SITE   <- if ("SYCA" %in% site_tbl$site) "SYCA" else site_tbl$site[1]
 
 site_present <- function(s) sort(unique(D$swc_long$analyte[D$swc_long$site == s]))
@@ -354,7 +354,7 @@ INFO <- list(
   compare = list("How the time series works", HTML(
     "Both analytes are matched on collection date and drawn on a shared time axis. <b>Normalized</b>
      mode standardizes each series to mean 0, SD 1 so you compare <i>shape</i> honestly even when the
-     units differ. <b>Dual axis (raw)</b> shows the original values on two independent scales — useful,
+     units differ. <b>Dual axis (raw)</b> shows the original values on two independent scales, which is useful,
      but the proximity of two lines on independent axes does <i>not</i> by itself imply correlation
      (use the Relationship tab to test that). Open markers are below the analytical detection limit.
      Source: NEON SWC DP1.20093.001 (external lab + field probe).")),
@@ -362,14 +362,14 @@ INFO <- list(
     "An ordinary least-squares line fit to date-paired samples. <b>R²</b> is the share of variance in the
      secondary analyte explained by the main one; the <b>p-value</b> tests whether the slope differs from
      zero; the shaded band is the 95% confidence interval. These are repeated measures through time, so
-     observations are not independent — temporal autocorrelation makes the p-value optimistic (a lag-1
+     observations are not independent, so temporal autocorrelation makes the p-value optimistic (a lag-1
      autocorrelation flag is shown). Correlation is not causation: both analytes may track a third driver
      such as discharge or season.")),
   correlations = list("How the correlation screen works", HTML(
     "Each coefficient is computed only on dates where both analytes were sampled (n shown per row).
      <b>Spearman ρ</b> is the headline because water-chemistry data are typically skewed and relationships
      are often monotonic-but-nonlinear; Pearson r (linear) is shown alongside. This screens ~34 analytes
-     at once, so some low p-values will appear by chance (multiple comparisons) — treat results as
+     at once, so some low p-values will appear by chance (multiple comparisons); treat results as
      hypothesis-generating, never confirmatory. Rows with fewer than 8 paired samples are flagged
      unreliable and greyed.")),
   seasonal = list("How the seasonal view works", HTML(
@@ -378,13 +378,13 @@ INFO <- list(
      cycle, and a <b>remainder</b>. Requires ≥ 24 months across ≥ 2 years. NEON grab samples are roughly
      monthly with gaps, so <b>interior months with no sample are linearly interpolated before decomposing</b>
      (the count is stamped on the chart); long gaps appear as smooth ramps and can understate real
-     variability. This is descriptive of the record — not a calibrated forecast.")),
+     variability. This is descriptive of the record, not a calibrated forecast.")),
   predictor = list("How the predictor works", HTML(
     "A generalized linear model (<code>glm</code>) trained on this site's bundled records, estimating the
      main analyte from its three most-correlated analytes. Validated with repeated k-fold cross-validation;
      RMSE (root-mean-square error, in the analyte's units) is the typical out-of-sample miss, shown next
      to a mean-only baseline so you can judge whether the model adds anything. Because the 3 predictors are
-     chosen on the full record, the cross-validated RMSE is mildly <b>optimistic</b> — treat it as a floor
+     chosen on the full record, the cross-validated RMSE is mildly <b>optimistic</b>; treat it as a floor
      on the true error. Move the sliders within each predictor's observed range for a live estimate. This
      is an interpolation aid, not a calibrated sensor.")),
   data = list("About this table", HTML(
@@ -403,23 +403,23 @@ GLOSSARY <- list(
     <b>−1</b> = one goes up as the other goes down. We default to it (over Pearson) because water-chemistry
     values are usually skewed."),
   pearson  = HTML("<b>Pearson's r</b> measures how close two analytes are to a <b>straight-line</b>
-    relationship, on the same −1 to +1 scale as Spearman — but it assumes the link is linear."),
-  n        = HTML("<b>n</b> is the number of dates where <b>both</b> analytes were measured — the sample
+    relationship, on the same −1 to +1 scale as Spearman, but it assumes the link is linear."),
+  n        = HTML("<b>n</b> is the number of dates where <b>both</b> analytes were measured, the sample
     size behind the number. Bigger n = more trustworthy."),
   r2       = HTML("<b>R²</b> is the share of one analyte's variation explained by the other (0–100%).
     Higher = the line fits the points better."),
   pval     = HTML("<b>p-value</b> is roughly the chance you'd see a relationship this strong if there were
-    really none. Small (e.g. &lt; 0.05) suggests it isn't a fluke — though it's optimistic for samples
+    really none. Small (e.g. &lt; 0.05) suggests it isn't a fluke, though it's optimistic for samples
     repeated through time."),
   rmse     = HTML("<b>RMSE</b> is the model's typical miss, in the analyte's units. <b>Skill</b> compares it
     to simply guessing the average: <b>+50%</b> means the model's error is half that naive baseline (and a
     negative skill means it's worse than guessing the average)."),
   stl      = HTML("<b>STL</b> splits the monthly series into a slow <b>trend</b>, a repeating <b>seasonal</b>
-    cycle, and leftover noise — computed from the real measured data."),
+    cycle, and leftover noise, computed from the real measured data."),
   censor   = HTML("<b>Below detection (BDL)</b> means the lab couldn't measure the analyte above its
     detection limit. We keep the reported number (drawn as an <b>open marker</b>) and never substitute a
     zero. But when a large share of an analyte's samples are below detection, a correlation is dominated by
-    detection-limit <b>ties</b>, not real chemistry — so we <b>grey out</b> any analyte with &gt; 25% below
+    detection-limit <b>ties</b>, not real chemistry, so we <b>grey out</b> any analyte with &gt; 25% below
     detection and treat it as <b>exploratory only</b> (Helsel 2012).")
 )
 # small (?) icon that pops a plain-language explanation on click/hover
@@ -506,7 +506,7 @@ MASCOT_CRITTER <- htmltools::HTML(paste0(
 # UI
 #======================================================================
 ui <- page_sidebar(
-  title = tagList(bs_icon("droplet-half"), " NEON Water Chemistry — Analyte Viewer"),
+  title = tagList(bs_icon("droplet-half"), " NEON Water Chemistry · Analyte Viewer"),
   theme = aqua_theme,
   window_title = "NEON Analyte Viewer",
   # Flow content naturally instead of filling the viewport. A fillable page collapses
@@ -569,7 +569,7 @@ ui <- page_sidebar(
         card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                         span("Pick a site to explore"),
                         span(class = "scope-note d-none d-md-inline",
-                             "Markers are coloured by the main analyte's site average — tap any marker"))),
+                             "Markers are coloured by the main analyte's site average. Tap any marker"))),
         withSpinner(plotlyOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         # Browse-all-sites — a CLOSED-by-default collapsible list under the map.
         # Each row sets input$pickFromList = <site code>; the server observer
@@ -587,7 +587,7 @@ ui <- page_sidebar(
                   "if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('pickFromList','%s',{priority:'event'});return false;",
                   site_tbl$site[i]),
                 tags$b(site_tbl$site[i]),
-                sprintf(" — %s ", site_tbl$siteName[i]),
+                sprintf(" · %s ", site_tbl$siteName[i]),
                 tags$span(class = "sb-meta",
                   paste0(site_tbl$state[i] %|na|% site_tbl$domain[i] %|na|% "NEON",
                          " · ", format(ifelse(is.na(site_tbl$n_obs[i]), 0L, site_tbl$n_obs[i]),
@@ -621,7 +621,7 @@ ui <- page_sidebar(
           card_header("Seasonal-trend decomposition (STL)"),
           withSpinner(plotlyOutput("stl", height = 430), type = 8, color = "#0E7C9B", hide.ui = TRUE),
           card_footer(class = "scope-note",
-            "Descriptive of the real monthly record — not a calibrated forecast. Needs ≥ 24 months.")))
+            "Descriptive of the real monthly record, not a calibrated forecast. Needs ≥ 24 months.")))
     ),
     nav_panel(
       "Predictor", icon = bs_icon("cpu"),
@@ -665,7 +665,7 @@ ui <- page_sidebar(
         card_footer(class = "scope-note", HTML(
           "Top 18 shown above (full list in the table). <b style='color:#0E7C9B'>Teal</b> = reliable,
            <b style='color:#9aa0a6'>grey</b> = under 8 paired samples or &gt; 25% below detection. Computed on
-           co-sampled dates only; screening many analytes at once inflates chance findings — hypothesis-generating,
+           co-sampled dates only; screening many analytes at once inflates chance findings, so treat them as hypothesis-generating,
            not confirmatory.")))
     ),
     nav_panel(
@@ -713,8 +713,8 @@ server <- function(input, output, session) {
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
         tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
         tags$ol(
-          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte) — or use the sidebar — to begin.")),
-          tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against — or start from a preset.")),
+          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte), or use the sidebar, to begin.")),
+          tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against, or start from a preset.")),
           tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons."))),
         tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled with the app so it is ready to use.")),
         checkboxInput("dont_show", "Don't show this again", FALSE),
@@ -853,7 +853,7 @@ server <- function(input, output, session) {
     rel <- qc_relevant(); if (!nrow(rel)) return(NULL)
     n <- nrow(rel)
     actionLink("qc_audit", class = "qc-pill",
-      title = "An implausible extreme was excluded from the fits, the seasonal trend, the predictor and the map — click to audit",
+      title = "An implausible extreme was excluded from the fits, the seasonal trend, the predictor and the map. Click to audit",
       tagList(bs_icon("exclamation-triangle-fill"),
               sprintf("%d extreme value%s excluded", n, if (n > 1) "s" else "")))
   })
@@ -869,7 +869,7 @@ server <- function(input, output, session) {
       easyClose = TRUE, size = "l", footer = modalButton("Close"),
       tags$p(HTML(
         "These values exceed a per-analyte plausibility ceiling (above the 99.9th percentile <i>and</i>
-         50× the analyte median) — almost certainly unit or decimal artifacts, not real chemistry.
+         50× the analyte median), almost certainly unit or decimal artifacts, not real chemistry.
          They are <b>excluded from every fit, the seasonal decomposition, the predictor, and the map's
          colour scale</b>, but kept here for audit. The reported number is preserved in the raw record.")),
       DT::datatable(tbl, rownames = FALSE,
@@ -886,7 +886,7 @@ server <- function(input, output, session) {
 
   output$ts_note <- renderUI({
     txt <- if (identical(input$ts_mode, "dual"))
-      "Two independent y-axes (left = main, right = secondary, colour-matched). Lines tracking each other does not by itself imply correlation — test it on the Relationship tab."
+      "Two independent y-axes (left = main, right = secondary, colour-matched). Lines tracking each other does not by itself imply correlation; test it on the Relationship tab."
     else
       "Each series is standardized to mean 0, SD 1 so you compare shape, not magnitude. Raw values are on the Data tab (or hover/tap a point)."
     div(class = "scope-note", style = "margin:.1rem 0 .4rem", txt)
@@ -1042,15 +1042,15 @@ server <- function(input, output, session) {
       div(class = "px-2 pb-2",
         tags$p(HTML(sprintf("<b>p-value (slope):</b> %s ",
                             ifelse(f$p < .001, "&lt; 0.001", signif(f$p, 3)))), help_pop("pval", "p-value")),
-        tags$p(HTML(sprintf("<b>Temporal autocorrelation (lag-1):</b> %s (%s) — %s",
+        tags$p(HTML(sprintf("<b>Temporal autocorrelation (lag-1):</b> %s (%s). %s",
                             ifelse(is.na(ac), "—", sprintf("%.2f", ac)), ac_flag,
-                            "high values mean the p-value above is optimistic.")))),
+                            "High values mean the p-value above is optimistic.")))),
       # clickable censoring badge — only when a fitted analyte is heavily below DL;
       # one short clause + a (?) that opens the existing explanation (no wall of text)
       { cen <- CENSOR_MAP[c(main_a(), sec_a())]; cen <- cen[is.finite(cen) & cen >= 0.25]
         if (length(cen)) div(class = "px-2 pb-2 scope-note",
           bs_icon("exclamation-triangle"),
-          sprintf(" %s heavily below detection — exploratory only ",
+          sprintf(" %s heavily below detection, exploratory only ",
                   paste(analyte_display(names(cen)), collapse = " & ")),
           help_pop("censor", "Below-detection handling")) }
     )
@@ -1072,8 +1072,8 @@ server <- function(input, output, session) {
       geom_segment(aes(x = 0, xend = coef, yend = display, color = reliable), linewidth = .9) +
       geom_point(aes(color = reliable, text = paste0(display, "<br>", input$cor_method, " = ", signif(coef, 3),
                      "<br>n = ", n,
-                     ifelse(heavy_censor, sprintf("<br>⚠ %.0f%% below detection — exploratory only", 100 * pct_below), ""),
-                     ifelse(!reliable & !heavy_censor, "<br>⚠ low n — interpret with care", ""))), size = 3.2) +
+                     ifelse(heavy_censor, sprintf("<br>⚠ %.0f%% below detection, exploratory only", 100 * pct_below), ""),
+                     ifelse(!reliable & !heavy_censor, "<br>⚠ low n, interpret with care", ""))), size = 3.2) +
       scale_color_manual(values = c(`TRUE` = COL$main, `FALSE` = "#BBBBBB")) +
       scale_x_continuous(limits = c(-1, 1), breaks = seq(-1, 1, .5)) +
       labs(x = paste0(tools::toTitleCase(input$cor_method), " correlation with ", analyte_display(main_a())), y = NULL) +
@@ -1085,7 +1085,7 @@ server <- function(input, output, session) {
   output$cor_table <- renderDT({
     ct <- cor_tbl()
     if (is.null(ct) || !nrow(ct))
-      return(datatable(data.frame(Note = "No co-sampled analytes in this window — widen the date range."),
+      return(datatable(data.frame(Note = "No co-sampled analytes in this window. Widen the date range."),
                        rownames = FALSE, options = list(dom = "t")))
     fmtp <- function(p) ifelse(is.na(p), "—", ifelse(p < 1e-4, "<0.0001", formatC(p, format = "g", digits = 2)))
     fmtbdl <- function(x) ifelse(is.na(x) | x < 0.005, "—", sprintf("%.0f%%", 100 * x))
@@ -1122,7 +1122,7 @@ server <- function(input, output, session) {
                                     pretty_unit(units, analyte), "<br>", month, ": n = ", n_month)),
                   width = .15, height = 0, size = 1.8, color = COL$main, alpha = .55) +
       labs(x = NULL, y = axis_title(main_a(), unit),
-           title = paste0("Monthly climatology — ", analyte_display(main_a()))) +
+           title = paste0("Monthly climatology · ", analyte_display(main_a()))) +
       theme_neon()
     ggplotly(pp, tooltip = "text") |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_climatology"))
   }, mode()) })
@@ -1284,7 +1284,7 @@ server <- function(input, output, session) {
   output$data_table <- renderDT({
     w <- wide_site()
     if (!nrow(w))
-      return(datatable(data.frame(Note = "No samples in this window — widen the date range."),
+      return(datatable(data.frame(Note = "No samples in this window. Widen the date range."),
                        rownames = FALSE, options = list(dom = "t")))
     keep <- c("collectDate", intersect(c(main_a(), sec_a()), names(w)),
               setdiff(names(w), c("site", "collectDate", main_a(), sec_a())))
@@ -1392,7 +1392,7 @@ server <- function(input, output, session) {
           geom_line(aes(color = lab), linewidth = .6) + geom_point(aes(color = lab), size = 1.3) +
           scale_color_manual(values = setNames(c(PG$main, PG$secondary), levels(sl$lab)), guide = "none") +
           facet_wrap(~lab, ncol = 1, scales = "free_y", strip.position = "left") +
-          labs(x = NULL, y = NULL, title = paste0(sm$siteName %||% st, " — analytes through time")) +
+          labs(x = NULL, y = NULL, title = paste0(sm$siteName %||% st, " · analytes through time")) +
           th + theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 90)))
 
       # Page 3 — regression
@@ -1413,7 +1413,7 @@ server <- function(input, output, session) {
         ggplot(cl, aes(month, value)) +
           geom_boxplot(outlier.shape = NA, fill = PG$main, alpha = .18, color = PG$main) +
           geom_jitter(width = .15, height = 0, color = PG$main, alpha = .5, size = 1.4) +
-          labs(x = NULL, y = axis_title(A, uA), title = paste0("Monthly climatology — ", analyte_display(A))) + th)
+          labs(x = NULL, y = axis_title(A, uA), title = paste0("Monthly climatology · ", analyte_display(A))) + th)
     })
 
   ## ---- Two sites: same analyte at site A vs site B ----
@@ -1430,7 +1430,7 @@ server <- function(input, output, session) {
                                collectDate >= d[1], collectDate <= d[2], !implausible) |> arrange(collectDate)
     if (!nrow(df)) return(plotly_message("No data for this analyte at these sites in this window.", mode()))
     unit <- df$units[1]
-    lab <- function(s) paste0(s, " — ", D$sites_meta$siteName[match(s, D$sites_meta$site)])
+    lab <- function(s) paste0(s, " · ", D$sites_meta$siteName[match(s, D$sites_meta$site)])
     df <- df |> mutate(siteLab = ifelse(site == s1, lab(s1), lab(s2)))
     pal <- setNames(c(COL$main, COL$secondary), c(lab(s1), lab(s2)))
     plot_ly(df, x = ~collectDate, y = ~value, color = ~siteLab, colors = pal,
@@ -1441,7 +1441,7 @@ server <- function(input, output, session) {
              xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
                           spikethickness = 1, spikecolor = "#9aa7b0", spikedash = "dot"),
              legend = list(orientation = "h", y = -0.22, x = 0), margin = list(t = 48, b = 74),
-             title = list(text = paste0(analyte_display(A), " — two sites"), font = list(size = 14),
+             title = list(text = paste0(analyte_display(A), " · two sites"), font = list(size = 14),
                           x = 0, xanchor = "left", y = 0.98, yanchor = "top")) |>
       plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
   }, mode()) })

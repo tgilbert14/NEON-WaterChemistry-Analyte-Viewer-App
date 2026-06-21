@@ -34,7 +34,7 @@ text(68, 470, "NEON Water Chemistry", col = "white", cex = 3.6, font = 2, adj = 
 text(68, 392, "Analyte Viewer",        col = "white", cex = 3.6, font = 2, adj = 0)
 
 # subtitle
-text(70, 318, "Compare analytes across 34 NEON aquatic sites — relationships,",
+text(70, 318, "Compare analytes across 34 NEON aquatic sites: relationships,",
      col = grDevices::adjustcolor("white", .92), cex = 1.18, adj = 0)
 text(70, 286, "correlations, seasonality. Real data, statistics that show their work.",
      col = grDevices::adjustcolor("white", .92), cex = 1.18, adj = 0)
