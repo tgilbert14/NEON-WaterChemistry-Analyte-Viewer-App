@@ -449,7 +449,8 @@ function wcVeilOn(){ var o=document.getElementById('wcOverlay'); if(!o) return;
 function wcVeilOff(){ var o=document.getElementById('wcOverlay'); if(o) o.style.display='none'; clearTimeout(wcSafety); }
 var WC_HEAVY=['site','analyte_main','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','color_mode','swap','full_range'];
 $(document).on('shiny:inputchanged', function(e){ if(WC_HEAVY.indexOf(e.name)>=0) wcVeilOn(); });
-$(document).on('mousedown', '#map', function(){ wcVeilOn(); });   /* map dot -> select + jump */
+/* a map-dot tap now opens a lightweight Explore|About choice card (no recompute),
+   so the veil is raised by the actual load instead (input$site is in WC_HEAVY). */
 $(document).on('shiny:idle', function(){ wcVeilOff(); });
 
 /* ---- mascot celebration: the droplet hops up + fades on a notable find ----
@@ -1494,24 +1495,108 @@ server <- function(input, output, session) {
                   jump to the comparison.", analyte_display(main_a())))
   })
 
-  # Clicking a site on the map selects it and takes the user to the comparison
+  # ---- Map site-picker: tap a dot -> a choice card (Explore | About) ----------
+  # Matches the flagship Small Mammal / Ground Beetle picker: tapping a marker no
+  # longer auto-jumps. It opens a small modal offering a CLEAR choice: "Explore
+  # this site" (load it and go to Compare) or "About this site" (an instant info
+  # card, no load). The Explore button sets input$mapExplore; About sets
+  # input$mapInfo. This app has a SINGLE site selectize (no state cascade), so
+  # selecting the site already syncs the one sidebar selector, so there is no live
+  # sidebar mismatch to fix here. rv$pendingSite is kept for parity with the
+  # cascade apps and to document the shared-load pattern.
+  rv <- reactiveValues(pendingSite = NULL)
+
+  # the shared load path used by the map choice, the About modal footer, and the
+  # browse list: select the site (syncs the sidebar) and jump to Compare.
+  load_site <- function(site) {
+    if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
+    updateSelectizeInput(session, "site", selected = site)
+    nav_select("main_tabs", "Compare")
+  }
+
+  site_choice_modal <- function(code) {
+    sm <- D$sites_meta[D$sites_meta$site == code, ]
+    if (!nrow(sm)) return(invisible())
+    where <- paste(stats::na.omit(c(as.character(sm$state[1]),
+      if (!is.na(sm$domain[1])) paste("NEON", sm$domain[1]) else NA)), collapse = " · ")
+    showModal(modalDialog(
+      title = tagList(bs_icon("geo-alt-fill"), " ", sm$siteName[1] %||% code,
+                      span(class = "scope-note", paste0(" (", code, ")"))),
+      easyClose = TRUE, size = "m",
+      footer = tagList(
+        actionButton("mapInfo_btn", "About this site", class = "btn-outline-secondary",
+          onclick = sprintf("Shiny.setInputValue('mapInfo','%s',{priority:'event'});", code)),
+        actionButton("mapExplore_btn", tagList("Explore this site ", bs_icon("arrow-right")),
+          class = "btn-primary",
+          onclick = sprintf("Shiny.setInputValue('mapExplore','%s',{priority:'event'});", code))),
+      tags$p(class = "scope-note", style = "margin-bottom:.4rem", where),
+      tags$p(HTML(sprintf(
+        "<b>%s</b> observations · <b>%s</b> analytes, %s to %s.",
+        format(ifelse(is.na(sm$n_obs[1]), 0L, sm$n_obs[1]), big.mark = ","),
+        ifelse(is.na(sm$n_analytes[1]), 0L, sm$n_analytes[1]),
+        if (!is.na(sm$first[1])) format(sm$first[1], "%b %Y") else "—",
+        if (!is.na(sm$last[1])) format(sm$last[1], "%b %Y") else "—"))),
+      tags$p(class = "scope-note", "Load this site to compare its analytes, or open the details first.")))
+  }
+
+  site_info_modal <- function(code) {
+    sm <- D$sites_meta[D$sites_meta$site == code, ]
+    if (!nrow(sm)) return(modalDialog(title = "Site info", easyClose = TRUE,
+      footer = modalButton("Close"), p("No details are available for this site.")))
+    dash <- function(x) if (length(x) == 0 || is.na(x) || !nzchar(as.character(x))) "—" else as.character(x)
+    coords <- if (!is.na(sm$lat[1]) && !is.na(sm$long[1])) sprintf("%.3f, %.3f", sm$lat[1], sm$long[1]) else "—"
+    modalDialog(
+      title = tagList(bs_icon("geo-alt-fill"), " ", sm$siteName[1] %||% code,
+                      span(class = "scope-note", paste0(" (", code, ")"))),
+      easyClose = TRUE, size = "m",
+      footer = tagList(
+        modalButton("Close"),
+        actionButton("mapExplore_btn2", tagList("Explore this site ", bs_icon("arrow-right")),
+          class = "btn-primary",
+          onclick = sprintf("Shiny.setInputValue('mapExplore','%s',{priority:'event'});", code))),
+      tags$dl(class = "row mb-0",
+        tags$dt(class = "col-5", "Where"),
+        tags$dd(class = "col-7", paste0(dash(sm$state[1]), " · NEON ", dash(sm$domain[1]))),
+        tags$dt(class = "col-5", "Coordinates"),
+        tags$dd(class = "col-7", coords),
+        tags$dt(class = "col-5", "Site type"),
+        tags$dd(class = "col-7", dash(sm$siteType[1])),
+        tags$dt(class = "col-5", "Records"),
+        tags$dd(class = "col-7", sprintf("%s observations across %s analytes",
+          format(ifelse(is.na(sm$n_obs[1]), 0L, sm$n_obs[1]), big.mark = ","),
+          ifelse(is.na(sm$n_analytes[1]), 0L, sm$n_analytes[1]))),
+        tags$dt(class = "col-5", "Coverage"),
+        tags$dd(class = "col-7", sprintf("%s to %s",
+          if (!is.na(sm$first[1])) format(sm$first[1], "%b %Y") else "—",
+          if (!is.na(sm$last[1])) format(sm$last[1], "%b %Y") else "—"))))
+  }
+
+  # Clicking a site on the map opens the Explore | About choice card.
   observeEvent(event_data("plotly_click", source = "sitemap"), {
     ev <- event_data("plotly_click", source = "sitemap")
     site <- ev$customdata
-    if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site) {
-      updateSelectizeInput(session, "site", selected = site)
-      nav_select("main_tabs", "Compare")
-    }
+    if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site)
+      site_choice_modal(site)
   })
 
-  # Browse-all-sites list (under the Explore map) -> same load path as a map click:
-  # select the site and jump to Compare. Wired to the same input$site selectize the
-  # rest of the app observes.
+  # "Explore this site" (choice card OR About modal footer) -> load it.
+  observeEvent(input$mapExplore, {
+    removeModal()
+    load_site(input$mapExplore)
+  })
+  # "About this site" -> instant info card (no load).
+  observeEvent(input$mapInfo, {
+    s <- input$mapInfo
+    if (!is.null(s) && nzchar(s)) showModal(site_info_modal(s))
+  })
+
+  # Browse-all-sites list (under the Explore map) -> same shared load path:
+  # select the site (syncs the sidebar selectize) and jump to Compare.
   observeEvent(input$pickFromList, {
     site <- input$pickFromList
     if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site) {
-      updateSelectizeInput(session, "site", selected = site)
-      nav_select("main_tabs", "Compare")
+      rv$pendingSite <- site   # documents the shared-pick pattern; single selector syncs directly
+      load_site(site)
     }
   })
 }
