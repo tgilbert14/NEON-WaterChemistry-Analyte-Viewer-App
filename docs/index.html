@@ -170,7 +170,7 @@
     .frung + .frung { margin-top:10px }
     .frung::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.0;
       background:linear-gradient(100deg, transparent, rgba(var(--lrgb),.16), transparent); }
-    .frung.pip-on::before { animation: pip 2.4s ease-in-out; }     /* energy pulse sweeps each rung in turn */
+    .frung.pip-on::before { animation: pip 3.2s ease-in-out; }     /* energy pulse sweeps each rung in turn (slowed) */
     @keyframes pip { 0%{opacity:0; transform:translateX(-30%)} 40%{opacity:1} 100%{opacity:0; transform:translateX(30%)} }
     .frung .fmark { width:34px; height:34px; flex:0 0 auto; border-radius:9px; position:relative;
       background:rgba(var(--lrgb),.16); border:1px solid rgba(var(--lrgb),.5) }
@@ -178,10 +178,14 @@
       background:var(--lc); box-shadow:0 0 12px var(--lc) }
     .frung .ftxt b { font-weight:800; font-size:1rem } .frung .ftxt span { color:var(--dim); font-size:.86rem }
     .frung.r1 { --lc:var(--clim); --lrgb:110,230,240 }
-    .frung.r2 { --lc:var(--phen); --lrgb:52,198,216; margin-left:14px }
-    .frung.r3 { --lc:var(--prod); --lrgb:74,163,224; margin-left:28px }
-    .frung.r4 { --lc:var(--cons); --lrgb:47,127,184; margin-left:42px }
-    .farrow { color:rgba(255,255,255,.32); text-align:center; margin:2px 0 2px 17px; font-size:1.05rem }
+    .frung.r2 { --lc:var(--phen); --lrgb:52,198,216 }
+    .frung.r3 { --lc:var(--prod); --lrgb:74,163,224 }
+    .frung.r4 { --lc:var(--cons); --lrgb:47,127,184 }
+    .frung.r5 { --lc:var(--phen); --lrgb:52,198,216 }
+    .frung.r6 { --lc:var(--clim); --lrgb:110,230,240 }
+    .frung.r7 { --lc:var(--cons); --lrgb:47,127,184 }
+    .cascade-band .hl-head { margin-top:30px }
+    .lead a { color:var(--bright); text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px }
 
     /* ---------- stats + about ---------- */
     .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:26px 0 0; position:relative; z-index:2 }
@@ -305,12 +309,7 @@
 
       <div class="eyebrow">Part of the NEON Explorer Suite · Water</div>
       <h1>NEON Water Chemistry</h1>
-      <p class="lead">See what is dissolved in a stream or a lake, and how it changes through the year.
-        <b>NEON</b> is a network of research sites across the United States, paid for by the National
-        Science Foundation, that measures water, plants, animals, and weather the same way everywhere,
-        year after year. This app lets you explore the chemistry of the water at those sites. Pick a
-        spot, pick something like <b>nitrogen, salt, or acidity</b>, and watch it rise and fall with the
-        seasons. Then <b>compare sites</b> across the country.</p>
+      <p class="lead">A Shiny web app for exploring the <a href="https://www.neonscience.org/" target="_blank" rel="noopener">National Ecological Observatory Network</a>'s surface-water chemistry data. It turns lab and sensor readings of what is dissolved in the water at 34 stream and lake sites into trends through time, relationships between two analytes, seasonal patterns, and a quick prediction, with every chart showing the sample size it rests on.</p>
 
       <div class="cta-row">
         <a id="launch" class="launch" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
@@ -346,20 +345,19 @@
   <!-- how the viewer reads: sample -> analyte panel -> trend -> compare -->
   <section class="cascade-band">
     <div class="wrap">
-      <span class="kick">What you can do here</span>
-      <h2>Pick one thing in the water. Watch it through the year, then across sites.</h2>
-      <p>It starts with a real water sample at a field site, either scooped by hand or read by a sensor in
-        the stream. The app lines all of those up so you can pick one thing that is dissolved in the water,
-        see how it changes over time, and compare one site to another. The numbers behind every chart are
-        always shown.</p>
+      <span class="kick">What it does</span>
+      <p>The app opens to a map of all the NEON aquatic sites, with one stream or lake already selected. Tap a site to dive into its water chemistry. Each site loads instantly from a data bundle that ships with the app, so there is no waiting on a network call. From there you pick a date range and two of the things measured in the water, then watch how they move together through time, how they relate, what else they track with, their seasonal rhythm, and a quick estimate from a small model.</p>
+      <p>It is built for two audiences: anyone curious about what is dissolved in NEON's streams and lakes, and new field technicians getting to know the analytes measured at their site.</p>
+
+      <h2 class="hl-head">Highlights</h2>
       <div class="flow" data-flow>
-        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Take a sample</b> &middot; <span>water scooped by hand or read by a sensor, with amounts too low to measure marked clearly</span></span></div>
-        <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Pick what to look at</b> &middot; <span>anything dissolved in the water, like salts, nutrients, or carbon, each one named with its units</span></span></div>
-        <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>See how it changes</b> &middot; <span>its trend over time, its seasonal rhythm, and how it tracks with other things in the water</span></span></div>
-        <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Compare</b> &middot; <span>one site against another, and one season against another, side by side</span></span></div>
+        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Compare two analytes</b> &middot; <span>Two things in the water through time. A normalized view compares their shape honestly, a raw dual-axis view keeps the original units, and readings too low to measure are drawn as open markers.</span></span></div>
+        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Relationship</b> &middot; <span>A straight-line fit between the two analytes with a 95% confidence band, the R-squared, slope, p-value and sample size, and a flag when readings close in time may overstate the link.</span></span></div>
+        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>Correlations</b> &middot; <span>The main analyte against every other one, as a lollipop chart and a sortable table. Spearman by default with Pearson alongside, the sample size shown per row, and anything under 8 readings flagged as unreliable.</span></span></div>
+        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Seasonal pattern</b> &middot; <span>The month-by-month picture and a real STL decomposition of the actual record, splitting it into season and trend. No made-up forecasts.</span></span></div>
+        <div class="frung r5"><span class="fmark"></span><span class="ftxt"><b>Predictor</b> &middot; <span>A small model that estimates the main analyte from its three best-correlated analytes, with a cross-validated error. Move the sliders for a live estimate.</span></span></div>
+        <div class="frung r6"><span class="fmark"></span><span class="ftxt"><b>Data table and download</b> &middot; <span>The full table behind every chart, with CSV or Excel download for exactly the site and date range you are looking at.</span></span></div>
+        <div class="frung r7"><span class="fmark"></span><span class="ftxt"><b>Site map</b> &middot; <span>All the NEON aquatic sites on one map, with the selected stream or lake highlighted.</span></span></div>
       </div>
 
       <div class="stats">
@@ -476,7 +474,7 @@
         // force reflow so the animation restarts each cycle
         void el.offsetWidth; el.classList.add("pip-on");
         i++;
-      }, 900);
+      }, 1800);
     })();
   </script>
   <script>
