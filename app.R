@@ -38,15 +38,30 @@ CEIL_MAP   <- ceiling_map(CEIL_TBL)
 D$swc_long$units <- unname(CANON_MAP[D$swc_long$analyte]) %|na|% D$swc_long$units
 # (2) flag plausibility on the long frame; keep the value for the audit marker,
 #     but NULL it out of the wide matrix the fits/means/STL/glm read from.
-D$swc_long$implausible <- !is_plausible(D$swc_long$value, D$swc_long$analyte, CEIL_MAP)
-# table of excluded extremes, for the clickable audit marker (small, never inline)
+D$swc_long$implausible <- !is_plausible(D$swc_long$value, D$swc_long$analyte, CEIL_MAP,
+                                        site = D$swc_long$site)
+# table of excluded extremes, for the clickable audit marker (small, never inline).
+# The ceiling shown is the SITE-aware one where it applies (high-variance analytes),
+# so a saline site like PRPO is judged against its own range, not the pooled one.
+.ceil_for <- function(an, st) {
+  key <- paste(an, st, sep = "\r")
+  sc  <- unname(CEIL_MAP$site[key])
+  ifelse(!is.na(sc), sc, unname(CEIL_MAP$global[an]))
+}
 EXCLUDED_EXTREMES <- D$swc_long |>
   dplyr::filter(implausible) |>
   dplyr::transmute(site, collectDate, analyte,
                    display = analyte_display(analyte), value,
                    units = unname(CANON_MAP[analyte]) %|na|% units,
-                   ceiling = unname(CEIL_MAP[analyte])) |>
+                   ceiling = .ceil_for(analyte, site)) |>
   dplyr::arrange(dplyr::desc(value))
+# Surface (not hide) any high-variance-analyte rows the gate trimmed, so a
+# legitimately extreme site is auditable. With the site-aware gate, PRPO's
+# saline conductance now stays IN; this records what (if anything) was trimmed.
+PRPO_TRIMMED <- EXCLUDED_EXTREMES |>
+  dplyr::filter(site == "PRPO", analyte %in% c("specificConductanceField","specificConductance","TDS","Na","Cl","SO4"))
+message(sprintf("[plausibility] %d implausible rows excluded total; %d are PRPO high-variance grabs (site-aware gate keeps genuine saline values).",
+                nrow(EXCLUDED_EXTREMES), nrow(PRPO_TRIMMED)))
 # (2) rebuild the wide matrix from the PLAUSIBLE long rows only — this is the
 #     single chokepoint every stats tab + the map mean pivot through, so one
 #     edit here gates fit_lm / stl / glm / the choropleth colorbar at once.
@@ -89,7 +104,7 @@ aqua_theme <- bs_theme(
   # kept as primary for chart/cover cohesion. The dark-mode system + the dark
   # command-band / value-box info-boxes are carried in the bs_add_rules() CSS below.
   bg = "#FBFDFE", fg = "#16243a",
-  primary = "#0E7C9B", secondary = "#5B7A8C",
+  primary = "#0E7C9B", secondary = "#4A6575",   # darkened for >=4.5:1 contrast on white (.scope-note token)
   success = "#3f9a52", info = "#2f8fc4", warning = "#d6a31c", danger = "#e0685a",
   base_font = font_google("Inter"), heading_font = font_google("Inter Tight"),
   "border-radius" = "0.6rem"
@@ -347,6 +362,18 @@ aqua_theme <- bs_theme(
     .sb-meta { color: var(--muted); font-size: 11.5px; }
     @media (max-width: 900px) { .site-browse-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 560px) { .site-browse-grid { grid-template-columns: 1fr; } }
+
+    /* closed-by-default 'Show all analytes' wrapper for the full correlation DT */
+    .cor-table-details { margin: 6px 0 2px; }
+    .cor-table-details > summary { list-style: none; }
+    .cor-table-details > summary::-webkit-details-marker { display: none; }
+    .cor-table-details[open] .sb-chevron { transform: rotate(180deg); }
+
+    /* in-app sibling links (About modal) */
+    .sibling-chip { display: inline-flex; align-items: center; padding: .2rem .6rem;
+      border: 1px solid var(--line); border-radius: 1rem; font-size: .82rem;
+      color: var(--pine2); text-decoration: none; background: var(--paper); }
+    .sibling-chip:hover { background: var(--bg); border-color: var(--pine); color: var(--pine2); }
   ")
 
 ## ---- Per-tab info-modal content (progressive disclosure) -----------------
@@ -447,7 +474,10 @@ function wcVeilOn(){ var o=document.getElementById('wcOverlay'); if(!o) return;
   if(navigator.vibrate){ try{ navigator.vibrate(12); }catch(e){} }
   clearTimeout(wcSafety); wcSafety=setTimeout(wcVeilOff, 30000); }   /* never stick */
 function wcVeilOff(){ var o=document.getElementById('wcOverlay'); if(o) o.style.display='none'; clearTimeout(wcSafety); }
-var WC_HEAVY=['site','analyte_main','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','color_mode','swap','full_range'];
+/* color_mode (the dark-mode toggle) is intentionally NOT here: it only re-themes
+   the page, it never re-binds data, so raising the working veil on it was a false
+   load. The veil now fires only on genuinely data-bound changes. */
+var WC_HEAVY=['site','analyte_main','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','swap','full_range'];
 $(document).on('shiny:inputchanged', function(e){ if(WC_HEAVY.indexOf(e.name)>=0) wcVeilOn(); });
 /* a map-dot tap now opens a lightweight Explore|About choice card (no recompute),
    so the veil is raised by the actual load instead (input$site is in WC_HEAVY). */
@@ -612,6 +642,44 @@ ui <- page_sidebar(
           actionLink("goto_seasonal", "see its seasonal pattern →", class = "info-link")))
     ),
     nav_panel(
+      "Relationship", icon = bs_icon("rulers"),
+      layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)),
+        card(full_screen = TRUE,
+          card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
+                          span("Regression"), info_link("info_relationship"))),
+          withSpinner(plotlyOutput("reg", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
+        card(card_header("Fit statistics"),
+          uiOutput("reg_stats"),
+          card_footer(class = "scope-note",
+            "OLS on date-paired samples. Correlation ≠ causation; repeated-measures p-values are optimistic.")))
+    ),
+    nav_panel(
+      "Correlations", icon = bs_icon("bar-chart-steps"),
+      card(full_screen = TRUE,
+        card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
+                        span("Main analyte vs every other analyte"),
+                        div(class = "d-flex align-items-center gap-2",
+                            checkboxInput("cor_bh", "BH q", value = FALSE, width = "auto"),
+                            radioButtons("cor_method", NULL, inline = TRUE,
+                              choices = c("Spearman" = "spearman", "Pearson" = "pearson"),
+                              selected = "spearman"),
+                            help_pop("spearman", "Spearman vs Pearson"),
+                            help_pop("censor", "Below-detection handling"),
+                            info_link("info_correlations")))),
+        withSpinner(plotlyOutput("cor_lolli", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        tags$details(class = "cor-table-details",
+          tags$summary(class = "site-browse-summary",
+            bs_icon("table"), tags$span("Show all analytes"),
+            tags$span(class = "sb-chevron", bs_icon("chevron-down"))),
+          div(style = "min-height:340px; overflow-x:auto",
+              withSpinner(DTOutput("cor_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE))),
+        card_footer(class = "scope-note", HTML(
+          "Top 18 shown above (open <b>Show all analytes</b> for the full table). <b style='color:#0E7C9B'>Teal</b> = reliable,
+           <b style='color:#9aa0a6'>grey</b> = under 8 paired samples or &gt; 25% below detection. Computed on
+           co-sampled dates only; screening many analytes at once inflates chance findings, so treat them as hypothesis-generating,
+           not confirmatory. Toggle <b>BH q</b> for Benjamini-Hochberg false-discovery-adjusted p-values.")))
+    ),
+    nav_panel(
       "Seasonal pattern", icon = bs_icon("calendar3"),
       layout_columns(col_widths = breakpoints(sm = 12, lg = c(6, 6)),
         card(full_screen = TRUE,
@@ -637,39 +705,6 @@ ui <- page_sidebar(
             "glm on the 3 best-correlated analytes; cross-validated RMSE shown. Interpolation aid, not a sensor.")))
     ),
     nav_panel(
-      "Relationship", icon = bs_icon("rulers"),
-      layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)),
-        card(full_screen = TRUE,
-          card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
-                          span("Regression"), info_link("info_relationship"))),
-          withSpinner(plotlyOutput("reg", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
-        card(card_header("Fit statistics"),
-          uiOutput("reg_stats"),
-          card_footer(class = "scope-note",
-            "OLS on date-paired samples. Correlation ≠ causation; repeated-measures p-values are optimistic.")))
-    ),
-    nav_panel(
-      "Correlations", icon = bs_icon("bar-chart-steps"),
-      card(full_screen = TRUE,
-        card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
-                        span("Main analyte vs every other analyte"),
-                        div(class = "d-flex align-items-center gap-2",
-                            radioButtons("cor_method", NULL, inline = TRUE,
-                              choices = c("Spearman" = "spearman", "Pearson" = "pearson"),
-                              selected = "spearman"),
-                            help_pop("spearman", "Spearman vs Pearson"),
-                            help_pop("censor", "Below-detection handling"),
-                            info_link("info_correlations")))),
-        withSpinner(plotlyOutput("cor_lolli", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
-        div(style = "min-height:340px; overflow-x:auto",
-            withSpinner(DTOutput("cor_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
-        card_footer(class = "scope-note", HTML(
-          "Top 18 shown above (full list in the table). <b style='color:#0E7C9B'>Teal</b> = reliable,
-           <b style='color:#9aa0a6'>grey</b> = under 8 paired samples or &gt; 25% below detection. Computed on
-           co-sampled dates only; screening many analytes at once inflates chance findings, so treat them as hypothesis-generating,
-           not confirmatory.")))
-    ),
-    nav_panel(
       "Two sites", icon = bs_icon("signpost-split"),
       card(full_screen = TRUE,
         card_header(div(class = "d-flex justify-content-between align-items-center gap-3 flex-wrap",
@@ -691,6 +726,7 @@ ui <- page_sidebar(
               downloadButton("dl_long", "Tidy CSV", class = "btn-sm btn-outline-primary"),
               downloadButton("dl_wide", "Wide CSV", class = "btn-sm btn-outline-secondary"),
               downloadButton("dl_dict", "Dictionary", class = "btn-sm btn-outline-secondary"),
+              downloadButton("dl_codebook", "Codebook", class = "btn-sm btn-outline-secondary"),
               info_link("info_data")))),
         withSpinner(DTOutput("data_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE))
     )
@@ -751,7 +787,14 @@ server <- function(input, output, session) {
          monthly record (not a fabricated forecast); below-detection values are flagged, not hidden.</p>",
         format(D$built$n_obs %||% 0, big.mark = ","), D$built$n_sites, D$built$n_analytes,
         substr(D$built$when %||% "", 1, 10), D$built$data_through %||% "—",
-        if (isTRUE(D$built$partial)) "<p class='scope-note' style='color:#C98A1E'><b>⚠ Partial dataset:</b> built from cached sites only while the full 34-site pull was in progress; counts reflect available data, not the complete product.</p>" else ""))))
+        if (isTRUE(D$built$partial)) "<p class='scope-note' style='color:#C98A1E'><b>⚠ Partial dataset:</b> built from cached sites only while the full 34-site pull was in progress; counts reflect available data, not the complete product.</p>" else "")),
+      sibling_block(),
+      tags$hr(),
+      tags$p(class = "scope-note", style = "margin-bottom:.2rem",
+        HTML("Built by <b>Desert Data Labs</b> · Tucson, Arizona · ",
+             "<a href='mailto:desertdatalabs@gmail.com'>desertdatalabs@gmail.com</a>")),
+      tags$p(class = "scope-note", style = "font-size:.78rem; opacity:.85",
+        "Not affiliated with NEON, Battelle, or the National Science Foundation. NEON data are provided under the NEON data policy.")))
   })
 
   ## ---- Preset -> analytes (only members the site actually has) ----
@@ -1095,9 +1138,18 @@ server <- function(input, output, session) {
                             `Pearson r` = round(pearson, 3),  `p (r)` = fmtp(p_pearson),
                             BDL = fmtbdl(pct_below),
                             Reading = ifelse(ties, paste0(flag, " †"), flag))
+    # Optional multiple-comparison + autocorrelation columns (review finding #6):
+    # BH false-discovery q on the active method's p, and an effective-n-adjusted p
+    # for the rows whose lag-1 |ACF| >= 0.5 (a dash where no adjustment applies).
+    cap_extra <- ""
+    if (isTRUE(input$cor_bh)) {
+      show$`BH q` <- fmtp(ct$q_bh)
+      show$`p (n_eff)` <- ifelse(is.na(ct$p_eff), "—", fmtp(ct$p_eff))
+      cap_extra <- " <b>BH q</b> = Benjamini-Hochberg false-discovery-adjusted p across these analytes. <b>p (n_eff)</b> = p re-tested on the autocorrelation-deflated effective n (shown only where lag-1 |ACF| ≥ 0.5)."
+    }
     datatable(show, rownames = FALSE, options = list(pageLength = 8, dom = "tip"),
               caption = htmltools::tags$caption(style = "caption-side:top",
-                htmltools::HTML("Each p-value pairs with the coefficient in the same colour group. † = tied ranks, Spearman p is approximate. <b>BDL</b> = % below detection; rows over 25% are exploratory only."))) |>
+                htmltools::HTML(paste0("Each p-value pairs with the coefficient in the same colour group. † = tied ranks, Spearman p is approximate. <b>BDL</b> = % below detection; rows over 25% are exploratory only.", cap_extra)))) |>
       formatStyle("Reading", target = "cell",
                   backgroundColor = styleEqual(
                     c("strong +", "strong −", "moderate", "strong + †", "strong − †", "moderate †"),
@@ -1327,7 +1379,7 @@ server <- function(input, output, session) {
       # exported codebook is self-describing (the FAIR codebook gap).
       dict <- ANALYTE_TBL |>
         left_join(D$analyte_meta |> select(code = analyte, units, n, n_sites, n_below, pct_below, source), by = "code") |>
-        left_join(CEIL_TBL |> select(code = analyte, plausibility_ceiling = ceiling), by = "code") |>
+        left_join(CEIL_TBL$global |> select(code = analyte, plausibility_ceiling = ceiling), by = "code") |>
         transmute(code, display, group, indicator, units, n_obs = n, n_sites,
                   n_below, pct_below = round(pct_below, 4), plausibility_ceiling = signif(plausibility_ceiling, 4),
                   source)
@@ -1340,6 +1392,16 @@ server <- function(input, output, session) {
       # write_csv (no BOM) for the appended block: write_excel_csv would emit a
       # second UTF-8 BOM mid-file, right before the header row, breaking strict CSV readers
       readr::write_csv(dict, file, append = TRUE, col_names = TRUE)
+    })
+
+  # versioned column-level codebook shipped beside the bundle (the keep-vector
+  # codebook); served as-is so the in-app download matches the committed file.
+  output$dl_codebook <- downloadHandler(
+    filename = function() "NEON-SWC-codebook.csv",
+    content = function(file) {
+      src <- "data/codebook.csv"
+      if (file.exists(src)) file.copy(src, file, overwrite = TRUE)
+      else writeLines("# codebook.csv not bundled in this build", file)
     })
 
   ## ---- One-click PDF site report (self-contained, base pdf() + ggplot) ----
@@ -1460,6 +1522,9 @@ server <- function(input, output, session) {
     if (!nrow(m)) return(plotly_message("No site coordinates available.", mode()))
     unit  <- pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == ana][1], ana)
     has_v <- m |> filter(is.finite(avg)); no_v <- m |> filter(!is.finite(avg))
+    # heavy-tail-safe colour channel: log10(site avg) for skewed analytes, clamped
+    # to p5/p95, colorbar ticking in TRUE units (so PRPO can't wash the rest out)
+    csc <- if (nrow(has_v)) map_colour_scale(has_v$avg, ana) else NULL
 
     geo <- list(scope = "north america", lataxis = list(range = c(15, 72)), lonaxis = list(range = c(-162, -60)),
                 showland = TRUE, landcolor = if (identical(mode(), "dark")) "rgba(40,46,54,1)" else "rgba(243,245,247,1)",
@@ -1476,10 +1541,15 @@ server <- function(input, output, session) {
     if (nrow(has_v))
       p <- add_trace(p, data = has_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
                      customdata = ~site, showlegend = FALSE,
-                     marker = list(size = ifelse(has_v$sel, 17, 11), color = ~avg,
+                     marker = list(size = ifelse(has_v$sel, 17, 11), color = csc$z,
+                                   cmin = csc$cmin, cmax = csc$cmax,
                                    colorscale = "YlGnBu", reversescale = TRUE, showscale = TRUE,
-                                   colorbar = list(title = list(text = paste0(analyte_display(ana), "<br>", unit),
-                                                                font = list(size = 10)), thickness = 12, len = .68, x = 1),
+                                   colorbar = list(title = list(
+                                                     text = paste0(analyte_display(ana), "<br>", unit,
+                                                                   if (isTRUE(csc$log)) "<br><span style='font-size:9px'>(log scale)</span>" else ""),
+                                                     font = list(size = 10)),
+                                                   tickvals = csc$tickvals, ticktext = csc$ticktext,
+                                                   thickness = 12, len = .68, x = 1),
                                    line = list(width = ifelse(has_v$sel, 2.4, .5),
                                                color = ifelse(has_v$sel, COL$secondary, "white"))),
                      text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",

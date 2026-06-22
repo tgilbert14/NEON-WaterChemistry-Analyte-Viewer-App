@@ -26,6 +26,19 @@ SITE_LABELS <- c(
 # NEON ships below-detection as the strings "ND"/"BDL" (sometimes "1") — NOT 0/1.
 .below_codes <- c("1", "ND", "BDL", "BD", "TRUE", "true")
 
+# Modal (most-frequent) non-NA value of a character vector. Used to pick ONE
+# canonical unit per analyte instead of dplyr::first(), which grabbed whatever
+# row sorted first and left 20/34 analytes carrying a stray non-modal unit.
+.mode_chr <- function(x) {
+  x <- x[!is.na(x) & nzchar(x)]
+  if (!length(x)) return(NA_character_)
+  names(sort(table(x), decreasing = TRUE))[1]
+}
+
+# UV absorbance has no real NEON unit string (it is an absorbance ratio); stamp a
+# canonical label so the dictionary stops exporting NA.
+.UV_ABS_CODES <- c("UV Absorbance (254 nm)", "UV Absorbance (250 nm)", "UV Absorbance (280 nm)")
+
 # lab_raw  : stacked external-lab rows; cols = site, collectDate, analyte,
 #            analyteConcentration, analyteUnits, belowDetectionQF, externalLabDataQF
 # field_raw: stacked field-probe rows; cols = site, collectDate, waterTemp,
@@ -60,9 +73,38 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
                 below = FALSE, labFlag = NA_character_, source = "Field Probe")
   } else tibble()
 
+  raw_long <- bind_rows(lab_long, field_long)
+
+  # ---- FAIR units (review finding #4): one canonical unit per analyte ---------
+  # Pick the MODAL unit per analyte (not dplyr::first(), which left 20/34 analytes
+  # mislabeled). Then coerce every analyte to that one canonical unit:
+  #   * GENUINE µg/L rows whose analyte is canonically mg/L are divided by 1000
+  #     (true unit mismatch — converted BY VALUE, not just relabeled);
+  #   * UV absorbance analytes are stamped "absorbance units" (no NEON unit string).
+  # This makes the bundle self-consistent so the runtime no longer has to patch it.
+  canon_tbl <- raw_long %>%
+    dplyr::group_by(analyte) %>%
+    dplyr::summarise(canon_unit = .mode_chr(units), .groups = "drop") %>%
+    dplyr::mutate(canon_unit = ifelse(analyte %in% .UV_ABS_CODES, "absorbance units", canon_unit))
+  canon_map <- setNames(canon_tbl$canon_unit, canon_tbl$analyte)
+
+  raw_long <- raw_long %>%
+    dplyr::mutate(
+      canon_unit = unname(canon_map[analyte]),
+      # genuine µg/L -> mg/L conversion BY VALUE (1000 µg = 1 mg) only where the
+      # analyte's canonical unit is mg/L and THIS row was reported in µg/L
+      value = dplyr::if_else(
+        !is.na(canon_unit) & canon_unit == "milligramsPerLiter" &
+          units == "microgramsPerLiter" & is.finite(value),
+        value / 1000, value),
+      units = dplyr::coalesce(canon_unit, units)
+    ) %>%
+    dplyr::select(-canon_unit)
+
   # Collapse replicates -> one row per site/date/analyte, KEEPING the replicate
-  # count + spread + a real below-detection flag (any rep below DL).
-  swc_long <- bind_rows(lab_long, field_long) %>%
+  # count + spread + a real below-detection flag (any rep below DL). Units are now
+  # canonical per analyte, so first() is safe here.
+  swc_long <- raw_long %>%
     group_by(site, collectDate, analyte) %>%
     summarise(value_sd = stats::sd(value, na.rm = TRUE),   # spread BEFORE collapse
               n_reps = dplyr::n(),
@@ -122,6 +164,90 @@ validate_bundle <- function(b) {
                   "n_obs","n_analytes","first","last") %in% names(b$sites_meta)),
             all(c("when","product","partial","n_obs","n_sites","n_analytes") %in% names(b$built)))
   invisible(TRUE)
+}
+
+# ---- Versioned column-level codebook (review finding #5) --------------------
+# Emits codebook.csv next to neon_swc.rds. The dictionary is built by iterating
+# the ACTUAL columns the app's tidy long export emits (the keep-vector) so it can
+# never drift from what ships; every column carries type + units-or-NA + allowed +
+# definition + NA-semantics. CODEBOOK_VERSION is stamped into the header.
+CODEBOOK_VERSION <- "1.0.0"
+# The keep-vector = the exact columns output$dl_long / long_slice() transmutes.
+# Keep this list in lock-step with app.R long_slice().
+LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","units",
+                      "n_reps","value_sd","below_detection","implausible_extreme",
+                      "lab_flag","source","product")
+.CODEBOOK_DEFS <- list(
+  site = list(type="character", units=NA, allowed="NEON 4-letter site code",
+              def="NEON aquatic site where the sample was collected",
+              na="never NA"),
+  collectDate = list(type="Date", units="ISO date", allowed="YYYY-MM-DD",
+              def="Field collection date (sub-day time dropped)", na="never NA"),
+  analyte = list(type="character", units=NA, allowed="raw analyte code",
+              def="NEON analyte identifier (join key to the analyte dictionary)", na="never NA"),
+  analyte_label = list(type="character", units=NA, allowed="free text",
+              def="Human-readable analyte name", na="never NA"),
+  value = list(type="numeric", units="see units column (canonical per analyte)", allowed=">= 0 typical",
+              def="Replicate-mean concentration / measurement for the site-date-analyte",
+              na="NA only if all replicates were non-numeric"),
+  units = list(type="character", units=NA, allowed="canonical NEON unit string",
+              def="Canonical (modal) unit for the analyte; UV absorbance = 'absorbance units'",
+              na="never NA after canonicalization"),
+  n_reps = list(type="integer", units="count", allowed=">= 1",
+              def="Number of lab/field replicates collapsed into value", na="never NA"),
+  value_sd = list(type="numeric", units="same as value", allowed=">= 0",
+              def="Standard deviation across replicates before collapse",
+              na="NA when n_reps == 1"),
+  below_detection = list(type="logical", units=NA, allowed="TRUE/FALSE",
+              def="Any replicate reported below the analytical detection limit (value kept, never substituted)",
+              na="never NA"),
+  implausible_extreme = list(type="logical", units=NA, allowed="TRUE/FALSE",
+              def="Flagged above the plausibility ceiling; kept in this raw export, excluded from fits/maps/STL/glm",
+              na="never NA"),
+  lab_flag = list(type="character", units=NA, allowed="NEON externalLabDataQF codes",
+              def="External-lab quality flag (e.g. legacyData, formatChange)", na="NA when unflagged"),
+  source = list(type="character", units=NA, allowed="External Lab | Field Probe",
+              def="Measurement origin", na="never NA"),
+  product = list(type="character", units=NA, allowed="DP1.20093.001",
+              def="NEON data product code", na="never NA")
+)
+write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
+  keep <- LONG_EXPORT_KEEP
+  rows <- lapply(keep, function(col) {
+    d <- .CODEBOOK_DEFS[[col]]
+    if (is.null(d)) d <- list(type="", units=NA, allowed="", def="(undocumented)", na="")
+    tibble::tibble(name = col, type = d$type,
+                   units = ifelse(is.na(d$units), "NA", d$units),
+                   allowed = d$allowed, definition = d$def, na_semantics = d$na)
+  })
+  long_cb <- dplyr::bind_rows(rows)
+  long_cb$section <- "tidy_long_export"
+
+  # analyte dictionary section: one row per analyte actually emitted, with its
+  # canonical unit + coverage + below-detection fraction
+  am <- bundle$analyte_meta
+  am$pct_below <- ifelse(is.finite(am$n) & am$n > 0, round(am$n_below / am$n, 4), NA_real_)
+  dict_cb <- tibble::tibble(
+    name = am$analyte, type = "numeric",
+    units = ifelse(is.na(am$units) | !nzchar(am$units), "NA", am$units),
+    allowed = ">= 0 typical",
+    definition = sprintf("Analyte '%s': %d obs across %d sites; canonical unit shown",
+                         am$analyte, am$n, am$n_sites),
+    na_semantics = sprintf("%s below detection (kept, not substituted)",
+                           ifelse(is.na(am$pct_below), "0%", paste0(round(100*am$pct_below), "%"))),
+    section = "analyte_dictionary")
+
+  cb <- dplyr::bind_rows(long_cb, dict_cb)
+  hdr <- c(
+    sprintf("# NEON Surface Water Chemistry codebook | version %s | product %s | built %s",
+            CODEBOOK_VERSION, bundle$built$product, substr(bundle$built$when, 1, 10)),
+    "# section=tidy_long_export documents the in-app Tidy CSV columns (the keep-vector); section=analyte_dictionary documents every emitted analyte",
+    "# units 'NA' = dimensionless or no canonical unit string (e.g. pH, UV absorbance ratio)")
+  writeLines(hdr, out)
+  suppressWarnings(suppressMessages(
+    utils::write.table(cb, out, append = TRUE, sep = ",", row.names = FALSE,
+                       col.names = TRUE, qmethod = "double")))
+  invisible(cb)
 }
 
 # write bundle with a timestamped backup of any existing file

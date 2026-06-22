@@ -54,6 +54,8 @@ save_bundle(bundle, file.path(ROOT, "data", "neon_swc.rds"))
 
 # ship a data dictionary alongside the bundle (provenance for downstream users)
 write_csv(bundle$analyte_meta, file.path(ROOT, "data", "analyte_coverage.csv"))
+# versioned column-level codebook (committed next to neon_swc.rds)
+write_codebook(bundle, file.path(ROOT, "data", "codebook.csv"))
 cat(sprintf("BUILT data/neon_swc.rds: obs=%d sites=%d analytes=%d below-detection=%d partial=%s\n",
             bundle$built$n_obs, bundle$built$n_sites, bundle$built$n_analytes,
             bundle$built$n_below, bundle$built$partial))

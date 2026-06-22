@@ -135,40 +135,132 @@ canon_unit_of <- function(code, map, fallback = NA_character_) {
 ## ---- Per-analyte plausibility gate (review finding #2, outlier QC) ---------
 # A single impossible singleton (ANC = 927 meq/L at CARI, site median 0.73; Fe =
 # 931 mg/L, median 0.011) must never drive a fit, an STL trend, the glm, or the
-# map colorbar. plausibility_ceilings() learns a per-analyte ceiling once at app
-# load. A value is flagged implausible only when it clears BOTH guards — the
-# review's "> p99.9 + a unit-sanity check":
-#   (a) it exceeds the analyte's p99.9 quantile, AND
-#   (b) it exceeds a generous multiple of the analyte's median (unit-sanity).
-# Requiring BOTH keeps a genuinely heavy-tailed-but-real analyte intact (PRPO
-# conductance 7,924 µS/cm stays IN — it is well within conductance's own p99.9),
-# while a lone 1000×-median artifact in an otherwise tight distribution is gated
-# OUT (ANC 927 dwarfs both its p99.9 and 50× its median). The ceiling is each
-# analyte's own max(p99.9, median×mult), so it is unit-agnostic / self-calibrating.
-plausibility_ceilings <- function(swc_long, q = 0.999, sanity_mult = 50) {
-  swc_long |>
-    dplyr::filter(is.finite(value)) |>
+# map colorbar. plausibility_ceilings() learns a ceiling once at app load. A value
+# is flagged implausible only when it clears BOTH guards — the review's
+# "> p99.9 + a unit-sanity check":
+#   (a) it exceeds the reference p99.9 quantile, AND
+#   (b) it exceeds a generous multiple of the reference median (unit-sanity).
+# Requiring BOTH gates a lone 1000×-median artifact in an otherwise tight
+# distribution (ANC 927 dwarfs both its p99.9 and 50× its median).
+#
+# SITE-AWARE branch (review finding #2 fix): for high-cross-site-variance
+# analytes (specific conductance, TDS, the major ions, ANC) a legitimately
+# extreme site — a saline prairie pothole like PRPO — sits far above the
+# CONTINENT-WIDE distribution yet is entirely real. A single global ceiling
+# silently trimmed those genuine grabs against this file's own intent. So for
+# HIVAR_ANALYTES the reference distribution is the SITE's own history, not the
+# pooled one: PRPO's saline values are judged against PRPO, so they stay IN,
+# while a true within-site artifact (a 1000× spike in an otherwise tight site
+# record) is still gated. Low-variance analytes keep the pooled global ceiling.
+HIVAR_ANALYTES <- c(
+  "specificConductanceField", "specificConductance", "TDS",
+  "ANC", "HCO3", "CO3", "DIC",
+  "Ca", "Mg", "Na", "K", "Cl", "SO4", "Br", "F", "Si"
+)
+plausibility_ceilings <- function(swc_long, q = 0.999, sanity_mult = 50,
+                                  site_q = 0.995, site_mult = 30, site_min_n = 8) {
+  d <- dplyr::filter(swc_long, is.finite(value))
+  # global (pooled) ceiling — applies to every analyte
+  glob <- d |>
     dplyr::group_by(analyte) |>
     dplyr::summarise(
       .groups = "drop",
       med  = stats::median(value, na.rm = TRUE),
       p999 = stats::quantile(value, q, na.rm = TRUE, names = FALSE),
       sanity  = ifelse(is.finite(med) & med > 0, abs(med) * sanity_mult, Inf),
-      # ceiling = larger of the two guards; a value must clear BOTH to be flagged,
-      # which is exactly value > max(p999, sanity).
-      ceiling = pmax(p999, sanity, na.rm = TRUE)
+      ceiling = pmax(p999, sanity, na.rm = TRUE),
+      scope = "analyte"
     )
+  # per-site ceiling for the high-variance analytes only, where a site has
+  # enough of its own observations to characterise its native range
+  site <- d |>
+    dplyr::filter(analyte %in% HIVAR_ANALYTES) |>
+    dplyr::group_by(analyte, site) |>
+    dplyr::filter(dplyr::n() >= site_min_n) |>
+    dplyr::summarise(
+      .groups = "drop",
+      med  = stats::median(value, na.rm = TRUE),
+      p999 = stats::quantile(value, site_q, na.rm = TRUE, names = FALSE),
+      sanity  = ifelse(is.finite(med) & med > 0, abs(med) * site_mult, Inf),
+      ceiling = pmax(p999, sanity, na.rm = TRUE),
+      scope = "analyte_site"
+    )
+  list(global = glob, site = site)
 }
-# Named lookup analyte -> ceiling for is_plausible().
-ceiling_map <- function(ceil_tbl) setNames(ceil_tbl$ceiling, ceil_tbl$analyte)
-# Is each value plausible? TRUE = keep. NA/non-finite are treated as keep (they
-# drop out of finite filters downstream anyway). `ceil_map` is a named vector
-# analyte -> ceiling from ceiling_map(plausibility_ceilings()).
-is_plausible <- function(value, analyte, ceil_map) {
-  ceil <- ceil_map[as.character(analyte)]
+# Named lookups for is_plausible(): the pooled ceiling per analyte, plus a
+# per-(analyte|site) ceiling for the high-variance analytes.
+ceiling_map <- function(ceil) {
+  if (is.list(ceil) && !is.data.frame(ceil)) {
+    list(global = setNames(ceil$global$ceiling, ceil$global$analyte),
+         site   = setNames(ceil$site$ceiling,
+                           paste(ceil$site$analyte, ceil$site$site, sep = "\r")))
+  } else {
+    # back-compat: a plain analyte->ceiling tibble
+    list(global = setNames(ceil$ceiling, ceil$analyte), site = character(0))
+  }
+}
+# Is each value plausible? TRUE = keep. For a high-variance analyte WITH a
+# site-specific ceiling, judge against that site's own range; otherwise the
+# pooled analyte ceiling. NA/non-finite -> keep (they drop from finite filters).
+is_plausible <- function(value, analyte, ceil_map, site = NULL) {
+  g <- ceil_map$global; s <- ceil_map$site
+  a <- as.character(analyte)
+  ceil <- unname(g[a])
+  if (length(s) && !is.null(site)) {
+    key <- paste(a, as.character(site), sep = "\r")
+    site_ceil <- unname(s[key])
+    ceil <- ifelse(!is.na(site_ceil), site_ceil, ceil)
+  }
   ok <- !is.finite(value) | is.na(ceil) | (value <= ceil)
   ok[is.na(ok)] <- TRUE
   unname(ok)
+}
+
+## ---- Heavy-tail map colour scale (review finding #1, map washout) ---------
+# A single saline site (PRPO specific conductance ~30x the median) on a RAW
+# linear YlGnBu colorbar washes ~24/34 sites into the bottom bin. The suite
+# COLOUR-SCALE STANDARD: for a heavy-tailed cross-site quantity, colour on
+# log10 with the colorbar TICKING IN TRUE UNITS, and clamp the colour domain to
+# robust quantiles (p5/p95) so one outlier can't floor everyone else. Bounded
+# metrics (pH, %, richness) are passed through linear (clamp = FALSE) so we never
+# log a thing that should not be logged.
+#
+# Returns a list the map trace consumes directly:
+#   $z          numeric colour channel (log10(value) for heavy-tail, raw else)
+#   $cmin/$cmax clamped colour-domain endpoints on the same channel
+#   $tickvals   colorbar tick positions ON the colour channel
+#   $ticktext   the same ticks printed in TRUE units (µS/cm, mg/L, …)
+# `linear_codes` = analytes that must NOT be log-scaled (bounded/near-symmetric).
+LINEAR_MAP_CODES <- c("pH", "waterTemp", "dissolvedOxygenField", "dissolvedOxygen")
+map_colour_scale <- function(value, code = NULL, p_lo = 0.05, p_hi = 0.95) {
+  v <- value[is.finite(value)]
+  linear <- (!is.null(code) && code %in% LINEAR_MAP_CODES) || any(v <= 0, na.rm = TRUE)
+  if (!length(v)) return(list(z = value, cmin = 0, cmax = 1, log = FALSE,
+                              tickvals = c(0, 1), ticktext = c(0, 1)))
+  if (linear || length(v) < 3) {
+    qs <- stats::quantile(v, c(p_lo, p_hi), na.rm = TRUE, names = FALSE)
+    cmin <- qs[1]; cmax <- qs[2]
+    if (!is.finite(cmin) || !is.finite(cmax) || cmin == cmax) { cmin <- min(v); cmax <- max(v) }
+    z <- pmin(pmax(value, cmin), cmax)
+    ticks <- pretty(c(cmin, cmax), n = 5)
+    ticks <- ticks[ticks >= cmin & ticks <= cmax]
+    return(list(z = z, cmin = cmin, cmax = cmax, log = FALSE,
+                tickvals = ticks, ticktext = signif(ticks, 3)))
+  }
+  # heavy-tail branch: work in log10, clamp domain to p5/p95
+  lz   <- log10(value)
+  qs   <- stats::quantile(log10(v), c(p_lo, p_hi), na.rm = TRUE, names = FALSE)
+  cmin <- qs[1]; cmax <- qs[2]
+  if (!is.finite(cmin) || !is.finite(cmax) || cmin == cmax) { cmin <- min(log10(v)); cmax <- max(log10(v)) }
+  z <- pmin(pmax(lz, cmin), cmax)
+  # ticks at "nice" true-unit values spanning the clamped log domain
+  decades <- seq(floor(cmin), ceiling(cmax))
+  cand <- as.numeric(outer(c(1, 2, 5), 10^decades))
+  cand <- sort(unique(cand))
+  cand <- cand[log10(cand) >= cmin & log10(cand) <= cmax]
+  if (length(cand) < 2) cand <- signif(10^(pretty(c(cmin, cmax), n = 4)), 2)
+  list(z = z, cmin = cmin, cmax = cmax, log = TRUE,
+       tickvals = log10(cand), ticktext = formatC(cand, format = "fg", big.mark = ","))
 }
 
 analyte_display <- function(code) {
@@ -236,6 +328,35 @@ PRESET_REASON <- c(
 
 season_of <- function(d) factor(c("Winter","Spring","Summer","Fall")[(lubridate::month(d) %% 12) %/% 3 + 1],
                                  levels = c("Winter","Spring","Summer","Fall"))
+
+## ---- In-app sibling links (suite chrome) ---------------------------------
+# The "Explore the NEON series" block surfaced in the About modal. Registry +
+# live URLs mirror docs/index.html so the in-app links and the landing grid can
+# never drift. Each sibling hyperlinks to its live github.io cover.
+SIBLINGS <- tibble::tribble(
+  ~name,                ~url,
+  "Driver Cascade",     "https://tgilbert14.github.io/NEON-Driver-Cascade/",
+  "Small Mammals",      "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/",
+  "Breeding Birds",     "https://tgilbert14.github.io/NEON-Breeding-Birds/",
+  "Ground Beetles",     "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/",
+  "Plant Diversity",    "https://tgilbert14.github.io/NEON-Plant-Diversity/",
+  "Plant Phenology",    "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/",
+  "Veg Structure",      "https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/",
+  "Mosquito Pulse",     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/"
+)
+sibling_block <- function() {
+  htmltools::tagList(
+    htmltools::tags$hr(),
+    htmltools::tags$p(htmltools::tags$b("Explore the NEON series"),
+      htmltools::tags$span(class = "scope-note",
+        " — sibling explorers built on the same honest-stats playbook, each on a different NEON measurement:")),
+    htmltools::tags$div(
+      style = "display:flex; flex-wrap:wrap; gap:.4rem .6rem; margin:.3rem 0 .2rem",
+      lapply(seq_len(nrow(SIBLINGS)), function(i)
+        htmltools::tags$a(href = SIBLINGS$url[i], target = "_blank", rel = "noopener",
+          class = "sibling-chip", SIBLINGS$name[i])))
+  )
+}
 
 ## ---- Theme helpers -------------------------------------------------------
 theme_neon <- function(base = 13) {
@@ -325,6 +446,12 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
   others <- setdiff(num, main)
   pct_bdl <- function(a) if (!is.null(censor_map) && a %in% names(censor_map)) unname(censor_map[a]) else NA_real_
   ptest <- function(x, y, mth) suppressWarnings(tryCatch(stats::cor.test(x, y, method = mth)$p.value, error = function(e) NA_real_))
+  # lag-1 ACF of a series (NA-safe); used to flag temporal autocorrelation and to
+  # compute the variance-inflation-adjusted effective n when |ACF| is high.
+  acf1 <- function(z) suppressWarnings(tryCatch({
+    if (length(z) < 4) return(NA_real_)
+    stats::acf(z, lag.max = 1, plot = FALSE, na.action = stats::na.pass)$acf[2]
+  }, error = function(e) NA_real_))
   rows <- lapply(others, function(a) {
     y <- suppressWarnings(as.numeric(wide_site[[a]]))
     ok <- is.finite(m) & is.finite(y)
@@ -334,14 +461,28 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     pp <- if (n >= 4) ptest(m[ok], y[ok], "pearson")  else NA_real_
     ps <- if (n >= 4) ptest(m[ok], y[ok], "spearman") else NA_real_
     ties <- n >= 4 && (any(duplicated(m[ok])) || any(duplicated(y[ok])))
+    # lag-1 ACF of each member of the pair; the larger |ACF| drives n_eff
+    ac <- if (n >= 6) max(abs(acf1(m[ok])), abs(acf1(y[ok])), na.rm = TRUE) else NA_real_
     tibble(code = a, display = analyte_display(a), n = n,
            pearson = pe, spearman = sp, p_pearson = pp, p_spearman = ps, ties = ties,
-           pct_below = pct_bdl(a))
+           acf1 = ac, pct_below = pct_bdl(a))
   })
   out <- bind_rows(rows)
   if (!nrow(out)) return(out)
   out$coef <- if (method == "spearman") out$spearman else out$pearson
   out$p    <- if (method == "spearman") out$p_spearman else out$p_pearson
+  # Effective-n-adjusted p when lag-1 autocorrelation is material (|ACF| >= 0.5):
+  # n_eff = n * (1-r)/(1+r) shrinks the df, and the two-sided t-test p is
+  # recomputed on n_eff. Reported alongside the raw p so a repeated-measures
+  # series cannot quietly borrow significance it does not have.
+  out$n_eff <- with(out, ifelse(is.finite(acf1) & abs(acf1) >= 0.5 & n > 3,
+                                pmax(3, n * (1 - abs(acf1)) / (1 + abs(acf1))), NA_real_))
+  out$p_eff <- with(out, {
+    ne <- n_eff; r <- coef
+    tval <- abs(r) * sqrt((ne - 2) / pmax(1e-9, 1 - r^2))
+    p <- 2 * stats::pt(tval, df = pmax(1, ne - 2), lower.tail = FALSE)
+    ifelse(is.finite(ne) & is.finite(r) & abs(r) < 1, pmin(1, p), NA_real_)
+  })
   out <- out |> filter(n >= 4, is.finite(coef)) |>
     mutate(heavy_censor = is.finite(pct_below) & pct_below >= censor_thresh,
            # reliable drives the grey-out: a row is reliable only if it clears the
@@ -355,6 +496,9 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
              abs(coef) >= 0.4     ~ "moderate",
              TRUE                 ~ "weak/none")) |>
     arrange(desc(abs(coef)))
+  # Benjamini-Hochberg false-discovery q across the screened analytes (computed
+  # on the active method's p, over the rows that survive the n filter).
+  out$q_bh <- stats::p.adjust(out$p, method = "BH")
   out
 }
 
