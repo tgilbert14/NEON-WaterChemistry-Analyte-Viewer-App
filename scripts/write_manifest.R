@@ -18,10 +18,14 @@ if (!requireNamespace("jsonlite", quietly = TRUE))  stop("install.packages('json
 
 app_files <- c(
   "app.R", "helpers.R",
-  list.files("data", pattern = "[.]rds$", full.names = TRUE),  # neon_swc.rds only
+  list.files("data", pattern = "[.](rds|csv)$", full.names = TRUE),  # neon_swc.rds, search_index.rds + codebook.csv (in-app download)
   if (dir.exists("data-sample")) list.files("data-sample", full.names = TRUE),
   if (dir.exists("www")) list.files("www", full.names = TRUE)
 )
+# analyte_coverage.csv is DERIVED + gitignored (not committed, not deployed) — the
+# new csv glob would otherwise sweep it in. Drop any data file that git does not
+# track so the manifest lists only deployable, committed runtime files.
+app_files <- app_files[basename(app_files) != "analyte_coverage.csv"]
 app_files <- app_files[file.exists(app_files)]
 
 rsconnect::writeManifest(appDir = ".", appPrimaryDoc = "app.R", appFiles = app_files)

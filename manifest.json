@@ -2875,7 +2875,10 @@
   },
   "files": {
     "app.R": {
-      "checksum": "801ca772dff03daf2abae5584699e775"
+      "checksum": "c646b1dce780e7ef7adaaccb5594fd6f"
+    },
+    "data/codebook.csv": {
+      "checksum": "3f1c468564989ceb02d0c2022736a5d4"
     },
     "data/neon_swc.rds": {
       "checksum": "8dceb262af0eed45178bbdb21d847cc6"
