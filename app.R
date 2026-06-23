@@ -670,9 +670,17 @@ APP_JS <- HTML("
 $(document).on('shiny:connected', function(){
   try { Shiny.setInputValue('welcome_seen', localStorage.getItem('neon_seen'), {priority:'event'}); }
   catch(e){ Shiny.setInputValue('welcome_seen', null, {priority:'event'}); }
+  /* restore-last-session: hand the server the saved view-state string (or '') so
+     the one-shot startup resolver can decide whether to auto-enter it. Same
+     localStorage round-trip pattern as welcome_seen above. */
+  try { Shiny.setInputValue('wc_restore', localStorage.getItem('wc_last') || '', {priority:'event'}); }
+  catch(e){ Shiny.setInputValue('wc_restore', '', {priority:'event'}); }
   Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'});
 });
 Shiny.addCustomMessageHandler('neon_set_seen', function(x){ try{ localStorage.setItem('neon_seen','1'); }catch(e){} });
+/* persist the loaded view's state; the server pushes a {site,main,sec,d1,d2}
+   object on every change while a site is loaded, never while on the splash. */
+Shiny.addCustomMessageHandler('wc_save_state', function(msg){ try{ localStorage.setItem('wc_last', JSON.stringify(msg)); }catch(e){} });
 
 /* ---- kickMaps: re-measure the leaflet site map after 'Change site' --------
    'Change site' re-shows the picker splash; the leaflet map may have been
@@ -1124,9 +1132,37 @@ server <- function(input, output, session) {
   main_a  <- reactive(input$analyte_main)
   sec_a   <- reactive(input$analyte_secondary)
 
+  # ---- delighters: session-restore / deep-link state ------------------------
+  # `loaded` is TRUE only while a site is entered (the splash is hidden); it gates
+  # the localStorage save + the deep-link query-string write so we never persist
+  # (or advertise in the URL) a view the user is not actually looking at.
+  loaded       <- reactiveVal(FALSE)
+  # set TRUE for the one load the startup resolver auto-enters, so the first-visit
+  # Welcome modal is suppressed for a deep-linked / resumed visitor (they came for
+  # the view, not the tour). Read once by the welcome observer below.
+  auto_entered <- reactiveVal(FALSE)
+
   ## ---- Onboarding modal (once) ----
   observeEvent(input$welcome_seen, once = TRUE, ignoreNULL = FALSE, {
-    if (!identical(input$welcome_seen, "1")) {
+    # a deep-linked / session-resumed visitor was auto-entered straight into a
+    # view; don't interrupt them with the first-visit tour. The deep-link case is
+    # read SYNCHRONOUSLY off the URL so it never races the startup resolver (which
+    # sets auto_entered); a resume implies a returning visitor (welcome_seen=="1",
+    # already suppressed by the first clause).
+    dl <- parseQueryString(session$clientData$url_search %||% "")
+    deep_linked <- !is.null(dl$site) && dl$site %in% D$sites_meta$site
+    # a localStorage resume also auto-enters; its payload (input$wc_restore) arrives
+    # in the SAME shiny:connected flush, so read it directly (isolated, no race) and
+    # skip the tour for a resumed visitor too.
+    resuming <- FALSE
+    raw <- isolate(input$wc_restore)
+    if (!is.null(raw) && nzchar(raw)) {
+      stt <- tryCatch(jsonlite::fromJSON(raw), error = function(e) NULL)
+      resuming <- !is.null(stt) && !is.null(stt$site) && length(stt$site) == 1 &&
+                  stt$site %in% D$sites_meta$site
+    }
+    if (!identical(input$welcome_seen, "1") && !isTRUE(auto_entered()) &&
+        !deep_linked && !resuming) {
       showModal(modalDialog(
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
         tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
@@ -1281,6 +1317,8 @@ server <- function(input, output, session) {
       div(class = "cb-actions",
         actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " Change site"),
                    class = "cb-change"),
+        actionLink("resetFlagship", tagList(bs_icon("stars"), " Reset to flagship example"),
+                   class = "cb-change", title = "Jump back to the Sycamore Creek showcase"),
         downloadLink("report_band", tagList(bs_icon("file-earmark-arrow-down"), " Report"),
                      class = "cb-report")),
       # clickable QC marker — only when this site/analyte owns an excluded extreme
@@ -1291,6 +1329,8 @@ server <- function(input, output, session) {
   # the leaflet map to re-measure into the now-visible width so it never paints
   # half-width / grey tiles (the flagship kickMaps multi-frame resize fix).
   observeEvent(input$changeSite, {
+    loaded(FALSE)                                  # stop persisting / advertising the view
+    updateQueryString("?", mode = "replace")       # don't carry a stale deep link onto the splash
     shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
     session$sendCustomMessage("kickMaps", list())
   })
@@ -2069,12 +2109,34 @@ server <- function(input, output, session) {
     shinyjs::hide("splash"); shinyjs::show("mainTabsWrap")
     shinyjs::hide("splashGuide")
     nav_select("main_tabs", tab)
+    loaded(TRUE)   # arm the state-persist + deep-link observer (delighters 1 & 2)
     invisible(TRUE)
   }
 
   # the shared load path used by the map popup, the About modal footer, and the
   # browse list: enter the loaded view (lands on Overview).
   load_site <- function(site, tab = "Overview") enter_site(site, tab)
+
+  # ---- delighters 1 & 2: persist the view + keep a deep-linkable URL ---------
+  # While a site is loaded, mirror the live state to localStorage (so a returning
+  # visitor can be auto-restored) AND to the address bar (so the current view is
+  # a shareable link). Both are gated on `loaded` so nothing is written on the
+  # splash. The save fires on every site / analyte / date change.
+  observe({
+    if (!isTRUE(loaded())) return()
+    site <- input$site; m <- main_a(); s <- sec_a()
+    req(site %in% D$sites_meta$site)
+    # Persist site + analyte pair only; the date window is intentionally NOT saved.
+    # A resumed or shared view lands on the site's full span (the common case Aaron
+    # wants), and it sidesteps a cross-site observer race where the site-change
+    # span-reset would clobber a restored sub-window anyway.
+    session$sendCustomMessage("wc_save_state",
+      list(site = site, main = m %||% "", sec = s %||% ""))
+    updateQueryString(sprintf("?site=%s&main=%s&sec=%s",
+      utils::URLencode(site, reserved = TRUE),
+      utils::URLencode(m %||% "", reserved = TRUE),
+      utils::URLencode(s %||% "", reserved = TRUE)), mode = "replace")
+  })
 
   site_info_modal <- function(code) {
     sm <- D$sites_meta[D$sites_meta$site == code, ]
@@ -2139,7 +2201,9 @@ server <- function(input, output, session) {
   # vs ANC), and land straight on the Relationship fit (r ~ 0.86). The preset
   # observer maps PRESETS[[name]] onto both analyte selectors; ordering the
   # updates before enter_site keeps input$site valid the whole time.
-  observeEvent(input$flagship, {
+  # Factored into go_flagship() so the splash "Try the flagship example" button
+  # AND the in-app "Reset to flagship example" link (context band) share one path.
+  go_flagship <- function() {
     flag_name <- names(PRESETS)[1]                 # "Ionic strength <-> buffering (flagship)"
     updateSelectizeInput(session, "site", selected = DEF_SITE)
     updateSelectInput(session, "preset", selected = flag_name)
@@ -2147,7 +2211,9 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "analyte_main", selected = pr[1])
     updateSelectizeInput(session, "analyte_secondary", selected = pr[2])
     enter_site(DEF_SITE, tab = "Relationship")
-  })
+  }
+  observeEvent(input$flagship,      go_flagship())
+  observeEvent(input$resetFlagship, go_flagship())   # in-app "back to the showcase" link
 
   # ---- Overview home-nav quick-jump grid ------------------------------------
   observeEvent(input$goRelationship, nav_select("main_tabs", "Relationship"))
@@ -2290,6 +2356,52 @@ server <- function(input, output, session) {
     enter_site(site)
   }
   observeEvent(input$searchGo, search_go(input$searchGo))
+
+  # ---- STARTUP RESOLVER (delighters 1 + 2, with precedence) -----------------
+  # Fires ONCE on connect (input$wc_restore is set in the shiny:connected JS, so
+  # clientData$url_search is ready by then). Precedence: a URL deep link wins over
+  # a saved session; if neither resolves to a valid site, the splash stays.
+  #   - URL ?site=&main=&sec=  -> land on Relationship (a link points at a compare)
+  #   - localStorage wc_last   -> land on Overview      (resume = home base)
+  # Every field is guarded so a hand-typed bad URL falls through to the splash
+  # rather than erroring.
+  observeEvent(input$wc_restore, once = TRUE, ignoreNULL = FALSE, {
+    target <- NULL; land_tab <- "Overview"
+
+    # (A) URL query params first
+    q <- tryCatch(parseQueryString(session$clientData$url_search %||% ""),
+                  error = function(e) list())
+    if (!is.null(q$site) && q$site %in% D$sites_meta$site) {
+      target   <- list(site = q$site, main = q$main, sec = q$sec, d1 = NULL, d2 = NULL)
+      land_tab <- "Relationship"
+    } else {
+      # (B) else localStorage round-trip (a JSON string, or '' when absent)
+      raw <- input$wc_restore
+      if (!is.null(raw) && nzchar(raw)) {
+        st <- tryCatch(jsonlite::fromJSON(raw), error = function(e) NULL)
+        if (!is.null(st) && !is.null(st$site) && length(st$site) == 1 &&
+            st$site %in% D$sites_meta$site) {
+          target   <- list(site = st$site, main = st$main, sec = st$sec,
+                           d1 = st$d1, d2 = st$d2)
+          land_tab <- "Overview"
+        }
+      }
+    }
+
+    if (is.null(target)) return(invisible())   # nothing valid -> splash stays
+
+    site <- target$site; pres <- site_present(site)
+    # set the analyte pair ONLY where each is non-null AND present at this site
+    if (!is.null(target$main) && length(target$main) == 1 &&
+        nzchar(target$main) && target$main %in% pres)
+      updateSelectizeInput(session, "analyte_main", selected = target$main)
+    if (!is.null(target$sec) && length(target$sec) == 1 &&
+        nzchar(target$sec) && target$sec %in% pres)
+      updateSelectizeInput(session, "analyte_secondary", selected = target$sec)
+    # (dates are not restored — a resumed/shared view lands on the site full span)
+    auto_entered(TRUE)              # suppress the first-visit Welcome modal this load
+    enter_site(site, tab = land_tab)
+  })
 }
 
 shinyApp(ui, server)
