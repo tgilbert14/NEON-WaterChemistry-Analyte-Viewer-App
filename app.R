@@ -11,7 +11,8 @@ suppressWarnings(suppressMessages({
   library(shiny); library(bslib); library(bsicons)
   library(dplyr); library(tidyr); library(readr); library(lubridate)
   library(plotly); library(DT); library(ggplot2); library(shinycssloaders)
-  library(leaflet)   # Explore-tab site picker (suite standard: tile basemap + circleMarkers)
+  library(leaflet)   # site picker (suite standard: tile basemap + circleMarkers)
+  library(shinyjs)   # map-first splash: show/hide("splash") / show/hide("mainTabsWrap")
 }))
 source("helpers.R")
 options(shiny.sanitize.errors = TRUE)                 # never leak a raw R error to the page
@@ -426,7 +427,7 @@ aqua_theme <- bs_theme(
     }
 
     /* ====================================================================== *
-     *  'Browse all 46 sites' — a CLOSED-by-default collapsible site list      *
+     *  'Browse all sites' — a CLOSED-by-default collapsible site list          *
      *  under the Explore map. Matches the canonical sibling pattern (Small    *
      *  Mammal .picker-list / Birds .site-browse) but wears THIS app's aqua    *
      *  accent (--pine2 #0E7C9B / --pine #1a9fb0 from the desert-night tokens).*
@@ -516,6 +517,75 @@ aqua_theme <- bs_theme(
       border: 1px solid var(--line); border-radius: 1rem; font-size: .82rem;
       color: var(--pine2); text-decoration: none; background: var(--paper); }
     .sibling-chip:hover { background: var(--bg); border-color: var(--pine); color: var(--pine2); }
+
+    /* ====================================================================== *
+     *  MAP-FIRST SPLASH (sibling pattern: My Little Inverts / Small Mammal).  *
+     *  #splash is visible at startup; entering a site hides it + shows        *
+     *  #mainTabsWrap. The hero carries the title + flagship button; the map   *
+     *  is the hero element; a .select-panel under it is the by-name path.     *
+     * ====================================================================== */
+    #splash { max-width: 1040px; margin: 0 auto; }
+    .app-hero-splash { text-align: center; margin: 8px auto 14px; max-width: 880px; }
+    .app-title { font-family: 'Inter Tight', Inter, sans-serif; font-weight: 800;
+      font-size: 30px; color: var(--pine2); letter-spacing: .2px; margin: 0 0 6px;
+      display: inline-flex; align-items: baseline; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    [data-bs-theme='dark'] .app-title { color: var(--pine); }
+    .title-tag { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+      color: var(--gold-ink); background: rgba(199,154,28,.14); border: 1px solid rgba(199,154,28,.35);
+      border-radius: 1rem; padding: 2px 9px; line-height: 1.4; }
+    [data-bs-theme='dark'] .title-tag { color: var(--gold); background: rgba(110,230,196,.12); border-color: rgba(110,230,196,.35); }
+    .app-subtitle { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 0 auto; max-width: 760px; }
+    .splash-orient { text-align: center; color: var(--ink); font-size: 14.5px; line-height: 1.5;
+      margin: 0 auto 12px; max-width: 760px; }
+    .splash-orient b { color: var(--pine2); }
+    [data-bs-theme='dark'] .splash-orient b { color: var(--pine); }
+    /* the flagship 'best 3 seconds' button — the visual primary above the map */
+    .flagship-wrap { max-width: 760px; margin: 0 auto 14px; }
+    .flagship-btn { width: 100%; min-height: 56px; background: #0E7C9B !important; border-color: #0E7C9B !important;
+      color: #fff !important; font-weight: 700; font-size: 16px; border-radius: 12px;
+      box-shadow: 0 8px 22px -8px rgba(14,124,155,.6); display: inline-flex; align-items: center;
+      justify-content: center; gap: 8px; text-align: center; line-height: 1.35; }
+    .flagship-btn:hover { background: #0b6580 !important; border-color: #0b6580 !important;
+      transform: translateY(-2px); box-shadow: 0 14px 30px -10px rgba(14,124,155,.7); }
+    .flagship-btn .bi { color: #fff !important; }
+    .flagship-btn .fb-text { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; }
+    .flagship-btn .fb-main { font-weight: 700; font-size: 16px; }
+    .flagship-btn .fb-sub { font-weight: 500; font-size: 12.5px; opacity: .93; margin-top: 1px; }
+    .splash-colour-by { max-width: 760px; margin: 0 auto 6px; text-align: left; }
+    .splash-colour-by label, .splash-colour-by .control-label { color: var(--ink); font-weight: 600; font-size: 13.5px; }
+    .splash-map-wrap { margin: 0 auto 8px; }
+    .splash-map-hint { text-align: center; color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+    .splash-map-hint .bi { color: var(--pine); }
+    /* phone: shorten the splash map so the picker dots clear the fold */
+    @media (max-width: 700px) { #map { height: 380px !important; } }
+    /* collapsed 'Fine-tune the comparison' details (reuse the .site-browse chrome) */
+    .tune-details { max-width: 980px; margin: 8px auto 4px; }
+    .tune-details > summary { list-style: none; }
+    .tune-details > summary::-webkit-details-marker { display: none; }
+    .tune-details[open] .sb-chevron { transform: rotate(180deg); }
+    .tune-body { margin-top: 8px; padding: 14px 16px; border: 1px solid var(--line);
+      border-radius: .6rem; background: var(--paper); }
+    @media (max-width: 640px) { .app-title { font-size: 24px; } .flagship-btn .fb-main { font-size: 15px; } .flagship-btn .fb-sub { font-size: 11px; } }
+
+    /* ---- home-nav quick-jump grid (Overview tab; ported from the siblings) ---- */
+    .home-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 6px 2px 18px; }
+    @media (max-width: 1100px) { .home-nav { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 620px)  { .home-nav { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 400px)  { .home-nav { grid-template-columns: 1fr; } }
+    .home-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+      background: var(--pine2); border: 1px solid var(--pine2); border-top: 4px solid var(--gold);
+      border-radius: 10px; padding: 14px 15px; box-shadow: 0 4px 12px -4px var(--shadow);
+      transition: transform .15s, box-shadow .15s, background .15s; height: 100%; }
+    .home-btn:hover { transform: translateY(-3px); box-shadow: 0 14px 26px -10px rgba(12,35,75,.5); background: var(--pine); }
+    .home-btn, .home-btn > div, .home-btn span { color: #fff !important; }
+    .home-btn .bi { font-size: 22px; color: #ffe7a8 !important; margin-bottom: 4px; }
+    [data-bs-theme='dark'] .home-btn .bi { color: var(--gold) !important; }
+    .home-btn > div { font-weight: 800; font-size: 15px; }
+    .home-btn small { color: #cfe3ee !important; font-size: 11.5px; font-weight: 400; line-height: 1.3; }
+    .home-btn:active { transform: translateY(0) scale(.99); }
+    /* the signature 'star' door (Compare/Relationship) gets the gold-accent emphasis */
+    .home-btn-star { border-top-color: var(--gold); box-shadow: 0 8px 18px -8px var(--gold-ink); }
+    @media (prefers-reduced-motion: reduce) { .home-btn:hover, .flagship-btn:hover { transform: none; } }
   ")
 
 ## ---- Per-tab info-modal content (progressive disclosure) -----------------
@@ -605,8 +675,8 @@ $(document).on('shiny:connected', function(){
 Shiny.addCustomMessageHandler('neon_set_seen', function(x){ try{ localStorage.setItem('neon_seen','1'); }catch(e){} });
 
 /* ---- kickMaps: re-measure the leaflet site map after 'Change site' --------
-   'Change site' navigates back to the Explore tab; the leaflet map may have been
-   measured while its tab was hidden (0px wide), so dispatch a window 'resize'
+   'Change site' re-shows the picker splash; the leaflet map may have been
+   measured while #splash was hidden (0px wide), so dispatch a window 'resize'
    across several frames. A 'resize' makes every Leaflet map invalidateSize and
    re-fit the settled width instead of painting half-width / grey tiles. Mirrors
    the flagship Small Mammal kickMaps handler. */
@@ -637,7 +707,7 @@ function wcVeilOff(){ var o=document.getElementById('wcOverlay'); if(o) o.style.
 /* color_mode (the dark-mode toggle) is intentionally NOT here: it only re-themes
    the page, it never re-binds data, so raising the working veil on it was a false
    load. The veil now fires only on genuinely data-bound changes. */
-var WC_HEAVY=['site','analyte_main','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','swap','full_range'];
+var WC_HEAVY=['site','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','swap','full_range'];
 $(document).on('shiny:inputchanged', function(e){ if(WC_HEAVY.indexOf(e.name)>=0) wcVeilOn(); });
 /* a map-dot tap now opens a lightweight Explore|About choice card (no recompute),
    so the veil is raised by the actual load instead (input$site is in WC_HEAVY). */
@@ -716,6 +786,7 @@ ui <- page_fillable(
   fillable = FALSE,
   tags$head(tags$script(APP_JS),
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1")),
+  useShinyjs(),   # show/hide("splash") <-> show/hide("mainTabsWrap") gates the map-first flow
 
   # client-side 'working' overlay (shown on heavy interactions, hidden on idle)
   tags$div(id = "wcOverlay", tags$div(class = "wc-spin mascot-spin", MASCOT_CRITTER), tags$div(class = "wc-msg", "Updating…")),
@@ -742,51 +813,83 @@ ui <- page_fillable(
         input_dark_mode(id = "color_mode", mode = "light")))   # DEFAULT LIGHT (dark info-boxes on a light page)
   ),
 
-  # Summary strip
-  uiOutput("summary_strip"),
+  # =====================================================================
+  # MAP-FIRST SPLASH (sibling pattern). Visible at startup; entering a site
+  # hides it and shows #mainTabsWrap. ALL the original control input ids live
+  # here (site, dates, full_range, analyte_main, swap, analyte_secondary,
+  # preset, armed, qc_chip) plus the relocated leafletOutput("map") — so the
+  # server's selection / load / preset / map logic is untouched, only moved.
+  # =====================================================================
+  div(id = "splash",
+    div(class = "app-hero app-hero-splash",
+      h1(class = "app-title", "NEON Water Chemistry · Analyte Viewer",
+         span(class = "title-tag", "unofficial")),
+      p(class = "app-subtitle",
+        "NEON's labs measure the chemistry of streams, rivers, and lakes across the country — ",
+        "hundreds of samples per site, not a handful. This app reads one aquatic site at a time and ",
+        "compares any two analytes over its full record. Built on the Surface Water Chemistry product (DP1.20093.001).")),
+    p(class = "splash-orient",
+      tags$b("Tap a site on the map"), " (coloured by the analyte you choose) to explore it, or pick one by name below. ",
+      tags$b(paste0(nrow(site_tbl), " aquatic sites")), ", from desert streams to arctic lakes."),
 
-  # server-rendered context band: current site + analytes, with a "Change site"
-  # control (jumps back to the Explore picker map) and a "Report" download. This
-  # replaces the old sidebar's role of "what am I looking at + how do I switch".
-  uiOutput("context_band"),
+    # FLAGSHIP — the best 3 seconds: load Sycamore Creek + the flagship pair and
+    # land straight on the Relationship fit (r ~ 0.86).
+    div(class = "flagship-wrap",
+      actionButton("flagship",
+        tagList(bs_icon("stars"),
+                tags$span(class = "fb-text",
+                  tags$span(class = "fb-main", "Try the flagship example"),
+                  tags$span(class = "fb-sub", "Sycamore Creek · specific conductance vs ANC · r ≈ 0.86"))),
+        class = "btn btn-lg flagship-btn")),
 
-  navset_card_tab(
-    id = "main_tabs",
-    nav_panel(
-      "Explore", icon = bs_icon("geo-alt"),
-      # ---- relocated select panel (was the sidebar) ----------------------
-      # Same input ids the server's selection / load / preset logic depend on
-      # (site, dates, full_range, analyte_main, swap, analyte_secondary, preset).
-      # Tapping a map dot is the primary path; this panel is the by-name path and
-      # the place to set the date window + analyte pair. Same ids => server is
-      # untouched.
-      div(class = "select-panel",
-        div(class = "sp-head", bs_icon("sliders"),
-            " Pick a site by name, set the date window, and choose two analytes"),
-        div(class = "sp-row",
-          div(class = "sp-field",
-            selectizeInput("site", label = tagList(bs_icon("pin-map-fill"), " Field site"),
-                           choices = SITE_CHO, selected = DEF_SITE, width = "100%",
-                           options = list(placeholder = "Type to search sites…"))),
-          div(class = "sp-field sp-field-date",
-            dateRangeInput("dates", label = tagList(bs_icon("calendar3"), " Date range"),
-                           format = "yyyy-mm", startview = "year",
-                           start = DEF_SPAN[1], end = DEF_SPAN[2]),
-            div(class = "sp-date-sub",
-              actionLink("full_range", "Use full record", class = "info-link"),
-              span(class = "scope-note", textOutput("date_hint", inline = TRUE))))),
+    # THE MAP AS HERO — colour-by selector above it (this IS the main analyte on
+    # load), then the relocated leafletOutput("map").
+    div(class = "splash-colour-by",
+      selectizeInput("analyte_main", label = tagList(bs_icon("droplet"), " Colour the map by"),
+                     choices = analyte_choices(site_present(DEF_SITE)),
+                     selected = DEF_A[1], width = "100%")),
+    div(class = "splash-map-wrap",
+      withSpinner(leafletOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
+    div(class = "splash-map-hint", bs_icon("hand-index-thumb"),
+        " Drag to pan · scroll to zoom · darker = higher · grey = not measured here."),
+
+    # BY-NAME PANEL (the by-name path) — site + date window + an Explore button.
+    div(class = "select-panel",
+      div(class = "sp-head", bs_icon("sliders"),
+          " Or pick a site by name, and set the date window"),
+      div(class = "sp-row",
+        div(class = "sp-field",
+          selectizeInput("site", label = tagList(bs_icon("pin-map-fill"), " Field site"),
+                         choices = SITE_CHO, selected = DEF_SITE, width = "100%",
+                         options = list(placeholder = "Type to search sites…"))),
+        div(class = "sp-field sp-field-date",
+          dateRangeInput("dates", label = tagList(bs_icon("calendar3"), " Date range"),
+                         format = "yyyy-mm", startview = "year",
+                         start = DEF_SPAN[1], end = DEF_SPAN[2]),
+          div(class = "sp-date-sub",
+            actionLink("full_range", "Use full record", class = "info-link"),
+            span(class = "scope-note", textOutput("date_hint", inline = TRUE))))),
+      actionButton("loadBtn", tagList(bs_icon("water"), " Explore this site"),
+                   class = "btn-primary btn-lg load-btn sp-load", onclick = "if(window.wcVeilOn)wcVeilOn();")),
+
+    # COLLAPSED 'Fine-tune the comparison' — keeps the secondary analyte + swap +
+    # preset inputs in the DOM (just inside a closed <details>) so server logic is
+    # unaffected; an advanced user can set the pair before loading.
+    tags$details(class = "tune-details",
+      tags$summary(
+        tags$span(class = "site-browse-summary",
+          bs_icon("sliders2"),
+          tags$span("Fine-tune the comparison (optional)"),
+          tags$span(class = "sb-chevron", bs_icon("chevron-down")))),
+      div(class = "tune-body",
         div(class = "sp-row sp-row-analytes",
           div(class = "sp-field",
-            selectizeInput("analyte_main", label = tagList(bs_icon("droplet"), " Main analyte"),
+            selectizeInput("analyte_secondary", label = tagList(bs_icon("droplet-half"), " Compare the main analyte against"),
                            choices = analyte_choices(site_present(DEF_SITE)),
-                           selected = DEF_A[1], width = "100%")),
+                           selected = DEF_A[2], width = "100%")),
           div(class = "sp-swap",
             actionButton("swap", tagList(bs_icon("arrow-left-right"), " swap"),
-                         class = "btn-sm btn-outline-secondary")),
-          div(class = "sp-field",
-            selectizeInput("analyte_secondary", label = tagList(bs_icon("droplet-half"), " Compare against"),
-                           choices = analyte_choices(site_present(DEF_SITE)),
-                           selected = DEF_A[2], width = "100%"))),
+                         class = "btn-sm btn-outline-secondary"))),
         div(class = "sp-row sp-row-preset",
           div(class = "sp-field",
             selectInput("preset", label = tagList(bs_icon("lightbulb"), " Jump to a preset comparison"),
@@ -794,36 +897,65 @@ ui <- page_fillable(
                         selected = names(PRESETS)[1], width = "100%")),
           div(class = "sp-preset-note scope-note", "Sets both analytes to a meaningful pair.")),
         div(class = "sp-armed scope-note", bs_icon("crosshair"), " ", textOutput("armed", inline = TRUE),
-            uiOutput("qc_chip", inline = TRUE))),
+            uiOutput("qc_chip", inline = TRUE)))),
 
+    # Browse-all-sites — CLOSED-by-default list (same input$pickFromList path).
+    tags$details(class = "site-browse",
+      tags$summary(
+        tags$span(class = "site-browse-summary",
+          bs_icon("list-ul"),
+          tags$span(paste0("Browse all ", nrow(site_tbl), " sites as a list")),
+          tags$span(class = "sb-chevron", bs_icon("chevron-down")))),
+      div(class = "site-browse-grid",
+        lapply(seq_len(nrow(site_tbl)), function(i)
+          tags$a(class = "site-browse-link", href = "#",
+            onclick = sprintf(
+              "if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('pickFromList','%s',{priority:'event'});return false;",
+              site_tbl$site[i]),
+            tags$b(site_tbl$site[i]),
+            sprintf(" · %s ", site_tbl$siteName[i]),
+            tags$span(class = "sb-meta",
+              paste0(site_tbl$state[i] %|na|% site_tbl$domain[i] %|na|% "NEON",
+                     " · ", format(ifelse(is.na(site_tbl$n_obs[i]), 0L, site_tbl$n_obs[i]),
+                                   big.mark = ","), " obs"))))))
+  ),
+
+  # =====================================================================
+  # MAIN TABS — hidden at startup; shown once a site is entered. Wraps the
+  # summary strip + context band + the analysis tabs. (The map + select panel
+  # are now on the splash above, so the old "Explore" tab is gone; a new
+  # "Overview" home-nav grid leads instead.)
+  # =====================================================================
+  hidden(div(id = "mainTabsWrap",
+
+  # Summary strip
+  uiOutput("summary_strip"),
+
+  # server-rendered context band: current site + analytes, with a "Change site"
+  # control (re-shows the picker splash) and a "Report" download. This carries
+  # the old sidebar's "what am I looking at + how do I switch" role.
+  uiOutput("context_band"),
+
+  navset_card_tab(
+    id = "main_tabs",
+    nav_panel(
+      "Overview", icon = bs_icon("compass"),
+      # quick-jump grid to the best parts (Inverts/Small-Mammal home-nav pattern)
+      div(class = "home-nav",
+        actionButton("goRelationship", tagList(bs_icon("rulers"), div("Compare two analytes"), tags$small("the relationship + its fit")), class = "home-btn home-btn-star"),
+        actionButton("goCompare", tagList(bs_icon("graph-up"), div("Through time"), tags$small("two analytes on one axis")), class = "home-btn"),
+        actionButton("goSeasonal", tagList(bs_icon("calendar3"), div("Seasonal pattern"), tags$small("monthly cycle + STL trend")), class = "home-btn"),
+        actionButton("goSearch", tagList(bs_icon("search"), div("Search the network"), tags$small("find sites by threshold")), class = "home-btn"),
+        actionButton("goTwoSites", tagList(bs_icon("signpost-split"), div("Two sites"), tags$small("the same analyte, two places")), class = "home-btn")),
       card(full_screen = TRUE,
-        card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
-                        span("Pick a site to explore"),
-                        span(class = "scope-note d-none d-md-inline",
-                             "Markers are coloured by the main analyte's site average. Tap any marker"))),
-        withSpinner(leafletOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
-        # Browse-all-sites — a CLOSED-by-default collapsible list under the map.
-        # Each row sets input$pickFromList = <site code>; the server observer
-        # (same path as the map click) selects that site and jumps to Compare.
-        tags$details(class = "site-browse",
-          tags$summary(
-            tags$span(class = "site-browse-summary",
-              bs_icon("list-ul"),
-              tags$span(paste0("Browse all ", nrow(site_tbl), " sites")),
-              tags$span(class = "sb-chevron", bs_icon("chevron-down")))),
-          div(class = "site-browse-grid",
-            lapply(seq_len(nrow(site_tbl)), function(i)
-              tags$a(class = "site-browse-link", href = "#",
-                onclick = sprintf(
-                  "if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('pickFromList','%s',{priority:'event'});return false;",
-                  site_tbl$site[i]),
-                tags$b(site_tbl$site[i]),
-                sprintf(" · %s ", site_tbl$siteName[i]),
-                tags$span(class = "sb-meta",
-                  paste0(site_tbl$state[i] %|na|% site_tbl$domain[i] %|na|% "NEON",
-                         " · ", format(ifelse(is.na(site_tbl$n_obs[i]), 0L, site_tbl$n_obs[i]),
-                                       big.mark = ","), " obs")))))),
-        card_footer(class = "scope-note", uiOutput("map_footer")))
+        card_header("This is dense, honest water-chemistry data"),
+        div(class = "p-2",
+          tags$p(class = "scope-note", style = "font-size:.95rem; margin-bottom:.6rem",
+            HTML(sprintf("You're looking at <b>%s</b> water-chemistry samples from one NEON aquatic site, with hundreds of records per site rather than a handful. Pick a tab above, or jump straight to the relationship between two analytes.",
+                         format(D$built$n_obs %||% 0, big.mark = ",")))),
+          tags$p(class = "scope-note", style = "margin-bottom:0",
+            bs_icon("shield-check"),
+            HTML(" <b>How the stats stay honest:</b> every statistic shows its sample size; correlations default to Spearman with an n ≥ 8 reliability flag; the seasonal view is a real STL decomposition of the monthly record, not a forecast; below-detection values are flagged, never hidden; and one per-analyte plausibility gate keeps a single artifact from driving any fit, the trend, the predictor, or the map's colour scale."))))
     ),
     nav_panel(
       "Compare", icon = bs_icon("graph-up"),
@@ -979,6 +1111,7 @@ ui <- page_fillable(
         withSpinner(DTOutput("data_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE))
     )
   )
+  ))   # close div(id="mainTabsWrap") + hidden()
 )
 
 #======================================================================
@@ -998,7 +1131,7 @@ server <- function(input, output, session) {
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
         tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
         tags$ol(
-          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte), or pick one by name in the panel above it, to begin.")),
+          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte), or pick one by name in the panel below it, to begin.")),
           tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against, or start from a preset.")),
           tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons. Use <b>Change site</b> in the band up top to return to the map at any time."))),
         tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled with the app so it is ready to use.")),
@@ -1154,11 +1287,11 @@ server <- function(input, output, session) {
       uiOutput("qc_chip_band", inline = TRUE))
   })
 
-  # "Change site" -> jump to the Explore tab (the picker map + select panel),
-  # then nudge the plotly map to re-measure into the now-visible width so it
-  # never paints half-width (the flagship kickMaps multi-frame resize fix).
+  # "Change site" -> re-show the picker splash (hide the main tabs), then nudge
+  # the leaflet map to re-measure into the now-visible width so it never paints
+  # half-width / grey tiles (the flagship kickMaps multi-frame resize fix).
   observeEvent(input$changeSite, {
-    nav_select("main_tabs", "Explore")
+    shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
     session$sendCustomMessage("kickMaps", list())
   })
 
@@ -1925,13 +2058,23 @@ server <- function(input, output, session) {
   # cascade siblings and to document the shared-load pattern.
   rv <- reactiveValues(pendingSite = NULL)
 
-  # the shared load path used by the map popup, the About modal footer, and the
-  # browse list: select the site (syncs the selector) and jump to Compare.
-  load_site <- function(site) {
+  # ---- enter_site: the single visual-gate path -----------------------------
+  # Select the site (input$site is ALWAYS a valid site — never empty — so every
+  # downstream reactive keeps working; the flow is gated VISUALLY, not by a null
+  # input), then hide the splash and reveal the main tabs, and dismiss the corner
+  # nudge. `tab` is the nav_panel to land on (default Overview).
+  enter_site <- function(site, tab = "Overview") {
     if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
     updateSelectizeInput(session, "site", selected = site)
-    nav_select("main_tabs", "Compare")
+    shinyjs::hide("splash"); shinyjs::show("mainTabsWrap")
+    shinyjs::hide("splashGuide")
+    nav_select("main_tabs", tab)
+    invisible(TRUE)
   }
+
+  # the shared load path used by the map popup, the About modal footer, and the
+  # browse list: enter the loaded view (lands on Overview).
+  load_site <- function(site, tab = "Overview") enter_site(site, tab)
 
   site_info_modal <- function(code) {
     sm <- D$sites_meta[D$sites_meta$site == code, ]
@@ -1978,8 +2121,8 @@ server <- function(input, output, session) {
     if (!is.null(s) && nzchar(s)) showModal(site_info_modal(s))
   })
 
-  # Browse-all-sites list (under the Explore map) -> same shared load path:
-  # select the site (syncs the sidebar selectize) and jump to Compare.
+  # Browse-all-sites list (under the splash map) -> same shared load path:
+  # select the site (syncs the by-name selectize) and enter the loaded view.
   observeEvent(input$pickFromList, {
     site <- input$pickFromList
     if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site) {
@@ -1987,6 +2130,31 @@ server <- function(input, output, session) {
       load_site(site)
     }
   })
+
+  # by-name "Explore this site" button on the splash -> enter the current site.
+  observeEvent(input$loadBtn, load_site(input$site))
+
+  # ---- FLAGSHIP: the best 3 seconds -----------------------------------------
+  # Load Sycamore Creek, set the flagship preset pair (specificConductanceField
+  # vs ANC), and land straight on the Relationship fit (r ~ 0.86). The preset
+  # observer maps PRESETS[[name]] onto both analyte selectors; ordering the
+  # updates before enter_site keeps input$site valid the whole time.
+  observeEvent(input$flagship, {
+    flag_name <- names(PRESETS)[1]                 # "Ionic strength <-> buffering (flagship)"
+    updateSelectizeInput(session, "site", selected = DEF_SITE)
+    updateSelectInput(session, "preset", selected = flag_name)
+    pr <- PRESETS[[flag_name]]
+    updateSelectizeInput(session, "analyte_main", selected = pr[1])
+    updateSelectizeInput(session, "analyte_secondary", selected = pr[2])
+    enter_site(DEF_SITE, tab = "Relationship")
+  })
+
+  # ---- Overview home-nav quick-jump grid ------------------------------------
+  observeEvent(input$goRelationship, nav_select("main_tabs", "Relationship"))
+  observeEvent(input$goCompare,      nav_select("main_tabs", "Compare"))
+  observeEvent(input$goSeasonal,     nav_select("main_tabs", "Seasonal pattern"))
+  observeEvent(input$goSearch,       nav_select("main_tabs", "search"))
+  observeEvent(input$goTwoSites,     nav_select("main_tabs", "Two sites"))
 
   #====================================================================
   # SEARCH THE NETWORK — filters the precomputed in-memory index (instant)
@@ -2112,15 +2280,14 @@ server <- function(input, output, session) {
   }, server = FALSE)
 
   # Go-to-site jump (button OR site-code link) -> load from bundle, colour the
-  # map by the analyte that was searched, land on the Explore (Overview) map.
+  # map by the analyte that was searched, and enter the loaded view (Overview).
   search_go <- function(site) {
     if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
     a <- input$search_analyte
     if (!is.null(a) && nzchar(a) && a %in% site_present(site))
       updateSelectizeInput(session, "analyte_main", selected = a)
     rv$pendingSite <- site
-    updateSelectizeInput(session, "site", selected = site)
-    nav_select("main_tabs", "Explore")
+    enter_site(site)
   }
   observeEvent(input$searchGo, search_go(input$searchGo))
 }
