@@ -141,15 +141,98 @@ aqua_theme <- bs_theme(
     #wcOverlay .wc-msg { font-weight:600; color:#0E7C9B; letter-spacing:.2px; }
     @keyframes wcspin { to { transform:rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { #wcOverlay .wc-spin { animation:none; } }
-    /* sticky current-selection breadcrumb, visible above the tabs at every width */
-    .armed-bar { position:sticky; top:0; z-index:20; background:#e7f1f5;
-                 border:1px solid rgba(14,124,155,.16); border-radius:.5rem; padding:.4rem .75rem;
-                 margin:.1rem 0 .7rem; font-size:.85rem; color:#0a5f78; font-weight:600;
-                 display:flex; align-items:center; flex-wrap:wrap; gap:.35rem;
-                 box-shadow:0 2px 6px rgba(0,0,0,.05); }
-    .armed-bar .bi { color:#0E7C9B; flex:none; }
-    /* opaque so scrolled card headers never bleed through the sticky bar */
-    [data-bs-theme='dark'] .armed-bar { background:#0c3350; border-color:rgba(52,198,216,.30); color:#6ee6f0; }
+    /* =====================================================================
+       v2 FLOW chrome — the sidebar is gone. A slim TOP BAR (theme + How-it-
+       works) sits above the summary strip; a sticky CONTEXT BAND below it
+       carries the current site, a Change-site link (back to the picker map)
+       and a Report download; and a SELECT PANEL on the Explore tab holds the
+       relocated site/date/analyte controls beside the map.
+       ===================================================================== */
+    /* ---- top bar ---- */
+    .top-bar { display:flex; align-items:center; justify-content:space-between;
+               gap:12px; flex-wrap:wrap; padding:8px 4px 6px; margin:0 0 6px;
+               border-bottom:1px solid var(--line); }
+    .top-bar-brand { display:flex; align-items:center; gap:9px; min-width:0; }
+    .top-bar-brand .tb-mark { font-size:20px; line-height:1; flex:none; color:var(--pine2); }
+    .top-bar-brand .tb-mark .bi { color:var(--pine2); }
+    .top-bar-brand .tb-title { font-weight:800; font-size:15px; color:var(--pine2);
+                               letter-spacing:.2px; white-space:nowrap; }
+    .top-bar-actions { display:flex; align-items:center; gap:12px; }
+    .top-bar-actions .tb-help { min-height:44px; display:inline-flex; align-items:center; font-weight:700; }
+    .tb-theme { display:flex; align-items:center; gap:6px; }
+    .tb-theme-lab { color:var(--muted); font-size:15px; display:inline-flex; align-items:center; }
+    .tb-theme .form-check, .tb-theme bslib-input-dark-mode { min-height:44px; display:inline-flex; align-items:center; }
+    [data-bs-theme='dark'] .top-bar-brand .tb-title,
+    [data-bs-theme='dark'] .top-bar-brand .tb-mark,
+    [data-bs-theme='dark'] .top-bar-brand .tb-mark .bi { color:var(--pine); }
+    @media (max-width:560px) {
+      .top-bar { padding:7px 2px; }
+      .top-bar-brand .tb-title { font-size:13.5px; white-space:normal; }
+      .top-bar-actions .tb-help .bi + * { display:none; } /* icon-only help on tiny screens */
+    }
+
+    /* ---- context band (sticky 'what am I looking at + how do I switch') ---- */
+    .context-band { position:sticky; top:0; z-index:20; background:#e7f1f5;
+                    border:1px solid rgba(14,124,155,.16); border-radius:.5rem; padding:.4rem .75rem;
+                    margin:.1rem 0 .7rem; font-size:.85rem; color:#0a5f78; font-weight:600;
+                    display:flex; align-items:center; flex-wrap:wrap; gap:.35rem .9rem;
+                    box-shadow:0 2px 6px rgba(0,0,0,.05); }
+    .context-band .bi { color:#0E7C9B; flex:none; }
+    .context-band .cb-site { display:inline-flex; align-items:center; gap:.35rem; }
+    .context-band .cb-site-name { font-weight:800; }
+    .context-band .cb-site-code { font-weight:600; opacity:.7; }
+    .context-band .cb-armed { display:inline-flex; align-items:center; gap:.3rem; font-weight:600; opacity:.92; }
+    .context-band .cb-actions { margin-left:auto; display:inline-flex; align-items:center; gap:.2rem; flex:none; }
+    .cb-change, .cb-report { font-size:.86rem; font-weight:700; text-decoration:none;
+                             color:#0E7C9B; padding:.3rem .55rem; border-radius:.4rem;
+                             min-height:38px; display:inline-flex; align-items:center; gap:.25rem; }
+    .cb-change:hover, .cb-report:hover { background:rgba(14,124,155,.12); color:#0a5f78; text-decoration:none; }
+    .cb-report { border-left:1px solid rgba(14,124,155,.22); border-radius:0 .4rem .4rem 0; }
+    [data-bs-theme='dark'] .context-band { background:#0c3350; border-color:rgba(52,198,216,.30); color:#6ee6f0; }
+    [data-bs-theme='dark'] .context-band .bi { color:#34c6d8; }
+    [data-bs-theme='dark'] .cb-change, [data-bs-theme='dark'] .cb-report { color:#6ee6f0; }
+    [data-bs-theme='dark'] .cb-change:hover, [data-bs-theme='dark'] .cb-report:hover {
+                            background:rgba(52,198,216,.16); color:#bdf2f7; }
+    @media (max-width:560px) {
+      .context-band .cb-armed { flex-basis:100%; order:3; }
+      .context-band .cb-actions { margin-left:0; }
+    }
+
+    /* ---- relocated site-select panel (was the sidebar) ---- */
+    .select-panel { max-width:980px; margin:6px auto 14px; text-align:left;
+                    background:var(--bg); border:1px solid var(--line);
+                    border-left:4px solid var(--pine2); border-radius:14px;
+                    padding:16px 18px; box-shadow:0 4px 16px var(--shadow); }
+    [data-bs-theme='dark'] .select-panel { background:linear-gradient(180deg,#0c3350 0%,var(--paper) 100%); }
+    .select-panel .sp-head { font-weight:700; color:var(--pine2); font-size:13.5px;
+                             display:flex; align-items:center; gap:7px; margin-bottom:12px; }
+    [data-bs-theme='dark'] .select-panel .sp-head { color:var(--pine); }
+    .select-panel .sp-row { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; margin-bottom:4px; }
+    .select-panel .sp-row-analytes { align-items:flex-end; }
+    .select-panel .sp-field { flex:1 1 230px; min-width:190px; }
+    .select-panel .sp-field-date { flex:1 1 250px; min-width:220px; }
+    .select-panel .sp-field .form-group,
+    .select-panel .sp-field .shiny-input-container { margin-bottom:0; width:100%; }
+    .select-panel label, .select-panel .control-label { color:var(--ink); font-weight:600; font-size:13px; }
+    .select-panel .sp-field .form-control,
+    .select-panel .sp-field .form-select,
+    .select-panel .sp-field .selectize-input { min-height:44px; }
+    .select-panel .input-daterange { display:flex; gap:6px; }
+    .select-panel .input-daterange .form-control { min-height:44px; }
+    .select-panel .sp-date-sub { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .7rem; margin-top:.3rem; }
+    .select-panel .sp-swap { flex:0 0 auto; padding-bottom:.35rem; }
+    .select-panel .sp-swap .btn { min-height:44px; }
+    .select-panel .sp-row-preset { align-items:flex-end; }
+    .select-panel .sp-preset-note { flex:1 1 220px; padding-bottom:.55rem; }
+    .select-panel .sp-armed { margin-top:.6rem; display:flex; align-items:center; flex-wrap:wrap; gap:.35rem; }
+    @media (max-width:640px) {
+      .select-panel { padding:14px 13px; }
+      .select-panel .sp-row { gap:10px; }
+      .select-panel .sp-field, .select-panel .sp-field-date { flex:1 1 100%; min-width:0; }
+      .select-panel .sp-swap { width:100%; text-align:center; }
+      .select-panel .sp-swap .btn { width:100%; }
+    }
+
     /* small clickable QC pill: a flagged extreme was excluded — click to audit */
     .qc-pill { margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:.3rem;
                background:rgba(214,163,28,.16); color:#9a7314; border:1px solid rgba(214,163,28,.4);
@@ -461,6 +544,17 @@ $(document).on('shiny:connected', function(){
   Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'});
 });
 Shiny.addCustomMessageHandler('neon_set_seen', function(x){ try{ localStorage.setItem('neon_seen','1'); }catch(e){} });
+
+/* ---- kickMaps: re-measure the plotly site map after 'Change site' --------
+   'Change site' navigates back to the Explore tab; the map was rendered while
+   that tab may have been hidden (0px wide), so dispatch a window 'resize' across
+   several frames so Plotly re-fits the settled width instead of painting half-
+   width. Mirrors the flagship Small Mammal kickMaps handler (leaflet there). */
+Shiny.addCustomMessageHandler('kickMaps', function(){
+  var kick = function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} };
+  if (window.requestAnimationFrame) requestAnimationFrame(kick);
+  [80, 250, 500, 900].forEach(function(t){ setTimeout(kick, t); });
+});
 window.addEventListener('resize', function(){ clearTimeout(window.__rt);
   window.__rt=setTimeout(function(){ Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'}); },250); });
 
@@ -536,7 +630,7 @@ MASCOT_CRITTER <- htmltools::HTML(paste0(
 #======================================================================
 # UI
 #======================================================================
-ui <- page_sidebar(
+ui <- page_fillable(
   title = tagList(bs_icon("droplet-half"), " NEON Water Chemistry · Analyte Viewer"),
   theme = aqua_theme,
   window_title = "NEON Analyte Viewer",
@@ -553,49 +647,80 @@ ui <- page_sidebar(
 
   # in-app mascot splash guide — a friendly corner nudge; first-visit wave + dismiss on first interaction (JS below)
   tags$div(id = "splashGuide", class = "splash-guide",
-           tags$div(class = "sg-bubble", "Pick a site to start!"),
+           tags$div(class = "sg-bubble", "Pick a site to start"),
            tags$div(class = "sg-mascot", MASCOT_CRITTER)),
 
-  sidebar = sidebar(
-    title = "Controls", width = 340, open = "desktop",
-    selectizeInput("site", "Field site", choices = SITE_CHO, selected = DEF_SITE,
-                   options = list(placeholder = "Type to search sites…")),
-    div(dateRangeInput("dates", "Date range", format = "yyyy-mm", startview = "year",
-                       start = DEF_SPAN[1], end = DEF_SPAN[2]),
-        actionLink("full_range", "Use full record", class = "info-link"),
-        div(class = "scope-note", textOutput("date_hint", inline = TRUE))),
-    selectizeInput("analyte_main", "Main analyte", choices = analyte_choices(site_present(DEF_SITE)),
-                   selected = DEF_A[1]),
-    div(class = "text-center my-1",
-        actionButton("swap", tagList(bs_icon("arrow-down-up"), " swap"),
-                     class = "btn-sm btn-outline-secondary")),
-    selectizeInput("analyte_secondary", "Compare against",
-                   choices = analyte_choices(site_present(DEF_SITE)), selected = DEF_A[2]),
-    div(class = "scope-note", textOutput("armed", inline = TRUE)),
-    hr(),
-    selectInput("preset", "Jump to a preset comparison",
-                choices = c("Custom…" = "", setNames(names(PRESETS), names(PRESETS))),
-                selected = names(PRESETS)[1]),
-    div(class = "scope-note", style = "margin-top:-.4rem", "Sets both analytes to a meaningful pair."),
-    hr(),
-    div(class = "d-flex justify-content-between align-items-center",
-        input_dark_mode(id = "color_mode", mode = "light"),   # DEFAULT LIGHT (dark info-boxes on a light page)
-        actionLink("about", "About & data", class = "info-link"))
+  # ---- persistent top control bar (theme + about/help) -------------------
+  # v2 flow: the sidebar is gone. The picker map on the Explore tab IS how you
+  # select a site (its select panel carries the same site/date/analyte ids).
+  # The two controls that must stay reachable everywhere — the theme toggle and
+  # the About/How-it-works dialog — live in this slim top-right bar.
+  div(class = "top-bar",
+    div(class = "top-bar-brand",
+      tags$span(class = "tb-mark", bs_icon("droplet-half")),
+      tags$span(class = "tb-title", "Water Chemistry · Analyte Viewer")),
+    div(class = "top-bar-actions",
+      actionButton("about", tagList(bs_icon("question-circle"), " How it works"),
+                   class = "btn-outline-secondary btn-sm tb-help"),
+      div(class = "tb-theme",
+        tags$span(class = "tb-theme-lab", bs_icon("circle-half")),
+        input_dark_mode(id = "color_mode", mode = "light")))   # DEFAULT LIGHT (dark info-boxes on a light page)
   ),
 
   # Summary strip
   uiOutput("summary_strip"),
 
-  # always-visible "what am I looking at" breadcrumb (the sidebar copy is hidden on phones)
-  div(class = "armed-bar", bs_icon("crosshair"), textOutput("armed_top", inline = TRUE),
-      # clickable QC marker — only rendered when this site/analyte has an excluded
-      # implausible extreme; opens an audit modal. No inline caveat text.
-      uiOutput("qc_chip", inline = TRUE)),
+  # server-rendered context band: current site + analytes, with a "Change site"
+  # control (jumps back to the Explore picker map) and a "Report" download. This
+  # replaces the old sidebar's role of "what am I looking at + how do I switch".
+  uiOutput("context_band"),
 
   navset_card_tab(
     id = "main_tabs",
     nav_panel(
       "Explore", icon = bs_icon("geo-alt"),
+      # ---- relocated select panel (was the sidebar) ----------------------
+      # Same input ids the server's selection / load / preset logic depend on
+      # (site, dates, full_range, analyte_main, swap, analyte_secondary, preset).
+      # Tapping a map dot is the primary path; this panel is the by-name path and
+      # the place to set the date window + analyte pair. Same ids => server is
+      # untouched.
+      div(class = "select-panel",
+        div(class = "sp-head", bs_icon("sliders"),
+            " Pick a site by name, set the date window, and choose two analytes"),
+        div(class = "sp-row",
+          div(class = "sp-field",
+            selectizeInput("site", label = tagList(bs_icon("pin-map-fill"), " Field site"),
+                           choices = SITE_CHO, selected = DEF_SITE, width = "100%",
+                           options = list(placeholder = "Type to search sites…"))),
+          div(class = "sp-field sp-field-date",
+            dateRangeInput("dates", label = tagList(bs_icon("calendar3"), " Date range"),
+                           format = "yyyy-mm", startview = "year",
+                           start = DEF_SPAN[1], end = DEF_SPAN[2]),
+            div(class = "sp-date-sub",
+              actionLink("full_range", "Use full record", class = "info-link"),
+              span(class = "scope-note", textOutput("date_hint", inline = TRUE))))),
+        div(class = "sp-row sp-row-analytes",
+          div(class = "sp-field",
+            selectizeInput("analyte_main", label = tagList(bs_icon("droplet"), " Main analyte"),
+                           choices = analyte_choices(site_present(DEF_SITE)),
+                           selected = DEF_A[1], width = "100%")),
+          div(class = "sp-swap",
+            actionButton("swap", tagList(bs_icon("arrow-left-right"), " swap"),
+                         class = "btn-sm btn-outline-secondary")),
+          div(class = "sp-field",
+            selectizeInput("analyte_secondary", label = tagList(bs_icon("droplet-half"), " Compare against"),
+                           choices = analyte_choices(site_present(DEF_SITE)),
+                           selected = DEF_A[2], width = "100%"))),
+        div(class = "sp-row sp-row-preset",
+          div(class = "sp-field",
+            selectInput("preset", label = tagList(bs_icon("lightbulb"), " Jump to a preset comparison"),
+                        choices = c("Custom…" = "", setNames(names(PRESETS), names(PRESETS))),
+                        selected = names(PRESETS)[1], width = "100%")),
+          div(class = "sp-preset-note scope-note", "Sets both analytes to a meaningful pair.")),
+        div(class = "sp-armed scope-note", bs_icon("crosshair"), " ", textOutput("armed", inline = TRUE),
+            uiOutput("qc_chip", inline = TRUE))),
+
       card(full_screen = TRUE,
         card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                         span("Pick a site to explore"),
@@ -750,9 +875,9 @@ server <- function(input, output, session) {
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
         tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
         tags$ol(
-          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte), or use the sidebar, to begin.")),
+          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte), or pick one by name in the panel above it, to begin.")),
           tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against, or start from a preset.")),
-          tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons."))),
+          tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons. Use <b>Change site</b> in the band up top to return to the map at any time."))),
         tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled with the app so it is ready to use.")),
         checkboxInput("dont_show", "Don't show this again", FALSE),
         footer = actionButton("start", "Start", class = "btn-primary")))
@@ -885,6 +1010,35 @@ server <- function(input, output, session) {
   output$armed     <- renderText(armed_txt())
   output$armed_top <- renderText(armed_txt())
 
+  ## ---- Context band: current site + analytes + Change-site + Report -------
+  # Replaces the old sidebar's "what am I looking at / how do I switch" role.
+  # "Change site" returns to the Explore picker map; "Report" streams the PDF
+  # site report (same content as the Data-tab download, via output$report_band).
+  output$context_band <- renderUI({
+    sm <- D$sites_meta[D$sites_meta$site == input$site, ]
+    div(class = "context-band",
+      div(class = "cb-site",
+        bs_icon("geo-alt-fill"),
+        tags$span(class = "cb-site-name", sm$siteName %||% input$site),
+        tags$span(class = "cb-site-code", paste0(" (", input$site, ")"))),
+      div(class = "cb-armed", bs_icon("crosshair"), " ", textOutput("armed_top", inline = TRUE)),
+      div(class = "cb-actions",
+        actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " Change site"),
+                   class = "cb-change"),
+        downloadLink("report_band", tagList(bs_icon("file-earmark-arrow-down"), " Report"),
+                     class = "cb-report")),
+      # clickable QC marker — only when this site/analyte owns an excluded extreme
+      uiOutput("qc_chip_band", inline = TRUE))
+  })
+
+  # "Change site" -> jump to the Explore tab (the picker map + select panel),
+  # then nudge the plotly map to re-measure into the now-visible width so it
+  # never paints half-width (the flagship kickMaps multi-frame resize fix).
+  observeEvent(input$changeSite, {
+    nav_select("main_tabs", "Explore")
+    session$sendCustomMessage("kickMaps", list())
+  })
+
   ## ---- Plausibility audit: clickable chip + modal (no inline caveat text) ----
   # Relevant when the current site, or either selected analyte, owns an excluded
   # extreme — i.e. when a gate is actually affecting what the user is viewing.
@@ -893,15 +1047,17 @@ server <- function(input, output, session) {
     EXCLUDED_EXTREMES |>
       dplyr::filter(site == input$site | analyte %in% c(main_a(), sec_a()))
   })
-  output$qc_chip <- renderUI({
+  qc_pill_ui <- function(link_id) {
     rel <- qc_relevant(); if (!nrow(rel)) return(NULL)
     n <- nrow(rel)
-    actionLink("qc_audit", class = "qc-pill",
+    actionLink(link_id, class = "qc-pill",
       title = "An implausible extreme was excluded from the fits, the seasonal trend, the predictor and the map. Click to audit",
       tagList(bs_icon("exclamation-triangle-fill"),
               sprintf("%d extreme value%s excluded", n, if (n > 1) "s" else "")))
-  })
-  observeEvent(input$qc_audit, {
+  }
+  output$qc_chip      <- renderUI(qc_pill_ui("qc_audit"))
+  output$qc_chip_band <- renderUI(qc_pill_ui("qc_audit_band"))
+  qc_audit_modal <- function() {
     rel <- qc_relevant(); all_n <- nrow(EXCLUDED_EXTREMES)
     tbl <- rel |>
       dplyr::transmute(Site = site, Date = format(collectDate, "%Y-%m-%d"),
@@ -921,7 +1077,9 @@ server <- function(input, output, session) {
       if (all_n > nrow(rel)) tags$p(class = "scope-note",
         sprintf("Showing the %d relevant to your current site/analytes; %d total excluded across the dataset.",
                 nrow(rel), all_n))))
-  })
+  }
+  observeEvent(input$qc_audit,      qc_audit_modal())
+  observeEvent(input$qc_audit_band, qc_audit_modal())
 
   output$preset_reason <- renderUI({
     pm <- preset_match(); if (is.na(pm)) return(NULL)
@@ -973,7 +1131,7 @@ server <- function(input, output, session) {
   ## ---- Compare: time series ----
   output$ts <- renderPlotly({ safe_plotly({
     df <- sel_long()
-    if (!nrow(df)) return(plotly_message("No matched samples in this window. Try 'Use full record' in the sidebar.", mode()))
+    if (!nrow(df)) return(plotly_message("No matched samples in this window. Try 'Use full record' on the Explore tab.", mode()))
     A <- main_a(); B <- sec_a()
     unitA <- df$units[df$analyte == A][1]; unitB <- df$units[df$analyte == B][1]
 
@@ -1405,9 +1563,9 @@ server <- function(input, output, session) {
     })
 
   ## ---- One-click PDF site report (self-contained, base pdf() + ggplot) ----
-  output$dl_report <- downloadHandler(
-    filename = function() paste0(fn_base(), "-report.pdf"),
-    content = function(file) {
+  # Shared by the Data-tab "PDF report" button AND the context-band "Report" link
+  # (output$dl_report + output$report_band both call write_site_report).
+  write_site_report <- function(file) {
       d <- dates_d(); A <- main_a(); B <- sec_a(); st <- input$site
       sm <- D$sites_meta[D$sites_meta$site == st, ]
       uA <- D$analyte_meta$units[D$analyte_meta$analyte == A][1]
@@ -1477,7 +1635,14 @@ server <- function(input, output, session) {
           geom_boxplot(outlier.shape = NA, fill = PG$main, alpha = .18, color = PG$main) +
           geom_jitter(width = .15, height = 0, color = PG$main, alpha = .5, size = 1.4) +
           labs(x = NULL, y = axis_title(A, uA), title = paste0("Monthly climatology · ", analyte_display(A))) + th)
-    })
+  }
+  output$dl_report <- downloadHandler(
+    filename = function() paste0(fn_base(), "-report.pdf"),
+    content  = write_site_report)
+  # context-band "Report" link — same PDF, reachable from every tab
+  output$report_band <- downloadHandler(
+    filename = function() paste0(fn_base(), "-report.pdf"),
+    content  = write_site_report)
 
   ## ---- Two sites: same analyte at site A vs site B ----
   output$two_sites_note <- renderUI({
