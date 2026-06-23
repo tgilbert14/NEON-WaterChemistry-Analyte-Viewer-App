@@ -11,6 +11,7 @@ suppressWarnings(suppressMessages({
   library(shiny); library(bslib); library(bsicons)
   library(dplyr); library(tidyr); library(readr); library(lubridate)
   library(plotly); library(DT); library(ggplot2); library(shinycssloaders)
+  library(leaflet)   # Explore-tab site picker (suite standard: tile basemap + circleMarkers)
 }))
 source("helpers.R")
 options(shiny.sanitize.errors = TRUE)                 # never leak a raw R error to the page
@@ -464,6 +465,36 @@ aqua_theme <- bs_theme(
     @media (max-width: 900px) { .site-browse-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 560px) { .site-browse-grid { grid-template-columns: 1fr; } }
 
+    /* ====================================================================== *
+     *  Leaflet picker map + site-choice popup. The popup card carries the     *
+     *  same two-choice pattern (Explore | About) as the sibling apps, bound   *
+     *  directly into each marker so a tap opens it client-side.               *
+     * ====================================================================== */
+    #map.leaflet-container { border-radius: 10px; background: var(--paper); font: inherit; }
+    .wc-pop-card .leaflet-popup-content-wrapper { border-radius: 14px; box-shadow: 0 12px 36px rgba(12,35,75,.24); }
+    .wc-pop-card .leaflet-popup-content { margin: 12px 14px; }
+    /* a leaflet popup keeps its own surface (outside the bslib card), so theme it explicitly */
+    .wc-pop-card .leaflet-popup-content-wrapper,
+    .wc-pop-card .leaflet-popup-tip { background: #ffffff; color: #0a2230; }
+    [data-bs-theme='dark'] .wc-pop-card .leaflet-popup-content-wrapper,
+    [data-bs-theme='dark'] .wc-pop-card .leaflet-popup-tip { background: #10203f; color: #e8eef6; }
+    .wc-pop-t { font-weight: 700; font-size: .98rem; line-height: 1.2; }
+    .wc-pop-code { font-weight: 500; opacity: .65; }
+    .wc-pop-s { font-size: .78rem; opacity: .8; margin: 2px 0 4px; }
+    .wc-pop-v { font-size: .86rem; margin: 4px 0; }
+    .wc-pop-v.wc-pop-na { font-style: italic; opacity: .7; }
+    .wc-pop-sub { font-weight: 400; opacity: .7; }
+    .wc-pop-n { font-size: .78rem; opacity: .85; margin-bottom: 9px; }
+    .wc-pop-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .wc-pop-btn { border: 0; border-radius: 8px; padding: 7px 11px; font-size: .82rem; font-weight: 600;
+                  cursor: pointer; transition: background .15s ease; }
+    .wc-pop-go { background: #0E7C9B; color: #fff; }
+    .wc-pop-go:hover { background: #0b6580; }
+    .wc-pop-info { background: rgba(14,124,155,.12); color: #0E7C9B; }
+    .wc-pop-info:hover { background: rgba(14,124,155,.2); }
+    [data-bs-theme='dark'] .wc-pop-info { background: rgba(70,198,218,.16); color: #7fd6e6; }
+    .leaflet-control.legend { border-radius: 10px; font-size: 11px; }
+
     /* closed-by-default 'Show all analytes' wrapper for the full correlation DT */
     .cor-table-details { margin: 6px 0 2px; }
     .cor-table-details > summary { list-style: none; }
@@ -563,11 +594,12 @@ $(document).on('shiny:connected', function(){
 });
 Shiny.addCustomMessageHandler('neon_set_seen', function(x){ try{ localStorage.setItem('neon_seen','1'); }catch(e){} });
 
-/* ---- kickMaps: re-measure the plotly site map after 'Change site' --------
-   'Change site' navigates back to the Explore tab; the map was rendered while
-   that tab may have been hidden (0px wide), so dispatch a window 'resize' across
-   several frames so Plotly re-fits the settled width instead of painting half-
-   width. Mirrors the flagship Small Mammal kickMaps handler (leaflet there). */
+/* ---- kickMaps: re-measure the leaflet site map after 'Change site' --------
+   'Change site' navigates back to the Explore tab; the leaflet map may have been
+   measured while its tab was hidden (0px wide), so dispatch a window 'resize'
+   across several frames. A 'resize' makes every Leaflet map invalidateSize and
+   re-fit the settled width instead of painting half-width / grey tiles. Mirrors
+   the flagship Small Mammal kickMaps handler. */
 Shiny.addCustomMessageHandler('kickMaps', function(){
   var kick = function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} };
   if (window.requestAnimationFrame) requestAnimationFrame(kick);
@@ -759,7 +791,7 @@ ui <- page_fillable(
                         span("Pick a site to explore"),
                         span(class = "scope-note d-none d-md-inline",
                              "Markers are coloured by the main analyte's site average. Tap any marker"))),
-        withSpinner(plotlyOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        withSpinner(leafletOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         # Browse-all-sites — a CLOSED-by-default collapsible list under the map.
         # Each row sets input$pickFromList = <site code>; the server observer
         # (same path as the map click) selects that site and jumps to Compare.
@@ -1755,55 +1787,116 @@ server <- function(input, output, session) {
       plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
   }, mode()) })
 
-  ## ---- Explore map: markers coloured by the main analyte; click -> select + Compare ----
-  output$map <- renderPlotly({ safe_plotly({
-    d <- dates_d(); ana <- main_a()
-    # exclude implausible singletons so one artifact (ANC 927) can't blow out the
-    # continent-wide YlGnBu colorbar and floor every other site
-    site_avg <- D$swc_long |>
+  ## ---- Explore map: leaflet picker; markers coloured by the main analyte -----
+  # Suite standard (matches Small Mammal / My Little Inverts): a STATIC
+  # leafletOutput in the UI (its JS deps land in <head> so it binds reliably on
+  # Connect Cloud), a CartoDB.Positron tile basemap, circleMarkers coloured by
+  # each site's analyte mean, and the site-choice buttons bound DIRECTLY into each
+  # marker popup (NOT a marker_click -> leafletProxy round-trip, which silently
+  # fails once the tab has been hidden and re-shown). The base map is drawn once;
+  # re-colouring on analyte / window / selected-site change is a leafletProxy swap
+  # so the user's pan & zoom are preserved.
+
+  # one row per site with its mean for the active analyte/window. Implausible
+  # singletons (ANC 927, Fe 931) are excluded so one artifact can't blow out the
+  # continent-wide YlGnBu scale and floor every other site.
+  map_site_avg <- function(ana, d) {
+    D$swc_long |>
       filter(analyte == ana, collectDate >= d[1], collectDate <= d[2], !implausible) |>
       group_by(site) |> summarise(avg = mean(value, na.rm = TRUE), nobs = dplyr::n(), .groups = "drop")
+  }
+
+  # the choice card bound to each marker: site facts + the two buttons. They fire
+  # the SAME inputs the server already handles (mapExplore loads + jumps to
+  # Compare; mapInfo opens the About modal) — so no new server wiring is needed.
+  map_popup_html <- function(code, ana, avg, nobs, unit) {
+    sm <- D$sites_meta[D$sites_meta$site == code, ]
+    where <- paste(stats::na.omit(c(as.character(sm$state[1]),
+      if (!is.na(sm$domain[1])) paste("NEON", sm$domain[1]) else NA)), collapse = " &middot; ")
+    val <- if (is.finite(avg))
+      sprintf("<div class='wc-pop-v'><b>%s</b>: %s %s <span class='wc-pop-sub'>(avg, n=%s)</span></div>",
+              analyte_display(ana), signif(avg, 3), unit, format(nobs, big.mark = ",")) else
+      sprintf("<div class='wc-pop-v wc-pop-na'>no %s in this window</div>", analyte_display(ana))
+    cov <- sprintf("<div class='wc-pop-n'><b>%s</b> obs &middot; <b>%s</b> analytes</div>",
+                   format(ifelse(is.na(sm$n_obs[1]), 0L, sm$n_obs[1]), big.mark = ","),
+                   ifelse(is.na(sm$n_analytes[1]), 0L, sm$n_analytes[1]))
+    htmltools::HTML(sprintf(
+      "<div class='wc-pop'>
+         <div class='wc-pop-t'>%s <span class='wc-pop-code'>(%s)</span></div>
+         <div class='wc-pop-s'>%s</div>
+         %s%s
+         <div class='wc-pop-actions'>
+           <button type='button' class='wc-pop-btn wc-pop-go' onclick=\"if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('mapExplore','%s',{priority:'event'});\">Explore this site &rarr;</button>
+           <button type='button' class='wc-pop-btn wc-pop-info' onclick=\"Shiny.setInputValue('mapInfo','%s',{priority:'event'});\">About this site</button>
+         </div>
+       </div>",
+      htmltools::htmlEscape(sm$siteName[1] %||% code), code, where, val, cov, code, code))
+  }
+
+  # draw (or re-draw) every site marker + the colour legend onto a leaflet map OR
+  # a leafletProxy. The selected site gets a larger, secondary-ringed marker.
+  draw_site_markers <- function(map, ana, d, sel) {
     m <- D$sites_meta |> filter(is.finite(lat), is.finite(long)) |>
-      left_join(site_avg, by = "site") |> mutate(sel = site == input$site)
-    if (!nrow(m)) return(plotly_message("No site coordinates available.", mode()))
-    unit  <- pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == ana][1], ana)
+      left_join(map_site_avg(ana, d), by = "site") |> mutate(is_sel = site == sel)
+    unit <- pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == ana][1], ana)
+    map <- map |> leaflet::clearGroup("sites") |> leaflet::clearControls()
+    if (!nrow(m)) return(map)
     has_v <- m |> filter(is.finite(avg)); no_v <- m |> filter(!is.finite(avg))
     # heavy-tail-safe colour channel: log10(site avg) for skewed analytes, clamped
-    # to p5/p95, colorbar ticking in TRUE units (so PRPO can't wash the rest out)
+    # to p5/p95, legend ticking in TRUE units (so PRPO can't wash the rest out)
     csc <- if (nrow(has_v)) map_colour_scale(has_v$avg, ana) else NULL
+    pal <- NULL
+    if (!is.null(csc)) {
+      dom <- c(csc$cmin, csc$cmax); if (dom[1] == dom[2]) dom[2] <- dom[1] + 1e-9
+      pal <- leaflet::colorNumeric("YlGnBu", domain = dom)   # darker = higher
+    }
+    pop_opts <- leaflet::popupOptions(maxWidth = 300, minWidth = 230, autoPan = TRUE,
+      autoPanPadding = c(40, 55), keepInView = TRUE, closeButton = TRUE,
+      closeOnClick = FALSE, className = "wc-pop-card")
+    pops <- function(df) vapply(seq_len(nrow(df)),
+      function(i) as.character(map_popup_html(df$site[i], ana, df$avg[i], df$nobs[i], unit)), character(1))
 
-    geo <- list(scope = "north america", lataxis = list(range = c(15, 72)), lonaxis = list(range = c(-162, -60)),
-                showland = TRUE, landcolor = if (identical(mode(), "dark")) "rgba(40,46,54,1)" else "rgba(243,245,247,1)",
-                subunitcolor = "rgba(180,190,200,1)", countrycolor = "rgba(180,190,200,1)", bgcolor = "rgba(0,0,0,0)")
-    p <- plot_ly(source = "sitemap")
     if (nrow(no_v))
-      p <- add_trace(p, data = no_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
-                     customdata = ~site, showlegend = FALSE,
-                     marker = list(size = ifelse(no_v$sel, 14, 7), color = "#cdd5da",
-                                   line = list(width = ifelse(no_v$sel, 2.2, .4),
-                                               color = ifelse(no_v$sel, COL$secondary, "white"))),
-                     text = ~paste0("<b>", siteName, "</b><br>", site, "<br>no ", analyte_display(ana),
-                                    " in this window<br><i>tap to select &amp; compare</i>"), hoverinfo = "text")
+      map <- leaflet::addCircleMarkers(map, data = no_v, lng = ~long, lat = ~lat, group = "sites",
+        radius = ifelse(no_v$is_sel, 9, 5.5), stroke = TRUE, weight = ifelse(no_v$is_sel, 2.4, .8),
+        color = ifelse(no_v$is_sel, COL$secondary, "#ffffff"), fillColor = "#cdd5da", fillOpacity = .85,
+        label = lapply(no_v$site, function(s) htmltools::HTML(sprintf("<b>%s</b> &middot; tap for options", s))),
+        popup = pops(no_v), popupOptions = pop_opts,
+        options = leaflet::markerOptions(riseOnHover = TRUE))
     if (nrow(has_v))
-      p <- add_trace(p, data = has_v, type = "scattergeo", mode = "markers", lat = ~lat, lon = ~long,
-                     customdata = ~site, showlegend = FALSE,
-                     marker = list(size = ifelse(has_v$sel, 17, 11), color = csc$z,
-                                   cmin = csc$cmin, cmax = csc$cmax,
-                                   colorscale = "YlGnBu", reversescale = TRUE, showscale = TRUE,
-                                   colorbar = list(title = list(
-                                                     text = paste0(analyte_display(ana), "<br>", unit,
-                                                                   if (isTRUE(csc$log)) "<br><span style='font-size:9px'>(log scale)</span>" else ""),
-                                                     font = list(size = 10)),
-                                                   tickvals = csc$tickvals, ticktext = csc$ticktext,
-                                                   thickness = 12, len = .68, x = 1),
-                                   line = list(width = ifelse(has_v$sel, 2.4, .5),
-                                               color = ifelse(has_v$sel, COL$secondary, "white"))),
-                     text = ~paste0("<b>", siteName, "</b><br>", site, " · ", domain %||% "", "<br>",
-                                    analyte_display(ana), ": ", signif(avg, 3), " ", unit, " (avg, n=", nobs, ")",
-                                    "<br><i>tap to select &amp; compare</i>"), hoverinfo = "text")
-    p |> layout(geo = geo, margin = list(t = 0, b = 0, l = 0, r = 0)) |>
-      event_register("plotly_click") |> plotly_theme(mode(), narrow()) |> plotly_clean("neon_sites_map")
-  }, mode()) })
+      map <- leaflet::addCircleMarkers(map, data = has_v, lng = ~long, lat = ~lat, group = "sites",
+        radius = ifelse(has_v$is_sel, 12, 8), stroke = TRUE, weight = ifelse(has_v$is_sel, 2.6, 1),
+        color = ifelse(has_v$is_sel, COL$secondary, "#ffffff"), fillColor = pal(csc$z), fillOpacity = .9,
+        label = lapply(seq_len(nrow(has_v)), function(i) htmltools::HTML(sprintf(
+          "<b>%s</b> &middot; %s %s", has_v$site[i], signif(has_v$avg[i], 3), unit))),
+        popup = pops(has_v), popupOptions = pop_opts,
+        options = leaflet::markerOptions(riseOnHover = TRUE))
+    if (!is.null(csc)) {
+      ttl <- HTML(sprintf("%s<br><span style='font-weight:400'>%s%s</span>", analyte_display(ana),
+                          unit, if (isTRUE(csc$log)) " (log)" else ""))
+      map <- leaflet::addLegend(map, position = "bottomright", colors = pal(csc$tickvals),
+                                labels = csc$ticktext, title = ttl, opacity = .9, className = "info legend")
+    }
+    map
+  }
+
+  # base map drawn ONCE (tiles + view + initial markers, isolated so changes go
+  # through the proxy below instead of a full re-render)
+  output$map <- leaflet::renderLeaflet({
+    validate(need(any(is.finite(D$sites_meta$lat) & is.finite(D$sites_meta$long)),
+                  "No site coordinates are available in this bundle."))
+    leaflet::leaflet(options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) |>
+      leaflet::addProviderTiles("CartoDB.Positron", options = leaflet::providerTileOptions(noWrap = TRUE)) |>
+      leaflet::setView(lng = -96, lat = 44, zoom = 3) |>
+      draw_site_markers(isolate(main_a()), isolate(dates_d()), isolate(input$site))
+  })
+  # keep the map alive while the Explore tab is hidden so leafletProxy stays valid
+  outputOptions(output, "map", suspendWhenHidden = FALSE)
+
+  # re-colour markers + legend when the analyte, window, or selected site changes
+  observeEvent(list(main_a(), dates_d(), input$site), {
+    draw_site_markers(leaflet::leafletProxy("map"), main_a(), dates_d(), input$site)
+  }, ignoreInit = TRUE)
 
   output$map_footer <- renderUI({
     HTML(sprintf("Markers coloured by the average <b>%s</b> at each site over the selected window (darker = higher);
@@ -1811,48 +1904,23 @@ server <- function(input, output, session) {
                   jump to the comparison.", analyte_display(main_a())))
   })
 
-  # ---- Map site-picker: tap a dot -> a choice card (Explore | About) ----------
-  # Matches the flagship Small Mammal / Ground Beetle picker: tapping a marker no
-  # longer auto-jumps. It opens a small modal offering a CLEAR choice: "Explore
-  # this site" (load it and go to Compare) or "About this site" (an instant info
-  # card, no load). The Explore button sets input$mapExplore; About sets
-  # input$mapInfo. This app has a SINGLE site selectize (no state cascade), so
-  # selecting the site already syncs the one sidebar selector, so there is no live
-  # sidebar mismatch to fix here. rv$pendingSite is kept for parity with the
-  # cascade apps and to document the shared-load pattern.
+  # ---- Map site-picker: tap a marker -> its choice popup (Explore | About) ----
+  # The choice card is bound DIRECTLY into each leaflet marker popup (see
+  # map_popup_html / draw_site_markers above), so a tap opens it client-side — no
+  # marker_click -> leafletProxy round-trip (which silently fails once the tab has
+  # been hidden and re-shown). The popup's "Explore" button sets input$mapExplore
+  # (load + jump to Compare); "About" sets input$mapInfo (the info modal below).
+  # This app has a SINGLE site selectize (no state cascade), so selecting the site
+  # already syncs the one selector. rv$pendingSite is kept for parity with the
+  # cascade siblings and to document the shared-load pattern.
   rv <- reactiveValues(pendingSite = NULL)
 
-  # the shared load path used by the map choice, the About modal footer, and the
-  # browse list: select the site (syncs the sidebar) and jump to Compare.
+  # the shared load path used by the map popup, the About modal footer, and the
+  # browse list: select the site (syncs the selector) and jump to Compare.
   load_site <- function(site) {
     if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
     updateSelectizeInput(session, "site", selected = site)
     nav_select("main_tabs", "Compare")
-  }
-
-  site_choice_modal <- function(code) {
-    sm <- D$sites_meta[D$sites_meta$site == code, ]
-    if (!nrow(sm)) return(invisible())
-    where <- paste(stats::na.omit(c(as.character(sm$state[1]),
-      if (!is.na(sm$domain[1])) paste("NEON", sm$domain[1]) else NA)), collapse = " · ")
-    showModal(modalDialog(
-      title = tagList(bs_icon("geo-alt-fill"), " ", sm$siteName[1] %||% code,
-                      span(class = "scope-note", paste0(" (", code, ")"))),
-      easyClose = TRUE, size = "m",
-      footer = tagList(
-        actionButton("mapInfo_btn", "About this site", class = "btn-outline-secondary",
-          onclick = sprintf("Shiny.setInputValue('mapInfo','%s',{priority:'event'});", code)),
-        actionButton("mapExplore_btn", tagList("Explore this site ", bs_icon("arrow-right")),
-          class = "btn-primary",
-          onclick = sprintf("Shiny.setInputValue('mapExplore','%s',{priority:'event'});", code))),
-      tags$p(class = "scope-note", style = "margin-bottom:.4rem", where),
-      tags$p(HTML(sprintf(
-        "<b>%s</b> observations · <b>%s</b> analytes, %s to %s.",
-        format(ifelse(is.na(sm$n_obs[1]), 0L, sm$n_obs[1]), big.mark = ","),
-        ifelse(is.na(sm$n_analytes[1]), 0L, sm$n_analytes[1]),
-        if (!is.na(sm$first[1])) format(sm$first[1], "%b %Y") else "—",
-        if (!is.na(sm$last[1])) format(sm$last[1], "%b %Y") else "—"))),
-      tags$p(class = "scope-note", "Load this site to compare its analytes, or open the details first.")))
   }
 
   site_info_modal <- function(code) {
@@ -1887,15 +1955,9 @@ server <- function(input, output, session) {
           if (!is.na(sm$last[1])) format(sm$last[1], "%b %Y") else "—"))))
   }
 
-  # Clicking a site on the map opens the Explore | About choice card.
-  observeEvent(event_data("plotly_click", source = "sitemap"), {
-    ev <- event_data("plotly_click", source = "sitemap")
-    site <- ev$customdata
-    if (!is.null(site) && length(site) == 1 && site %in% D$sites_meta$site)
-      site_choice_modal(site)
-  })
-
-  # "Explore this site" (choice card OR About modal footer) -> load it.
+  # "Explore this site" (map-marker popup OR About modal footer) -> load it.
+  # The popup button fires mapExplore directly; removeModal() is a harmless no-op
+  # when the trigger was the marker popup rather than the About modal.
   observeEvent(input$mapExplore, {
     removeModal()
     load_site(input$mapExplore)

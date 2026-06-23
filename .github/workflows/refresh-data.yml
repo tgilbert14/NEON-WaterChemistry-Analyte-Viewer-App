@@ -67,11 +67,13 @@ jobs:
           use-public-rspm: true
 
       # Pulls the NEON public API directly — only these light deps, no neonUtilities.
+      # leaflet is added so the manifest-regen step (writeManifest) can snapshot it
+      # as a runtime dep of the Explore picker map (the suite-standard tile basemap).
       - name: Install R packages
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: >
-            jsonlite, dplyr, tidyr, readr
+            jsonlite, dplyr, tidyr, readr, leaflet
 
       # Pull + rebuild data/neon_swc.rds, then guard against a shrunken bundle
       # (the guard stop()s the job before the PR if the pull collapsed).
