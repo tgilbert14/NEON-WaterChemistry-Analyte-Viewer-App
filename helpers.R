@@ -342,7 +342,8 @@ SIBLINGS <- tibble::tribble(
   "Plant Diversity",    "https://tgilbert14.github.io/NEON-Plant-Diversity/",
   "Plant Phenology",    "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/",
   "Veg Structure",      "https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/",
-  "Mosquito Pulse",     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/"
+  "Mosquito Pulse",     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/",
+  "Little Inverts",     "https://tgilbert14.github.io/NEON-My-Little-Inverts/"
 )
 sibling_block <- function() {
   htmltools::tagList(
