@@ -78,6 +78,24 @@ D$analyte_meta <- D$analyte_meta |>
 #     the clickable censoring note (Br 57%, Mn/Fe/F ~34-39% below DL).
 CENSOR_MAP <- setNames(D$analyte_meta$pct_below, D$analyte_meta$analyte)
 
+## ---- Search-the-network index (small, precomputed, loaded once) -----------
+# data/search_index.rds is built by scripts/build_search_index.R from the SAME
+# committed bundle + the SAME plausibility gate applied above, so a threshold
+# query returns exactly the sites the map mean / stats tabs would. Loaded once,
+# filtered in memory — instant, no live fetch. If it is missing (older bundle),
+# the Search tab degrades gracefully to an empty catalogue.
+SEARCH_IDX <- tryCatch(readRDS("data/search_index.rds"), error = function(e) NULL)
+SEARCH_PS  <- if (!is.null(SEARCH_IDX)) SEARCH_IDX$per_site else NULL
+# analyte picker choices, labelled with the display name + unit, ordered by data volume
+SEARCH_ANALYTE_CHO <- if (!is.null(SEARCH_IDX)) {
+  a <- SEARCH_IDX$analytes
+  lab <- ifelse(nzchar(a$pretty %|na|% ""), paste0(a$display, " (", a$pretty, ")"), a$display)
+  setNames(a$analyte, lab)
+} else character(0)
+SEARCH_DEF_ANALYTE <- if (length(SEARCH_ANALYTE_CHO)) {
+  if ("specificConductanceField" %in% SEARCH_ANALYTE_CHO) "specificConductanceField" else unname(SEARCH_ANALYTE_CHO[1])
+} else ""
+
 # Site choices: rich labels, only sites that actually have data
 site_tbl   <- D$sites_meta |> arrange(siteName)
 SITE_CHO   <- setNames(site_tbl$site, paste0(site_tbl$site, " · ", site_tbl$siteName))
@@ -558,6 +576,12 @@ Shiny.addCustomMessageHandler('kickMaps', function(){
 window.addEventListener('resize', function(){ clearTimeout(window.__rt);
   window.__rt=setTimeout(function(){ Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'}); },250); });
 
+/* Any tab becoming visible: nudge a resize so a DataTable or Plotly that
+   initialised in a hidden (0-width) tab recomputes its width (e.g. the Search
+   results table, which renders before its tab is ever shown). */
+document.addEventListener('shown.bs.tab', function(){
+  setTimeout(function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} }, 60); });
+
 /* ---- client-side 'working' veil ----------------------------------------
    A site/analyte/date/map change kicks off recompute on the worker; the
    per-output withSpinner can't paint until that work starts, so raise a veil
@@ -613,6 +637,15 @@ $(document).on('shiny:inputchanged', function(e){
 });
 $(document).on('mousedown', '#map', function(){
   var g = document.getElementById('splashGuide'); if (g) g.style.display = 'none';
+});
+/* ---- Search-the-network: a 'Go to site' button or the site-code link loads
+   that site from the bundle and lands on the Explore map. Delegated so it works
+   for every DT redraw. Raise the working veil on the gesture (real load). ---- */
+$(document).on('click', '.search-go, .search-go-link', function(e){
+  e.preventDefault();
+  var s = this.getAttribute('data-site'); if (!s) return;
+  if (window.wcVeilOn) wcVeilOn();
+  Shiny.setInputValue('searchGo', s, {priority:'event'});
 });
 ")
 
@@ -840,6 +873,54 @@ ui <- page_fillable(
         uiOutput("two_sites_note"),
         withSpinner(plotlyOutput("two_sites", height = 480), type = 8, color = "#0E7C9B", hide.ui = TRUE),
         card_footer(class = "scope-note", "The main analyte at the selected site vs a second site, over the same date window."))
+    ),
+    nav_panel(
+      "Search", value = "search", icon = bs_icon("search"),
+      card(full_screen = TRUE,
+        card_header(div(class = "d-flex justify-content-between align-items-center gap-3 flex-wrap",
+          span("Search the network"),
+          radioButtons("search_mode", NULL, inline = TRUE,
+            choices = c("By threshold" = "threshold", "Highest / lowest" = "rank"),
+            selected = "threshold"))),
+        tags$p(class = "scope-note", style = "margin:.2rem 0 .8rem",
+          "Find sites by their water chemistry across the whole network, then jump to one. ",
+          "Values are each site's average over its full bundled record, computed the same way as the map ",
+          "(implausible extremes excluded). This ranks sites by a within-site index, it is not an absolute ranking, ",
+          "and below-detection samples are kept in the count and flagged, not dropped."),
+
+        # ---- the query controls -------------------------------------------
+        div(class = "select-panel",
+          div(class = "sp-row",
+            div(class = "sp-field",
+              selectizeInput("search_analyte", label = tagList(bs_icon("droplet"), " Analyte"),
+                             choices = SEARCH_ANALYTE_CHO, selected = SEARCH_DEF_ANALYTE,
+                             width = "100%",
+                             options = list(placeholder = "Type to search analytes…"))),
+            conditionalPanel("input.search_mode == 'threshold'",
+              class = "sp-field",
+              selectInput("search_op", label = tagList(bs_icon("funnel"), " Where the site average is"),
+                          choices = c("greater than ( > )" = "gt", "less than ( < )" = "lt",
+                                      "between" = "between"),
+                          selected = "gt", width = "100%")),
+            conditionalPanel("input.search_mode == 'rank'",
+              class = "sp-field",
+              selectInput("search_rank", label = tagList(bs_icon("sort-down"), " Show"),
+                          choices = c("Highest first" = "high", "Lowest first" = "low"),
+                          selected = "high", width = "100%"))),
+          conditionalPanel("input.search_mode == 'threshold'",
+            div(class = "sp-row",
+              div(class = "sp-field", uiOutput("search_val1_ui")),
+              conditionalPanel("input.search_op == 'between'",
+                class = "sp-field", uiOutput("search_val2_ui")))),
+          div(class = "sp-armed scope-note", bs_icon("crosshair"), " ",
+              textOutput("search_summary", inline = TRUE))),
+
+        uiOutput("search_empty"),
+        div(style = "min-height:340px; overflow-x:auto; width:100%",
+            DTOutput("search_table", width = "100%")),
+        card_footer(class = "scope-note",
+          "Click a site code, or its ", tags$b("Go to site"), " button, to load it from the bundle and open it on the map. ",
+          "n = plausibility-gated samples at that site; below-DL = share reported below the analytical detection limit."))
     ),
     nav_panel(
       "Data", icon = bs_icon("table"),
@@ -1834,6 +1915,142 @@ server <- function(input, output, session) {
       load_site(site)
     }
   })
+
+  #====================================================================
+  # SEARCH THE NETWORK — filters the precomputed in-memory index (instant)
+  #====================================================================
+  # rows of the index for the currently-picked analyte (one row per site)
+  search_analyte_rows <- reactive({
+    req(!is.null(SEARCH_PS))
+    a <- input$search_analyte
+    if (is.null(a) || !nzchar(a)) return(SEARCH_PS[0, ])
+    SEARCH_PS[SEARCH_PS$analyte == a, , drop = FALSE]
+  })
+
+  # the analyte's real value range, to seed the threshold inputs in TRUE units
+  search_range <- reactive({
+    r <- search_analyte_rows()
+    if (!nrow(r)) return(c(0, 1))
+    v <- r$mean[is.finite(r$mean)]
+    if (!length(v)) return(c(0, 1))
+    range(v)
+  })
+  search_unit <- reactive({
+    r <- search_analyte_rows()
+    if (!nrow(r)) return("")
+    r$pretty[1] %|na|% ""
+  })
+  # a tidy default + step for the numeric inputs
+  .nice_step <- function(rng) {
+    span <- diff(rng); if (!is.finite(span) || span <= 0) return(1)
+    signif(span / 50, 1)
+  }
+
+  output$search_val1_ui <- renderUI({
+    rng <- search_range(); u <- search_unit()
+    lab <- tagList(bs_icon("123"), if (identical(input$search_op, "between")) " Low value" else " Value",
+                   if (nzchar(u)) span(class = "scope-note", paste0(" (", u, ")")) else NULL)
+    numericInput("search_val1", label = lab,
+                 value = signif(stats::median(rng), 3), step = .nice_step(rng), width = "100%")
+  })
+  output$search_val2_ui <- renderUI({
+    rng <- search_range(); u <- search_unit()
+    numericInput("search_val2",
+                 label = tagList(bs_icon("123"), " High value",
+                                 if (nzchar(u)) span(class = "scope-note", paste0(" (", u, ")")) else NULL),
+                 value = signif(rng[2], 3), step = .nice_step(rng), width = "100%")
+  })
+
+  # the matching rows, sorted, after applying threshold OR rank
+  search_result <- reactive({
+    r <- search_analyte_rows()
+    if (!nrow(r)) return(r)
+    mode <- input$search_mode %||% "threshold"
+    if (identical(mode, "rank")) {
+      r <- r[order(r$mean, decreasing = identical(input$search_rank %||% "high", "high")), , drop = FALSE]
+      return(r)
+    }
+    op <- input$search_op %||% "gt"
+    v1 <- suppressWarnings(as.numeric(input$search_val1))
+    if (!is.finite(v1)) return(r[0, ])   # wait for a value
+    keep <- switch(op,
+      gt = r$mean >  v1,
+      lt = r$mean <  v1,
+      between = {
+        v2 <- suppressWarnings(as.numeric(input$search_val2))
+        if (!is.finite(v2)) return(r[0, ])
+        lo <- min(v1, v2); hi <- max(v1, v2)
+        r$mean >= lo & r$mean <= hi
+      })
+    keep[is.na(keep)] <- FALSE
+    r <- r[keep, , drop = FALSE]
+    r[order(r$mean, decreasing = TRUE), , drop = FALSE]
+  })
+
+  output$search_summary <- renderText({
+    if (is.null(SEARCH_PS)) return("Search index not available in this bundle.")
+    tot <- nrow(search_analyte_rows()); n <- nrow(search_result())
+    disp <- analyte_display(input$search_analyte %||% "")
+    if (identical(input$search_mode %||% "threshold", "rank"))
+      sprintf("%s site%s with %s on record", n, if (n == 1) "" else "s", disp)
+    else
+      sprintf("%s of %s sites match for %s", n, tot, disp)
+  })
+
+  output$search_empty <- renderUI({
+    if (is.null(SEARCH_PS))
+      return(div(class = "empty-note scope-note",
+                 "The search index is not bundled with this version. Rebuild it with scripts/build_search_index.R."))
+    if (nrow(search_result()) == 0) {
+      msg <- if (identical(input$search_mode %||% "threshold", "threshold") && nzchar(input$search_analyte %||% ""))
+        "No site's average meets that threshold. Try a wider value or the highest / lowest view."
+      else "Pick an analyte to begin."
+      return(div(class = "empty-note scope-note", bs_icon("inbox"), " ", msg))
+    }
+    NULL
+  })
+
+  output$search_table <- renderDT({
+    r <- search_result()
+    if (!nrow(r)) return(NULL)
+    u <- r$pretty[1] %|na|% ""
+    yr <- ifelse(is.finite(r$year_min) & is.finite(r$year_max),
+                 ifelse(r$year_min == r$year_max, as.character(r$year_min),
+                        paste0(r$year_min, "–", r$year_max)), "—")
+    btn <- sprintf(
+      "<button class='btn btn-sm btn-outline-primary search-go' data-site='%s'>Go to site &rarr;</button>",
+      r$site)
+    df <- data.frame(
+      Site    = sprintf("<a href='#' class='search-go-link' data-site='%s'><b>%s</b></a>", r$site, r$site),
+      Name    = r$siteName %|na|% r$site,
+      State   = r$state %|na|% "—",
+      Mean    = signif(r$mean, 4),
+      Median  = signif(r$median, 4),
+      n       = r$n,
+      `below-DL` = ifelse(is.finite(r$pct_below), paste0(round(100 * r$pct_below), "%"), "—"),
+      Years   = yr,
+      ` `     = btn,
+      check.names = FALSE, stringsAsFactors = FALSE)
+    names(df)[names(df) == "Mean"]   <- if (nzchar(u)) paste0("Mean (", u, ")") else "Mean"
+    names(df)[names(df) == "Median"] <- if (nzchar(u)) paste0("Median (", u, ")") else "Median"
+    datatable(df, escape = FALSE, rownames = FALSE, selection = "none",
+              options = list(pageLength = 15, dom = "ftip", order = list(), scrollX = TRUE,
+                             columnDefs = list(list(orderable = FALSE, targets = c(0, ncol(df) - 1)))),
+              class = "compact stripe hover")
+  }, server = FALSE)
+
+  # Go-to-site jump (button OR site-code link) -> load from bundle, colour the
+  # map by the analyte that was searched, land on the Explore (Overview) map.
+  search_go <- function(site) {
+    if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
+    a <- input$search_analyte
+    if (!is.null(a) && nzchar(a) && a %in% site_present(site))
+      updateSelectizeInput(session, "analyte_main", selected = a)
+    rv$pendingSite <- site
+    updateSelectizeInput(session, "site", selected = site)
+    nav_select("main_tabs", "Explore")
+  }
+  observeEvent(input$searchGo, search_go(input$searchGo))
 }
 
 shinyApp(ui, server)

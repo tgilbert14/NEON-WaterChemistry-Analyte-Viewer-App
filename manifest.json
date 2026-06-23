@@ -2875,13 +2875,16 @@
   },
   "files": {
     "app.R": {
-      "checksum": "c99e7c64049c6b382fc042eb65bf7d9d"
+      "checksum": "801ca772dff03daf2abae5584699e775"
     },
     "data/neon_swc.rds": {
       "checksum": "8dceb262af0eed45178bbdb21d847cc6"
     },
+    "data/search_index.rds": {
+      "checksum": "51bcca6bc2c80fe7a0708298e47af27a"
+    },
     "helpers.R": {
-      "checksum": "f77c492729a736dd11c375035eec5d16"
+      "checksum": "a0a051e99ae59a601ed2c7240eae41ba"
     }
   },
   "users": null
