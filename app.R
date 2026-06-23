@@ -495,6 +495,16 @@ aqua_theme <- bs_theme(
     [data-bs-theme='dark'] .wc-pop-info { background: rgba(70,198,218,.16); color: #7fd6e6; }
     .leaflet-control.legend { border-radius: 10px; font-size: 11px; }
 
+    /* ====================================================================== *
+     *  PAGE MUST SCROLL. page_fillable clamps the page to 100vh with          *
+     *  overflow-y:hidden; this dashboard is taller than the viewport by       *
+     *  design, so on a normal-height screen the picker map (it sits ~960px    *
+     *  down) and everything below the fold were CLIPPED and unreachable (no   *
+     *  page scroll). Let the fill page grow to its content height and scroll. *
+     * ====================================================================== */
+    html { height: auto !important; }
+    .bslib-page-fill { height: auto !important; min-height: 100vh; overflow-y: auto !important; }
+
     /* closed-by-default 'Show all analytes' wrapper for the full correlation DT */
     .cor-table-details { margin: 6px 0 2px; }
     .cor-table-details > summary { list-style: none; }
