@@ -26,10 +26,22 @@ logmsg <- function(...) {
   cat(line, "\n"); cat(line, "\n", file = LOG, append = TRUE)
 }
 
+# NEON requires an API token for downloads from 2026-06-30 (and moves CC0 -> CC BY
+# 4.0). The token rides as an X-API-Token header on every API + file request; supply
+# it via the NEON_TOKEN env (the refresh workflow passes the GitHub Actions secret).
+# Without it, post-2026-06-30 pulls 401/403 and the completeness guard stop()s the
+# job before a shrunken bundle can ship, so the deployed app keeps its last bundle.
+NEON_TOKEN <- Sys.getenv("NEON_TOKEN", "")
+NEON_HDR   <- if (nzchar(NEON_TOKEN)) c("X-API-Token" = NEON_TOKEN) else NULL
+if (!nzchar(NEON_TOKEN)) message("NOTE: no NEON_TOKEN set - NEON requires a token for downloads from 2026-06-30.")
+
 getJSON <- function(u, tries = 3) {
   for (i in seq_len(tries)) {
-    r <- tryCatch(jsonlite::fromJSON(paste(readLines(url(u), warn = FALSE), collapse = "")),
-                  error = function(e) NULL)
+    r <- tryCatch({
+      tmp <- tempfile(fileext = ".json"); on.exit(unlink(tmp), add = TRUE)
+      download.file(u, tmp, mode = "wb", quiet = TRUE, method = "libcurl", headers = NEON_HDR)
+      jsonlite::fromJSON(tmp)
+    }, error = function(e) NULL)
     if (!is.null(r)) return(r)
     Sys.sleep(1.5 * i)
   }
@@ -61,7 +73,7 @@ logmsg("Got metadata for %d sites; total site-months = %d",
 # 2) Download + cache the two basic CSVs per site-month (newest first = resumable & recent-weighted)
 fetch_csv <- function(file_url, dest) {
   if (file.exists(dest) && file.info(dest)$size > 0) return(suppressWarnings(suppressMessages(read_csv(dest, show_col_types = FALSE))))
-  ok <- tryCatch({ download.file(file_url, dest, mode = "wb", quiet = TRUE); TRUE }, error = function(e) FALSE)
+  ok <- tryCatch({ download.file(file_url, dest, mode = "wb", quiet = TRUE, method = "libcurl", headers = NEON_HDR); TRUE }, error = function(e) FALSE)
   if (!ok || !file.exists(dest)) return(NULL)
   suppressWarnings(suppressMessages(read_csv(dest, show_col_types = FALSE)))
 }

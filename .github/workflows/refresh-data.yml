@@ -57,6 +57,13 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
+    env:
+      # NEON requires an API token for downloads from 2026-06-30. precompute_neon_data.R
+      # reads NEON_TOKEN and sends it as the X-API-Token header on every API + file
+      # request. Set this repo secret (Settings -> Secrets and variables -> Actions) to a
+      # token from your NEON "My Account" page; without it, the monthly re-pull will fail
+      # after 2026-06-30 (the app keeps serving its last committed bundle).
+      NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
