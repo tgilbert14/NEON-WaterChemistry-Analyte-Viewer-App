@@ -1211,7 +1211,7 @@ server <- function(input, output, session) {
         HTML("Built by <b>Desert Data Labs</b> · Tucson, Arizona · ",
              "<a href='mailto:desertdatalabs@gmail.com'>desertdatalabs@gmail.com</a>")),
       tags$p(class = "scope-note", style = "font-size:.78rem; opacity:.85",
-        "Not affiliated with NEON, Battelle, or the National Science Foundation. NEON data are provided under the NEON data policy.")))
+        HTML("Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle. NEON data are provided under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (<a href='https://creativecommons.org/licenses/by/4.0/' target='_blank'>creativecommons.org/licenses/by/4.0</a>). This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF."))))
   })
 
   ## ---- Preset -> analytes (only members the site actually has) ----
@@ -1840,6 +1840,7 @@ server <- function(input, output, session) {
       # provenance header documents the below-detection convention + the gate
       writeLines(c(
         "# NEON Surface Water Chemistry data dictionary (DP1.20093.001)",
+        "# Source: NEON DP1.20093.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
         "# units = canonical (modal) unit per analyte; below_detection rows keep the reported number (never substituted)",
         "# n_below / pct_below = count / fraction of below-detection samples; plausibility_ceiling = per-analyte max(p99.9, 50x median) above which a value is excluded as an artifact"),
         file)
