@@ -126,7 +126,20 @@ aqua_theme <- bs_theme(
   bg = "#FBFDFE", fg = "#16243a",
   primary = "#0E7C9B", secondary = "#4A6575",   # darkened for >=4.5:1 contrast on white (.scope-note token)
   success = "#3f9a52", info = "#2f8fc4", warning = "#d6a31c", danger = "#e0685a",
-  base_font = font_google("Inter"), heading_font = font_google("Inter Tight"),
+  # Inter / Inter Tight are named as PLAIN CSS font-families here (bslib
+  # font_collections of bare strings), NOT font_google(). font_google() defaults to
+  # local = TRUE, which makes bslib DOWNLOAD the font from Google and compile it into
+  # the theme AT APP STARTUP. On Connect Cloud that live fetch runs on every cold start
+  # against an empty cache; when Google Fonts is slow/unreachable the Sass compile
+  # blocks/fails during boot -> black screen / "start-up error" (republish only re-primes
+  # the cache until the next recycle). Naming the family as a string does ZERO network at
+  # boot; the real glyphs are delivered client-side by the non-blocking <link> in
+  # tags$head below (display=swap), with a system-sans fallback. See
+  # docs/neonize-playbook.md §4.
+  base_font = bslib::font_collection(
+    "Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
+  heading_font = bslib::font_collection(
+    "Inter Tight", "Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
   "border-radius" = "0.6rem"
 ) |>
   bs_add_rules("
@@ -793,7 +806,14 @@ ui <- page_fillable(
   # chart's explicit height = charts always render and the page just scrolls.
   fillable = FALSE,
   tags$head(tags$script(APP_JS),
-            tags$meta(name = "viewport", content = "width=device-width, initial-scale=1")),
+            tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
+            # Client-side Google Fonts delivery (non-blocking, display=swap) — the theme
+            # names Inter/Inter Tight as plain families (no server-side font_google
+            # download at boot); the real glyphs load here in the browser. See §4 note above.
+            tags$link(rel = "preconnect", href = "https://fonts.googleapis.com"),
+            tags$link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = NA),
+            tags$link(rel = "stylesheet",
+                      href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700;800&display=swap")),
   useShinyjs(),   # show/hide("splash") <-> show/hide("mainTabsWrap") gates the map-first flow
 
   # client-side 'working' overlay (shown on heavy interactions, hidden on idle)
