@@ -105,7 +105,7 @@ need(all(c("shiny", "dplyr", "ggplot2", "plotly", "leaflet", "lubridate") %in% p
      "Manifest is missing required runtime packages.")
 need("users" %in% names(manifest), "Manifest lacks canonical users metadata.")
 manifest_text <- paste(readLines("manifest.json", warn = FALSE), collapse = "\n")
-need(!grepl("cloud[.]r-project[.]org|cran/(?:__linux__/jammy/)?latest",
+need(!grepl("cloud[.]r-project[.]org|cran[.]rstudio[.]com|cran/(?:__linux__/jammy/)?latest",
             manifest_text, perl = TRUE),
      "Manifest contains a moving package repository.")
 need(grepl("packagemanager[.]posit[.]co/cran/__linux__/jammy/2026-07-15",

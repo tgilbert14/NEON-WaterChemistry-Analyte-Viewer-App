@@ -15,6 +15,8 @@ on:
         description: "Skip the NEON re-pull; rebuild derived bytes from the committed bundle"
         type: boolean
         default: false
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -24,6 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
   RENV_CONFIG_REPOS_OVERRIDE: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
   OPENBLAS_CORETYPE: Haswell
@@ -39,6 +42,11 @@ jobs:
       - id: check
         run: |
           set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Pull request validation — proceeding on exact head $SOURCE_SHA."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual run — proceeding."
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -61,13 +69,11 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
-    env:
-      NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
     steps:
       - name: Checkout the immutable source revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -102,7 +108,9 @@ jobs:
           install-quarto: "false"
 
       - name: Refresh the complete water-chemistry bundle
-        if: ${{ github.event_name == 'schedule' || inputs.skip_download == false }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_download == false) }}
+        env:
+          NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
         run: Rscript --vanilla scripts/refresh_data.R
 
       - name: Rebuild deterministic derived bytes
@@ -126,7 +134,7 @@ jobs:
       - name: Upload the producer candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: water-refresh-producer-${{ github.sha }}
+          name: water-refresh-producer-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/water-refresh.tgz
           if-no-files-found: error
           retention-days: 7
@@ -142,7 +150,7 @@ jobs:
       - name: Checkout the immutable source revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -152,7 +160,7 @@ jobs:
       - name: Download the producer candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: water-refresh-producer-${{ github.sha }}
+          name: water-refresh-producer-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/producer-candidate
 
       - name: Extract the producer candidate
@@ -194,14 +202,14 @@ jobs:
       - name: Upload independently validated candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: water-refresh-validated-${{ github.sha }}
+          name: water-refresh-validated-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/water-refresh-validated.tgz
           if-no-files-found: error
           retention-days: 7
 
   publish_candidate:
     needs: [gate, build_candidate, validate_candidate]
-    if: needs.gate.outputs.run == 'true' && needs.validate_candidate.result == 'success'
+    if: github.event_name != 'pull_request' && needs.gate.outputs.run == 'true' && needs.validate_candidate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -210,13 +218,13 @@ jobs:
       - name: Checkout the validated source revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
 
       - name: Download the independently validated candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: water-refresh-validated-${{ github.sha }}
+          name: water-refresh-validated-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/validated-candidate
 
       - name: Publish or update the review branch
@@ -225,7 +233,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
+          if ! git merge-base --is-ancestor origin/main "$SOURCE_SHA"; then
             echo "Producer revision does not contain current main; refusing stale publication."
             exit 1
           fi
@@ -247,9 +255,9 @@ jobs:
           git config user.name "neon-data-bot"
           git config user.email "neon-data-bot@users.noreply.github.com"
           git add data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json
-          git commit -m "data: propose validated water-chemistry refresh [bot]" -m "Produced from $GITHUB_SHA; complete roster, non-shrink baseline, deterministic index, manifest checksums, and independent validation passed."
+          git commit -m "data: propose validated water-chemistry refresh [bot]" -m "Produced from $SOURCE_SHA; complete roster, non-shrink baseline, deterministic index, manifest checksums, and independent validation passed."
           published_commit=$(git rev-parse HEAD)
-          if [[ "$(git rev-parse HEAD^)" != "$GITHUB_SHA" ]]; then
+          if [[ "$(git rev-parse HEAD^)" != "$SOURCE_SHA" ]]; then
             echo "Candidate promotion commit is not a direct child of the validated producer revision."
             exit 1
           fi
