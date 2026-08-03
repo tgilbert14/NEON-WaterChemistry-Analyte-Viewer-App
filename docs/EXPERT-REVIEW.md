@@ -12,9 +12,13 @@ recommendations:
   analytes use explicit fixed extraction units because the field source table has
   no row-level unit labels.
 - Modal relabelling is explicitly rejected. Registered missing labels require an
-  observed target label; 36 WALK mismatch identities and 12 unresolved legacy
-  TPC/TPN identities are quarantined with count/receipt bounds. The exact legacy
-  runtime removes all 48 groups (99 represented source rows) before app/index use.
+  observed target label. Signed full-fetch replay run 30852990426 expanded the
+  reviewed quarantine from 48 to 73 exact identities: 17 additional WALK-2019
+  concentration-label identities and eight additional unresolved EcoCore_CSU
+  TPC/TPN identities, all count bounded. The replay contains 75 affected source
+  rows and policy v4 changes no numeric value. The still-deployed legacy runtime
+  contains only the original 48 groups (99 represented source rows), all removed
+  before app/index use.
 - The TPC/TPN identities are not asserted to be unconverted masses. The current
   [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
   supersedes F.1, and the [product change log](https://data.neonscience.org/api/v0/products/DP1.20093.001)

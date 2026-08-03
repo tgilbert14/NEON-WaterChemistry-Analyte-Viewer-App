@@ -11,13 +11,17 @@ section is authoritative for the release candidate:
   external-lab analytes are guarded by row-level source labels; the three field
   analytes use explicit fixed extraction units because their source table has no
   per-row unit labels. Numeric values are never silently converted.
-- The exact 36 WALK alternate-label identities and 12 residual TPC/TPN
-  `milligram` identities are quarantined. The latter are unresolved legacy
-  anomalies: the current [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
+- Signed full-fetch replay run 30852990426 expanded the count-bounded quarantine
+  from the original 48 identities to 73: 17 additional WALK-2019
+  alternate-label identities and eight additional EcoCore_CSU TPC/TPN
+  `milligram` identities. The latter remain unresolved legacy anomalies: the
+  current [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
   supersedes F.1, while the [official product change log](https://data.neonscience.org/api/v0/products/DP1.20093.001)
   says EcoCore particulate C/N data were converted to `microgramsPerLiter`.
-  The candidate does not infer a conversion. Its runtime filter also removes all
-  48 collapsed groups (99 represented source rows) from the legacy app/index.
+  Policy v4 infers no conversion and changes no numeric value. The replay's 73
+  identities represent 75 source rows; the deployed legacy bundle still contains
+  only the original 48 collapsed groups (99 represented source rows), which its
+  runtime filter removes from the app/index.
 - The tracked static `data/codebook.csv` is regenerated from the fail-closed
   effective runtime view. Both build paths refresh it, and the independent
   verifier reconciles its version, provenance, complete text contract, roster,

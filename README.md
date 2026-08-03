@@ -104,7 +104,10 @@ shiny::runApp("app.R")
   row-level source labels are checked against reviewed targets; only registered missing labels
   are filled and exact audited legacy mismatches are quarantined. The three field-derived
   analytes use documented fixed extraction-unit assumptions because their source value table
-  does not supply per-row unit labels. Numeric values are never silently rescaled.
+  does not supply per-row unit labels. Policy v4 binds its 25 newly admitted quarantine
+  identities to the signed full-fetch replay/run recorded in
+  [`docs/BUILD-TEST-HANDOFF.md`](docs/BUILD-TEST-HANDOFF.md). Numeric values are never silently
+  rescaled.
 - **Below-detection values are flagged, not hidden.**
 - Regression carries explicit caveats: correlation ≠ causation, and repeated-measures p-values
   are optimistic (a lag-1 autocorrelation flag quantifies it).

@@ -45,7 +45,7 @@ run_tests <- function() {
 
   lab_raw <- rbind(
     # Registered TPN/milligram pair but a new, unaudited exact identity.
-    make_rows("CRAM", "2017-08-29T10:00:00Z", "TPN", c("4", "2"),
+    make_rows("CRAM", "2017-08-30T10:00:00Z", "TPN", c("4", "2"),
               "milligram", c("Zulu_Lab", NA_character_),
               c("ND", "0"), c("legacyData", NA_character_)),
     # Exact audited identity: reviewable evidence, not an unapproved change.

@@ -5,11 +5,29 @@
 # mismatch stops the build for scientific review.
 
 WATER_UNIT_POLICY <-
-  "explicit-targets-audited-exclusions-value-invariant-v3"
+  "explicit-targets-audited-exclusions-value-invariant-v4"
 WATER_MISSING_UNIT <- "<MISSING>"
 WATER_EXCLUDED_UNIT <- "<EXCLUDED>"
 WATER_LEGACY_BUNDLE_SHA256 <-
   "dce312128e4392aaecdba535bc92be5d9ae8f1dc0e938745b530bc2a4f7f0868"
+
+# v4 admits only the 25 exact identities (26 source rows) exposed by the
+# failed-safe full fetch below. The signed replay was independently rehashed
+# and deterministically reproduced before these count-bounded quarantines were
+# added; numeric values remain untouched and the rows remain excluded.
+WATER_UNIT_POLICY_V4_EVIDENCE <- list(
+  workflow_run = "30852990426",
+  source_sha = "60aca33c36ced33e6f381ee58a551e379acdaf26",
+  review_schema = "water-refresh-review-v1",
+  prior_unit_policy =
+    "explicit-targets-audited-exclusions-value-invariant-v3",
+  refresh_review_receipt_sha256 =
+    "0f533784f24408a938324bfb0b521e11f1b023ee59527ab1c15e0f6318c8102c",
+  unit_review_sha256 =
+    "c18b00c39f74dae90ae7253dd2371482362b5ce354169826c50dda4281202485",
+  n_new_identities = 25L,
+  n_new_source_rows = 26L
+)
 
 # Exact presentation target for every analyte in the established 34-analyte
 # bundle. The 31 external-lab analytes arrive with row-level unit metadata, so
@@ -94,20 +112,31 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
 .water_exclusion_identity_rows <- c(
   "WALK\t2019-06-18\tNH4 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tNH4 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-07-22\tNH4 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-08-13\tNH4 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-09-04\tNH4 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-16\tNH4 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-10-07\tNH4 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-11-04\tNH4 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-12-02\tNH4 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-06-18\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-07-01\tNO2 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-07-22\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-04\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-16\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-10-07\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-11-04\tNO2 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tNO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-06-18\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-07-01\tNO3+NO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-07-22\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tNO3+NO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-09-04\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-09-16\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-10-07\tNO3+NO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-11-04\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-12-02\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-06-18\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-08-13\tOrtho - P\tmicrogramsPerLiter\t2",
@@ -116,28 +145,42 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
   "WALK\t2019-10-07\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-11-04\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tOrtho - P\tmicrogramsPerLiter\t2",
+  "WALK\t2019-06-18\tTDP\tmicrogramsPerLiter\t1",
+  "WALK\t2019-07-01\tTDP\tmicrogramsPerLiter\t1",
   "WALK\t2019-07-22\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-08-13\tTDP\tmicrogramsPerLiter\t2",
+  "WALK\t2019-09-04\tTDP\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-16\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-10-07\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-11-04\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-06-18\tTP\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tTP\tmicrogramsPerLiter\t2",
+  "WALK\t2019-07-22\tTP\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tTP\tmicrogramsPerLiter\t2",
   "WALK\t2019-09-04\tTP\tmicrogramsPerLiter\t4",
+  "WALK\t2019-09-16\tTP\tmicrogramsPerLiter\t1",
+  "WALK\t2019-10-07\tTP\tmicrogramsPerLiter\t1",
   "WALK\t2019-11-04\tTP\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tTP\tmicrogramsPerLiter\t2",
+  "CRAM\t2017-05-02\tTPC\tmilligram\t1",
   "CRAM\t2017-08-29\tTPC\tmilligram\t12",
   "CUPE\t2017-07-11\tTPC\tmilligram\t2",
   "LECO\t2017-11-27\tTPC\tmilligram\t1",
   "LEWI\t2017-12-13\tTPC\tmilligram\t2",
+  "LIRO\t2017-05-01\tTPC\tmilligram\t1",
   "OKSR\t2017-05-28\tTPC\tmilligram\t2",
   "REDB\t2017-04-18\tTPC\tmilligram\t2",
   "REDB\t2017-04-25\tTPC\tmilligram\t2",
   "WALK\t2017-11-20\tTPC\tmilligram\t1",
+  "CRAM\t2017-05-02\tTPN\tmilligram\t1",
+  "CRAM\t2017-08-29\tTPN\tmilligram\t2",
+  "CUPE\t2017-07-11\tTPN\tmilligram\t1",
   "LECO\t2017-11-27\tTPN\tmilligram\t1",
+  "LEWI\t2017-12-13\tTPN\tmilligram\t1",
+  "LIRO\t2017-05-01\tTPN\tmilligram\t1",
   "OKSR\t2017-05-28\tTPN\tmilligram\t2",
+  "REDB\t2017-04-18\tTPN\tmilligram\t1",
   "REDB\t2017-04-25\tTPN\tmilligram\t2",
   "WALK\t2017-11-20\tTPN\tmilligram\t1"
 )
@@ -304,7 +347,22 @@ validate_water_unit_policy <- function() {
   rewrites <- WATER_UNIT_LABEL_REWRITES
   exclusions <- WATER_UNIT_EXCLUSION_RULES
   identities <- WATER_UNIT_EXCLUSION_IDENTITIES
+  evidence <- WATER_UNIT_POLICY_V4_EVIDENCE
   stopifnot(
+    identical(names(evidence), c(
+      "workflow_run", "source_sha", "review_schema", "prior_unit_policy",
+      "refresh_review_receipt_sha256", "unit_review_sha256",
+      "n_new_identities", "n_new_source_rows"
+    )),
+    grepl("^[0-9]+$", evidence$workflow_run),
+    grepl("^[0-9a-f]{40}$", evidence$source_sha),
+    identical(evidence$review_schema, "water-refresh-review-v1"),
+    identical(evidence$prior_unit_policy,
+              "explicit-targets-audited-exclusions-value-invariant-v3"),
+    grepl("^[0-9a-f]{64}$", evidence$refresh_review_receipt_sha256),
+    grepl("^[0-9a-f]{64}$", evidence$unit_review_sha256),
+    identical(evidence$n_new_identities, 25L),
+    identical(evidence$n_new_source_rows, 26L),
     is.character(targets), length(targets) == 34L,
     !is.null(names(targets)), !anyDuplicated(names(targets)),
     all(nzchar(names(targets))), all(nzchar(targets)),
@@ -322,6 +380,7 @@ validate_water_unit_policy <- function() {
     all(exclusions$from_unit != unname(targets[exclusions$analyte])),
     identical(names(identities), c("site", "collectDate", "analyte",
                                     "from_unit", "max_source_rows")),
+    nrow(identities) == 73L,
     !anyDuplicated(water_unit_identity_key(
       identities$site, identities$collectDate, identities$analyte,
       identities$from_unit

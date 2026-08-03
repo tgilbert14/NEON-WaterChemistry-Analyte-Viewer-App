@@ -1,5 +1,41 @@
 # Build, test, and handoff record
 
+## 2026-08-03 EDT - signed refresh replay and unit policy v4 / Codex
+
+- Full-fetch diagnostic run
+  [30852990426](https://github.com/tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App/actions/runs/30852990426)
+  ran at exact source `60aca33c36ced33e6f381ee58a551e379acdaf26`.
+  It passed the gate and six-file Connect cold start, downloaded the complete
+  public product, then failed closed before candidate publication on 25
+  previously unaudited unit identities. Production remained on the verified
+  196,856-observation baseline.
+- The retained artifact contained exactly the three canonical replay files, the
+  deterministic unit review, and its receipt. Independent rehash/replay matched
+  receipt SHA-256
+  `0f533784f24408a938324bfb0b521e11f1b023ee59527ab1c15e0f6318c8102c`
+  and review SHA-256
+  `c18b00c39f74dae90ae7253dd2371482362b5ce354169826c50dda4281202485`.
+  It covers 238,488 lab rows, 8,599 field rows, and the canonical 34-site
+  coordinate roster.
+- The replay exposed 73 non-target unit identities / 75 source rows in total.
+  Forty-eight were already audited. The 25 new identities / 26 rows belong only
+  to the two existing anomaly families: 17 WALK-2019 concentration-label
+  identities from Florida International University and eight EcoCore_CSU
+  TPC/TPN `milligram` identities. The latter remain unresolved legacy
+  particulate-unit anomalies because the fetch lacks the defensible
+  sample-volume evidence required for a mass-to-concentration conversion.
+- Unit policy v4 adds only those exact site/date/analyte/source-label identities
+  with their observed source-row counts as upper bounds. It still quarantines
+  every mismatch, changes zero numeric values, and fails on a new identity,
+  count increase, wrong EcoCore provenance, unknown analyte, or unsupported
+  missing-label repair. Replaying the signed source under v4 yields 73 audited
+  exclusions, 11,681 approved missing-label identities, and zero unapproved
+  identities.
+- Release boundary: exact-head tests, a second authenticated full fetch, clean
+  independent candidate verification, reviewer-authenticated PR, merge, and
+  live Pages/Connect proof are still required before the refreshed data can
+  replace production.
+
 ## 2026-08-03 EDT - Connect startup recovery / Codex
 
 - Merge `091a97c74ca287d68aeda5cf644246e058545692` passed exact-head CI and
