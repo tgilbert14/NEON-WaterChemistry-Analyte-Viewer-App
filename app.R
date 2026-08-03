@@ -20,15 +20,23 @@ shinyOptions(cache = cachem::cache_disk(file.path(tempdir(), "neon-cache"), max_
 
 ## ---- Data (loaded once, shared across sessions) --------------------------
 D <- readRDS("data/neon_swc.rds")
+D <- apply_runtime_water_unit_contract(D)
+message(sprintf(
+  paste0("[unit-contract] %d collapsed rows (%d represented source rows) ",
+         "quarantined; %d registered missing labels filled."),
+  D$built$n_runtime_unit_rows_excluded,
+  D$built$n_runtime_unit_source_rows_excluded,
+  D$built$n_runtime_unit_labels_rewritten
+))
 
 ## ---- App-side input QC (expert-review findings, applied at load — NO bundle
 ##      rebuild) -------------------------------------------------------------
-# Three upstream fixes the bundle's first()-wins shortcuts left open, applied
-# once here against the in-memory long frame so EVERY downstream reactive (fits,
-# STL, glm, map mean, exports, dictionary) inherits them:
-#   (1) Canonical unit per analyte (modal, not first; UV gets a real unit) —
-#       coerce swc_long$units to one string per analyte (LABEL only; values are
-#       NOT rescaled — the µg/L mixers are mislabeled mg/L-magnitude rows).
+# Three input controls are applied once here against the in-memory long frame so
+# EVERY downstream reactive (fits, STL, glm, map mean, exports, dictionary)
+# inherits them:
+#   (1) The shared fail-closed unit contract above removes exact registered
+#       legacy mismatch identities and fills only registered missing labels.
+#       Numeric values are never rescaled.
 #   (2) Plausibility gate — flag values above the per-analyte ceiling so a lone
 #       artifact (ANC 927, Fe 931) never drives a fit/STL/glm/map mean.
 #   (3) Censoring rate per analyte (already in analyte_meta) — surfaced via click.
@@ -36,7 +44,7 @@ CANON_MAP  <- canonical_units(D$swc_long)
 CEIL_TBL   <- plausibility_ceilings(D$swc_long)
 CEIL_MAP   <- ceiling_map(CEIL_TBL)
 
-# (1) stamp the canonical unit onto every long row (so axis/hover/export agree)
+# (1) reassert the reviewed target onto every retained row (axis/hover/export)
 D$swc_long$units <- unname(CANON_MAP[D$swc_long$analyte]) %|na|% D$swc_long$units
 # (2) flag plausibility on the long frame; keep the value for the audit marker,
 #     but NULL it out of the wide matrix the fits/means/STL/glm read from.
@@ -71,8 +79,7 @@ D$swc_wide <- D$swc_long |>
   dplyr::filter(!implausible) |>
   dplyr::select(site, collectDate, analyte, value) |>
   tidyr::pivot_wider(names_from = analyte, values_from = value)
-# (1)+(3) refresh analyte_meta so the dictionary export carries the canonical
-#     unit (no more NA for UV254/UV280) and a real censored fraction.
+# (1)+(3) add a real censored fraction to the already reconciled analyte metadata.
 D$analyte_meta <- D$analyte_meta |>
   dplyr::mutate(units = unname(CANON_MAP[analyte]) %|na|% units,
                 pct_below = ifelse(is.finite(n) & n > 0, n_below / n, NA_real_))
@@ -1848,7 +1855,7 @@ server <- function(input, output, session) {
   output$dl_dict <- downloadHandler(
     filename = function() "NEON-SWC-data-dictionary.csv",
     content = function(file) {
-      # Canonical units now flow from D$analyte_meta (modal, UV no longer NA);
+      # Reviewed units flow from the shared fail-closed runtime contract;
       # carry the below-detection fraction + the plausibility ceiling so the
       # exported codebook is self-describing (the FAIR codebook gap).
       dict <- ANALYTE_TBL |>
@@ -1861,7 +1868,7 @@ server <- function(input, output, session) {
       writeLines(c(
         "# NEON Surface Water Chemistry data dictionary (DP1.20093.001)",
         "# Source: NEON DP1.20093.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
-        "# units = canonical (modal) unit per analyte; below_detection rows keep the reported number (never substituted)",
+        "# units = explicit reviewed target per analyte; registered legacy mismatches are excluded and numeric values are never silently rescaled",
         "# n_below / pct_below = count / fraction of below-detection samples; plausibility_ceiling = per-analyte max(p99.9, 50x median) above which a value is excluded as an artifact"),
         file)
       # write_csv (no BOM) for the appended block: write_excel_csv would emit a

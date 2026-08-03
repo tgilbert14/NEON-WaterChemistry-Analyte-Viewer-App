@@ -37,7 +37,11 @@ real, strong relationship on first visit (Pearson r ≈ 0.86 over the full recor
 app.R                         # the whole app: bslib UI + server
 helpers.R                     # analyte names/units, colors, theme + chart helpers,
                               #   correlation_table(), fit_lm(), kfold_rmse()
+scripts/water_unit_contract.R # shared fail-closed producer/runtime unit policy
 data/neon_swc.rds             # REAL NEON SWC, precomputed (loaded once at startup)
+data/search_index.rds         # deterministic, plausibility/unit-gated network index
+data/codebook.csv             # versioned export/analyte dictionary generated with the bundle
+scripts/runtime_manifest_files.R # exact six-file deployment allowlist
 scripts/precompute_neon_data.R  # pulls SWC from the NEON public API (resumable, cached)
 scripts/build_rds_from_cache.R  # builds data/neon_swc.rds from the cache
 legacy/                       # the original 2021 app + old data files
@@ -64,6 +68,8 @@ compact bundle the app loads instantly. No runtime NEON calls, no `neonUtilities
 # from the project root, with R on PATH:
 Rscript scripts/precompute_neon_data.R     # pulls/refreshes the cache (resumable)
 Rscript scripts/build_rds_from_cache.R     # rebuilds data/neon_swc.rds from the cache
+Rscript scripts/build_search_index.R       # rebuilds the matching search index
+Rscript scripts/write_manifest.R           # writes the exact runtime manifest
 ```
 
 The cache (`data/.neon_cache/`) is git-ignored; the built `data/neon_swc.rds` is committed.
@@ -86,8 +92,12 @@ shiny::runApp("app.R")
   skew typical of water chemistry), guard at n ≥ 8, and print a multiple-comparisons caveat.
 - **The seasonal view is a real STL decomposition** of the measured monthly series — not the
   synthetic sine-wave "forecast" the original app shipped.
-- **Analyte names and units are chemically correct** (e.g. Br = bromide, not bicarbonate;
-  Cl = chloride; ANC in meq/L; pH unitless) and units are read from the data, not hard-coded.
+- **Analyte names and unit handling are explicit and fail closed** (e.g. Br = bromide, not
+  bicarbonate; Cl = chloride; ANC in meq/L; pH unitless). For the 31 external-lab analytes,
+  row-level source labels are checked against reviewed targets; only registered missing labels
+  are filled and exact audited legacy mismatches are quarantined. The three field-derived
+  analytes use documented fixed extraction-unit assumptions because their source value table
+  does not supply per-row unit labels. Numeric values are never silently rescaled.
 - **Below-detection values are flagged, not hidden.**
 - Regression carries explicit caveats: correlation ≠ causation, and repeated-measures p-values
   are optimistic (a lag-1 autocorrelation flag quantifies it).
