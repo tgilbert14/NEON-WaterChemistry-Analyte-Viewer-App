@@ -77,29 +77,30 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
 
   # ---- FAIR units (review finding #4): one canonical unit per analyte ---------
   # Pick the MODAL unit per analyte (not dplyr::first(), which left 20/34 analytes
-  # mislabeled). Then coerce every analyte to that one canonical unit:
-  #   * GENUINE µg/L rows whose analyte is canonically mg/L are divided by 1000
-  #     (true unit mismatch — converted BY VALUE, not just relabeled);
-  #   * UV absorbance analytes are stamped "absorbance units" (no NEON unit string).
-  # This makes the bundle self-consistent so the runtime no longer has to patch it.
+  # mislabeled). NEON's handful of microgramsPerLiter labels on otherwise-mg/L
+  # analytes are already attached to mg/L-magnitude values (for example, TP 0.057,
+  # not 57). They are label defects, not values awaiting conversion. Canonicalize
+  # the label only and prove below that the numeric vector remains byte-for-byte
+  # identical. UV absorbance analytes are stamped "absorbance units" because the
+  # source sometimes omits their unit string.
   canon_tbl <- raw_long %>%
     dplyr::group_by(analyte) %>%
     dplyr::summarise(canon_unit = .mode_chr(units), .groups = "drop") %>%
     dplyr::mutate(canon_unit = ifelse(analyte %in% .UV_ABS_CODES, "absorbance units", canon_unit))
   canon_map <- setNames(canon_tbl$canon_unit, canon_tbl$analyte)
 
+  values_before_unit_labels <- raw_long$value
+  relabeled <- !is.na(unname(canon_map[raw_long$analyte])) &
+    (is.na(raw_long$units) |
+       raw_long$units != unname(canon_map[raw_long$analyte]))
+
   raw_long <- raw_long %>%
     dplyr::mutate(
       canon_unit = unname(canon_map[analyte]),
-      # genuine µg/L -> mg/L conversion BY VALUE (1000 µg = 1 mg) only where the
-      # analyte's canonical unit is mg/L and THIS row was reported in µg/L
-      value = dplyr::if_else(
-        !is.na(canon_unit) & canon_unit == "milligramsPerLiter" &
-          units == "microgramsPerLiter" & is.finite(value),
-        value / 1000, value),
       units = dplyr::coalesce(canon_unit, units)
     ) %>%
     dplyr::select(-canon_unit)
+  stopifnot(identical(raw_long$value, values_before_unit_labels))
 
   # Collapse replicates -> one row per site/date/analyte, KEEPING the replicate
   # count + spread + a real below-detection flag (any rep below DL). Units are now
@@ -146,7 +147,10 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
     n_obs = nrow(swc_long), n_sites = dplyr::n_distinct(swc_long$site),
     n_analytes = dplyr::n_distinct(swc_long$analyte),
     data_through = as.character(max(swc_long$collectDate)),
-    n_below = sum(swc_long$belowDetection))
+    n_below = sum(swc_long$belowDetection),
+    unit_policy = "canonical-labels-value-invariant-v1",
+    n_unit_labels_rewritten = as.integer(sum(relabeled)),
+    n_unit_values_changed = 0L)
 
   bundle <- list(swc_long = swc_long, swc_wide = swc_wide, sites_meta = sites_meta,
                  analyte_meta = analyte_meta, built = built)
@@ -158,11 +162,25 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
 validate_bundle <- function(b) {
   need_long <- c("site","collectDate","analyte","value","value_sd","n_reps",
                  "units","source","belowDetection","labFlag")
+  units_by_analyte <- split(as.character(b$swc_long$units),
+                            as.character(b$swc_long$analyte))
+  canonical_units <- vapply(
+    units_by_analyte,
+    function(x) !anyNA(x) && all(nzchar(x)) && length(unique(x)) == 1L,
+    logical(1)
+  )
   stopifnot(all(need_long %in% names(b$swc_long)),
             inherits(b$swc_long$collectDate, "Date"),
+            length(canonical_units) > 0L,
+            all(canonical_units),
             all(c("site","siteName","domain","state","lat","long",
                   "n_obs","n_analytes","first","last") %in% names(b$sites_meta)),
-            all(c("when","product","partial","n_obs","n_sites","n_analytes") %in% names(b$built)))
+            all(c("when","product","partial","n_obs","n_sites","n_analytes",
+                  "unit_policy","n_unit_labels_rewritten",
+                  "n_unit_values_changed") %in% names(b$built)),
+            identical(b$built$unit_policy,
+                      "canonical-labels-value-invariant-v1"),
+            identical(as.integer(b$built$n_unit_values_changed), 0L))
   invisible(TRUE)
 }
 

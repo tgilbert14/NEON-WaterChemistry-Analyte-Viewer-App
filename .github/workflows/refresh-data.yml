@@ -122,8 +122,15 @@ jobs:
       - name: Verify the producer candidate
         run: |
           set -euo pipefail
-          Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
-          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/build_search_index.R"); parse("scripts/verify_refresh_candidate.R")'
+          Rscript --vanilla tests/test_runtime_manifest_files.R
+          Rscript --vanilla tests/test_unit_canonicalization.R
+          verify_args=("$RUNNER_TEMP/water-baseline.rds")
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]] || \
+             [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.skip_download }}" != "true" ]]; then
+            verify_args+=("--require-current-unit-contract")
+          fi
+          Rscript --vanilla scripts/verify_refresh_candidate.R "${verify_args[@]}"
+          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_unit_canonicalization.R")'
           git diff --check
 
       - name: Package the producer candidate
@@ -175,17 +182,24 @@ jobs:
       - name: Install validator dependency
         uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          packages: jsonlite
+          packages: jsonlite, dplyr, tidyr, tibble
           pak-version: stable
           dependencies: '"hard"'
-          cache-version: water-refresh-validator-v1
+          cache-version: water-refresh-validator-v2
           install-pandoc: "false"
           install-quarto: "false"
 
       - name: Independently verify exact candidate bytes
         run: |
           set -euo pipefail
-          Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
+          Rscript --vanilla tests/test_runtime_manifest_files.R
+          Rscript --vanilla tests/test_unit_canonicalization.R
+          verify_args=("$RUNNER_TEMP/water-baseline.rds")
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]] || \
+             [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.skip_download }}" != "true" ]]; then
+            verify_args+=("--require-current-unit-contract")
+          fi
+          Rscript --vanilla scripts/verify_refresh_candidate.R "${verify_args[@]}"
           unexpected=$(git diff --name-only | grep -Ev '^(data/neon_swc[.]rds|data/search_index[.]rds|data/codebook[.]csv|manifest[.]json)$' || true)
           if [ -n "$unexpected" ]; then
             echo "Candidate changed paths outside the publication allowlist:"

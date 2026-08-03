@@ -5,6 +5,11 @@
 
 fail <- function(...) stop(sprintf(...), call. = FALSE)
 need <- function(ok, ...) if (!isTRUE(ok)) fail(...)
+show_set <- function(x) if (length(x)) paste(x, collapse = ", ") else "<none>"
+
+args <- commandArgs(trailingOnly = TRUE)
+require_unit_contract <- "--require-current-unit-contract" %in% args
+positional_args <- args[!startsWith(args, "--")]
 
 required_paths <- c(
   "app.R", "helpers.R", "data/codebook.csv",
@@ -52,9 +57,8 @@ need(!isTRUE(bundle$built$partial), "Candidate build receipt is partial.")
 need(identical(as.character(bundle$built$product), "DP1.20093.001"),
      "Unexpected NEON product in build receipt.")
 
-args <- commandArgs(trailingOnly = TRUE)
-if (length(args) && nzchar(args[[1]])) {
-  baseline <- tryCatch(readRDS(args[[1]]), error = function(e) fail(
+if (length(positional_args) && nzchar(positional_args[[1]])) {
+  baseline <- tryCatch(readRDS(positional_args[[1]]), error = function(e) fail(
     "Cannot read validation baseline: %s", conditionMessage(e)
   ))
   baseline_sites <- sort(unique(as.character(baseline$sites_meta$site)))
@@ -85,13 +89,49 @@ need(identical(as.character(index$built$when),
                as.character(bundle$built$when)),
      "Search index provenance is not derived from the source bundle.")
 
+# Legacy committed bundles predate the canonical-unit receipt, so code-only PR
+# validation may exercise them while the exact-source fixture tests the new
+# builder. Every real full-refresh candidate must carry and satisfy this receipt.
+has_unit_contract <- !is.null(bundle$built$unit_policy)
+if (require_unit_contract || has_unit_contract) {
+  need(has_unit_contract,
+       "Candidate lacks the required canonical-unit policy receipt.")
+  need(identical(as.character(bundle$built$unit_policy),
+                 "canonical-labels-value-invariant-v1"),
+       "Candidate carries an unexpected canonical-unit policy: %s.",
+       show_set(as.character(bundle$built$unit_policy)))
+  need(identical(as.integer(bundle$built$n_unit_values_changed), 0L),
+       "Candidate reports numeric value changes during unit canonicalization.")
+  need(length(bundle$built$n_unit_labels_rewritten) == 1L &&
+         is.finite(as.numeric(bundle$built$n_unit_labels_rewritten)) &&
+         as.numeric(bundle$built$n_unit_labels_rewritten) >= 0,
+       "Candidate has an invalid unit-label rewrite count.")
+
+  units_by_analyte <- split(as.character(bundle$swc_long$units),
+                            as.character(bundle$swc_long$analyte))
+  noncanonical <- names(units_by_analyte)[!vapply(
+    units_by_analyte,
+    function(x) !anyNA(x) && all(nzchar(x)) && length(unique(x)) == 1L,
+    logical(1)
+  )]
+  need(!length(noncanonical),
+       "Candidate analytes lack one canonical non-missing unit: %s.",
+       show_set(noncanonical))
+}
+
 if (!requireNamespace("jsonlite", quietly = TRUE))
   fail("jsonlite is required to verify manifest.json.")
 manifest <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
 manifest_files <- names(manifest$files)
 expected_manifest_files <- sort(setdiff(required_paths, "manifest.json"))
-need(identical(sort(manifest_files), expected_manifest_files),
-     "Manifest runtime file allowlist changed.")
+missing_manifest_files <- setdiff(expected_manifest_files, manifest_files)
+unexpected_manifest_files <- setdiff(manifest_files, expected_manifest_files)
+need(!length(missing_manifest_files) && !length(unexpected_manifest_files),
+     paste0(
+       "Manifest runtime file allowlist changed (missing: %s; ",
+       "unexpected: %s)."
+     ),
+     show_set(missing_manifest_files), show_set(unexpected_manifest_files))
 for (path in manifest_files) {
   actual <- unname(tools::md5sum(path))
   declared <- manifest$files[[path]]$checksum
@@ -113,7 +153,12 @@ need(grepl("packagemanager[.]posit[.]co/cran/__linux__/jammy/2026-07-15",
      "Manifest does not carry the pinned 2026-07-15 package snapshot.")
 
 cat(sprintf(
-  "Verified water-chemistry candidate: %d observations, %d analytes, %d sites, through %s.\n",
+  paste0(
+    "Verified water-chemistry candidate: %d observations, %d analytes, ",
+    "%d sites, through %s; unit policy %s (%s label rewrites, 0 value changes).\n"
+  ),
   nrow(bundle$swc_long), length(unique(bundle$swc_long$analyte)),
-  length(site_roster), bundle$built$data_through
+  length(site_roster), bundle$built$data_through,
+  if (has_unit_contract) bundle$built$unit_policy else "legacy-not-required",
+  if (has_unit_contract) bundle$built$n_unit_labels_rewritten else "n/a"
 ))
