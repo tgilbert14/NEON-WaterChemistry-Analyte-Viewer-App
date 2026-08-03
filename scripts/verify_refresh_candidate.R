@@ -757,6 +757,49 @@ need(grepl("packagemanager[.]posit[.]co/cran/__linux__/jammy/2026-07-15",
            manifest_text),
      "Manifest does not carry the pinned 2026-07-15 package snapshot.")
 
+lock_path <- file.path("config", "connect-manifest-packages-v1.json")
+need(file.exists(lock_path), "Reviewed Connect package-lock fixture is missing.")
+connect_lock <- jsonlite::fromJSON(lock_path, simplifyVector = FALSE)
+snapshot <- "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
+need(identical(connect_lock$schema_version, 1L) &&
+       identical(connect_lock$platform, "4.5.2") &&
+       identical(connect_lock$locale, "C") &&
+       identical(connect_lock$repository, snapshot) &&
+       identical(connect_lock$source_commit,
+                 "31b2e921a80aa262741c44f2282c781f394e1a90"),
+     "Reviewed Connect package-lock metadata is invalid.")
+need(identical(manifest$platform, connect_lock$platform) &&
+       identical(manifest$locale, connect_lock$locale),
+     "Manifest R platform/locale differs from the reviewed Connect lock.")
+need(length(packages) == 103L &&
+       identical(sort(packages), sort(names(connect_lock$packages))),
+     "Manifest package-name closure differs from the reviewed Connect lock.")
+manifest_sources <- vapply(
+  manifest$packages, function(record) record$Source, character(1)
+)
+manifest_repositories <- vapply(
+  manifest$packages, function(record) record$Repository, character(1)
+)
+manifest_remote_types <- vapply(
+  manifest$packages,
+  function(record) {
+    value <- record$description$RemoteType
+    if (is.null(value)) "" else value
+  },
+  character(1)
+)
+manifest_remote_repositories <- vapply(
+  manifest$packages, function(record) record$description$RemoteRepos,
+  character(1)
+)
+need(all(manifest_sources == "CRAN") &&
+       all(manifest_repositories == snapshot) &&
+       all(manifest_remote_repositories == snapshot) &&
+       !any(manifest_remote_types == "url"),
+     "Manifest package lock must use only the fixed standard CRAN snapshot.")
+need(identical(manifest$packages, connect_lock$packages),
+     "Manifest package records differ from the reviewed Connect lock.")
+
 cat(sprintf(
   paste0(
     "Verified water-chemistry candidate: %d observations, %d analytes, ",

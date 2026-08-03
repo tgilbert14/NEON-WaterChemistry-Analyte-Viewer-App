@@ -30,6 +30,12 @@ copy_fixture_file <- function(path) {
 }
 
 invisible(lapply(runtime_files, copy_fixture_file))
+dir.create(file.path(fixture_root, "config"), recursive = TRUE, showWarnings = FALSE)
+stopifnot(file.copy(
+  file.path(repo_root, "config", "connect-manifest-packages-v1.json"),
+  file.path(fixture_root, "config", "connect-manifest-packages-v1.json"),
+  overwrite = TRUE
+))
 invisible(lapply(
   c("scripts/verify_refresh_candidate.R", "scripts/water_unit_contract.R"),
   function(path) if (!file.exists(file.path(fixture_root, path))) {
@@ -102,25 +108,21 @@ write_fixture_manifest <- function() {
   files <- stats::setNames(lapply(runtime_files, function(path) {
     list(checksum = unname(tools::md5sum(file.path(fixture_root, path))))
   }), runtime_files)
-  snapshot <- paste0(
-    "https://packagemanager.posit.co/cran/__linux__/jammy/",
-    "2026-07-15"
+  lock <- jsonlite::fromJSON(
+    file.path(fixture_root, "config", "connect-manifest-packages-v1.json"),
+    simplifyVector = FALSE
   )
-  package_names <- c(
-    "shiny", "bslib", "bsicons", "dplyr", "tidyr", "readr", "lubridate",
-    "plotly", "DT", "ggplot2", "shinycssloaders", "leaflet", "shinyjs",
-    "cachem", "digest", "htmltools", "jsonlite", "tibble"
-  )
-  packages <- stats::setNames(lapply(package_names, function(package) {
-    list(
-      Source = "CRAN", Repository = snapshot,
-      description = list(Package = package, Version = "fixture")
-    )
-  }), package_names)
   jsonlite::write_json(
-    list(version = 1L, packages = packages, files = files, users = list()),
+    list(
+      version = 1L, locale = lock$locale, platform = lock$platform,
+      metadata = list(
+        appmode = "shiny", primary_rmd = NULL, primary_html = NULL,
+        content_category = NULL, has_parameters = FALSE
+      ),
+      packages = lock$packages, files = files, users = list()
+    ),
     file.path(fixture_root, "manifest.json"),
-    auto_unbox = TRUE, pretty = TRUE
+    auto_unbox = TRUE, pretty = TRUE, null = "null"
   )
 }
 
@@ -143,7 +145,9 @@ run_verifier <- function(expected_pattern = NULL) {
   if (is.null(status)) status <- 0L
   output_text <- paste(output, collapse = "\n")
   if (is.null(expected_pattern)) {
-    stopifnot(identical(status, 0L))
+    if (!identical(status, 0L)) {
+      stop(sprintf("Valid verifier fixture failed:\n%s", output_text), call. = FALSE)
+    }
   } else {
     stopifnot(status != 0L, grepl(expected_pattern, output_text, fixed = TRUE))
   }
@@ -323,9 +327,37 @@ jsonlite::write_json(
 )
 run_verifier("Manifest is missing direct runtime package(s): htmltools")
 
+reset_fixture()
+manifest <- jsonlite::fromJSON(manifest_path, simplifyVector = FALSE)
+manifest$packages$shiny$description$Version <- "999.0.0"
+jsonlite::write_json(
+  manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE, null = "null"
+)
+run_verifier("Manifest package records differ from the reviewed Connect lock")
+
+reset_fixture()
+manifest <- jsonlite::fromJSON(manifest_path, simplifyVector = FALSE)
+manifest$packages$sf$Source <- "URL"
+manifest$packages$sf$description$RemoteType <- "url"
+jsonlite::write_json(
+  manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE, null = "null"
+)
+run_verifier("Manifest package lock must use only the fixed standard CRAN snapshot")
+
+reset_fixture()
+manifest <- jsonlite::fromJSON(manifest_path, simplifyVector = FALSE)
+manifest$packages$dplyr$Repository <-
+  "https://packagemanager.posit.co/cran/__linux__/jammy/latest"
+manifest$packages$dplyr$description$RemoteRepos <-
+  "https://packagemanager.posit.co/cran/__linux__/jammy/latest"
+jsonlite::write_json(
+  manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE, null = "null"
+)
+run_verifier("Manifest contains a moving package repository")
+
 cat(paste0(
   "Independent verifier rejected fractional/malformed bundle and index ",
   "receipts; complete index drift; adversarial codebook version, provenance, ",
-  "roster, unit, count, and reviewed-text mutations; plus a missing direct ",
-  "runtime package.\n"
+  "roster, unit, count, and reviewed-text mutations; plus package removal, ",
+  "version drift, direct URL sources, and moving repositories.\n"
 ))

@@ -1,5 +1,55 @@
 # Build, test, and handoff record
 
+## 2026-08-03 EDT - Connect startup recovery / Codex
+
+- Merge `091a97c74ca287d68aeda5cf644246e058545692` passed exact-head CI and
+  GitHub Pages, but the public Connect content returned Posit's `Startup Error`
+  page after automatic publication. The full Water refresh was held; no new NEON
+  candidate was dispatched or published against the failed runtime.
+- The merged six-file runtime was independently cold-sourced with isolated
+  home/cache/tmp and `LC_ALL=C`. It returned a `shiny.appobj` with the exact
+  reviewed receipts: 48 collapsed / 99 represented unit rows quarantined,
+  11,679 labels filled, 198 plausibility exclusions, and zero PRPO high-variance
+  exclusions. This ruled out an ordinary local top-level source failure from the
+  manifest file set, locale, committed data, or scientific contract; exact Ubuntu
+  and real Connect proof remained required.
+- The evidence isolated the leading recovery boundary to package restoration or
+  package/runtime compatibility: the failed manifest retained the
+  same 103 package names but changed 35 versions and encoded `classInt`, `raster`,
+  `s2`, `sf`, `sp`, `terra`, `units`, and `wk` as direct URL/source records. The
+  prior healthy Water manifest and healthy suite siblings used zero URL records.
+- The recovery preserves all merged scientific/data logic and every data byte;
+  the only app change computes and publishes readiness/receipt metadata. It
+  restores the prior known-good package records from source commit
+  `31b2e921a80aa262741c44f2282c781f394e1a90`, normalizes both repository fields to
+  the fixed Posit jammy `2026-07-15` snapshot, and records them in
+  `config/connect-manifest-packages-v1.json`. `write_manifest.R` regenerates only
+  the exact six file checksums, refuses dependency-name drift, overlays the lock,
+  requires R 4.5.2 / locale C / 103 standard CRAN records, forbids URL and moving
+  repositories, and retains terra 1.8-50 for the documented GDAL boundary.
+- The independent candidate verifier now requires semantic identity with the lock.
+  Adversarial fixtures cover package removal, version mutation, URL-source drift,
+  and moving repositories in addition to the existing scientific/data attacks.
+- A new required `connect_cold_start` job derives all `name@version` specs from the
+  lock, restores the complete graph in a clean Ubuntu 22.04/R 4.5.2 job, verifies
+  every installed version, cold-sources only the six manifest files, starts a real
+  localhost Shiny process, and requires `water-chemistry-v1` from HTTP. The normal
+  producer also runs the six-file source/HTTP gate before packaging.
+- `.github/workflows/post-deploy.yml` now waits through Connect cold start after
+  every main publication, rejects `Startup Error` even when returned with HTTP
+  200, requires the Water readiness marker plus an exact receipt derived from all
+  six committed runtime checksums, checks Pages, and maintains a production-health
+  issue on failure/recovery. Its bounded retry budget leaves explicit margin for
+  outage-issue handling before the 35-minute job timeout.
+- Local evidence: package-lock, allowlist, unit-contract, and backup-recovery tests
+  passed; the exact six-file source and localhost HTTP boot passed with the receipts
+  above; changed R and shell files parse; both workflows parse as YAML; and
+  `git diff --check` passes. The full index/adversarial verifier remains intentionally
+  delegated to exact-head Ubuntu CI because the promoted search-index bytes contain
+  Linux/OpenBLAS floating representations that do not exact-recompute on macOS.
+- Required release boundary: exact-head clean-restore CI, independent review, merge,
+  real Connect semantic recovery, then—and only then—the held full NEON refresh.
+
 ## 2026-08-03 EDT - manifest allowlist and unit-contract follow-up / Codex
 
 - Audited scheduled run 30821462254 at source

@@ -18,6 +18,14 @@ source("helpers.R")
 options(shiny.sanitize.errors = TRUE)                 # never leak a raw R error to the page
 shinyOptions(cache = cachem::cache_disk(file.path(tempdir(), "neon-cache"), max_size = 50 * 1024^2))
 
+WATER_RUNTIME_FILES <- sort(c(
+  "app.R", "helpers.R", "scripts/water_unit_contract.R",
+  "data/codebook.csv", "data/neon_swc.rds", "data/search_index.rds"
+))
+WATER_RUNTIME_RECEIPT <- paste(
+  unname(tools::md5sum(WATER_RUNTIME_FILES)), collapse = "."
+)
+
 ## ---- Data (loaded once, shared across sessions) --------------------------
 D <- readRDS("data/neon_swc.rds")
 D <- apply_runtime_water_unit_contract(D)
@@ -814,6 +822,8 @@ ui <- page_fillable(
   fillable = FALSE,
   tags$head(tags$script(APP_JS),
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
+            tags$meta(name = "ddl-app-ready", content = "water-chemistry-v1"),
+            tags$meta(name = "ddl-runtime-receipt", content = WATER_RUNTIME_RECEIPT),
             # Client-side Google Fonts delivery (non-blocking, display=swap) — the theme
             # names Inter/Inter Tight as plain families (no server-side font_google
             # download at boot); the real glyphs load here in the browser. See §4 note above.
