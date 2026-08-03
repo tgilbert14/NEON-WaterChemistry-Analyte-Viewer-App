@@ -42,6 +42,9 @@ data/neon_swc.rds             # REAL NEON SWC, precomputed (loaded once at start
 data/search_index.rds         # deterministic, plausibility/unit-gated network index
 data/codebook.csv             # versioned export/analyte dictionary generated with the bundle
 scripts/runtime_manifest_files.R # exact six-file deployment allowlist
+config/connect-manifest-packages-v1.json # reviewed Connect/R 4.5.2 package lock
+scripts/verify_connect_runtime.R # checksum/package/six-file cold-source gate
+scripts/connect_runtime_smoke.sh # real localhost Shiny HTTP cold boot
 scripts/precompute_neon_data.R  # pulls SWC from the NEON public API (resumable, cached)
 scripts/build_rds_from_cache.R  # builds data/neon_swc.rds from the cache
 legacy/                       # the original 2021 app + old data files
@@ -69,10 +72,14 @@ compact bundle the app loads instantly. No runtime NEON calls, no `neonUtilities
 Rscript scripts/precompute_neon_data.R     # pulls/refreshes the cache (resumable)
 Rscript scripts/build_rds_from_cache.R     # rebuilds data/neon_swc.rds from the cache
 Rscript scripts/build_search_index.R       # rebuilds the matching search index
-Rscript scripts/write_manifest.R           # writes the exact runtime manifest
+Rscript scripts/write_manifest.R           # refreshes file MD5s; preserves package lock
 ```
 
 The cache (`data/.neon_cache/`) is git-ignored; the built `data/neon_swc.rds` is committed.
+Ordinary data/runtime rebuilds never regenerate Connect package versions. Dependency
+changes require a separate review of `config/connect-manifest-packages-v1.json`; CI
+restores all 103 locked versions on Ubuntu 22.04/R 4.5.2 and cold-boots the exact
+six-file app before a refresh candidate can publish.
 
 ---
 

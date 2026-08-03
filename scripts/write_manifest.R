@@ -1,17 +1,19 @@
 # ===========================================================================
 # write_manifest.R — (re)generate manifest.json for Posit Connect Cloud.
 #
-# RUN THIS after ANY change to runtime dependencies or the committed data set,
-# then COMMIT manifest.json — Connect Cloud reads the committed manifest, so a
-# stale manifest restores the OLD package set or serves yesterday's data.
+# RUN THIS after ANY change to a committed runtime file, then COMMIT
+# manifest.json. Connect Cloud reads the committed manifest, so stale file
+# checksums can serve yesterday's data. The committed package-lock fixture is
+# an explicit release lock: ordinary data rebuilds preserve it byte-for-byte.
+# A dependency change therefore requires a separately reviewed fixture update.
 #
 #   Rscript scripts/write_manifest.R
 #
 # This app is a single-file Shiny app (app.R) + helpers.R + the committed data
 # bundle. appFiles is scoped to exactly those runtime files so the deploy stays
-# LEAN: the heavy pull/build packages (neonUtilities, arrow, data.table) are
-# NEVER referenced at runtime, so they must never appear in the manifest. The
-# HARD GATE at the bottom stop()s the build if any of them leak in.
+# lean. The heavy pull/build packages neonUtilities and arrow are never
+# referenced at runtime and must never appear in the manifest. data.table is a
+# genuine plotly runtime dependency and is expected.
 # ===========================================================================
 if (!requireNamespace("rsconnect", quietly = TRUE)) stop("install.packages('rsconnect') first")
 if (!requireNamespace("jsonlite", quietly = TRUE))  stop("install.packages('jsonlite') first")
@@ -19,31 +21,95 @@ if (!requireNamespace("jsonlite", quietly = TRUE))  stop("install.packages('json
 source(file.path("scripts", "runtime_manifest_files.R"), local = TRUE)
 app_files <- water_runtime_files()
 
-rsconnect::writeManifest(appDir = ".", appPrimaryDoc = "app.R", appFiles = app_files)
+lock_path <- file.path("config", "connect-manifest-packages-v1.json")
+if (!file.exists(lock_path)) {
+  stop("The reviewed Connect package-lock fixture is missing.", call. = FALSE)
+}
 
-# ---- pin terra to the last release before the GDAL-3.8 multidim code (1.8-54) ----
-# terra >= 1.8-54 ships gdal_multidimensional.cpp using a GDAL 3.8 call unguarded in
-# releases, so it FAILS to compile against Connect Cloud's GDAL 3.4.1. Connect compiles
-# from source regardless of repo. 1.8-50 is the last release before 1.8-54: it compiles
-# on 3.4.1 and still satisfies raster's terra (>= 1.8-5). terra/raster are install-only
-# (leaflet -> raster -> terra; app never calls terra) -> zero runtime impact. Also pin
-# the repo to the dated RSPM jammy snapshot used by validation.
-local({
-  mm <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
-  if (!is.null(mm$packages$terra)) {
-    mm$packages$terra$description$Version <- "1.8-50"
-    if (!is.null(mm$packages$terra$description$RemoteSha)) mm$packages$terra$description$RemoteSha <- "1.8-50"
-    jsonlite::write_json(mm, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null")
-  }
-  mtxt <- readLines("manifest.json", warn = FALSE)
-  snapshot <- "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
-  mtxt <- gsub("https://cloud.r-project.org", snapshot, mtxt, fixed = TRUE)
-  mtxt <- gsub("https://cran.rstudio.com", snapshot, mtxt, fixed = TRUE)
-  mtxt <- gsub("https://packagemanager.posit.co/cran/latest", snapshot, mtxt, fixed = TRUE)
-  mtxt <- gsub("https://packagemanager.posit.co/cran/__linux__/jammy/latest", snapshot, mtxt, fixed = TRUE)
-  writeLines(mtxt, "manifest.json")
-  cat("Pinned terra to 1.8-50 + dated RSPM jammy snapshot.\n")
-})
+locked <- jsonlite::fromJSON(lock_path, simplifyVector = FALSE)
+snapshot <- "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
+if (!identical(locked$schema_version, 1L) ||
+    !identical(locked$platform, "4.5.2") ||
+    !identical(locked$locale, "C") ||
+    !identical(locked$repository, snapshot) ||
+    !identical(locked$source_commit,
+               "31b2e921a80aa262741c44f2282c781f394e1a90") ||
+    !length(locked$packages)) {
+  stop("The reviewed Connect package-lock fixture metadata is invalid.",
+       call. = FALSE)
+}
+
+locked_names <- sort(names(locked$packages))
+locked_sources <- vapply(
+  locked$packages,
+  function(record) if (is.null(record$Source)) "" else record$Source,
+  character(1)
+)
+locked_remote_types <- vapply(
+  locked$packages,
+  function(record) {
+    value <- record$description$RemoteType
+    if (is.null(value)) "" else value
+  },
+  character(1)
+)
+locked_repositories <- vapply(
+  locked$packages, function(record) record$Repository, character(1)
+)
+locked_remote_repositories <- vapply(
+  locked$packages, function(record) record$description$RemoteRepos, character(1)
+)
+locked_versions <- vapply(
+  locked$packages, function(record) record$description$Version, character(1)
+)
+locked_remote_shas <- vapply(
+  locked$packages,
+  function(record) {
+    value <- record$description$RemoteSha
+    if (is.null(value)) "" else value
+  },
+  character(1)
+)
+standard <- locked_remote_types == "standard"
+if (length(locked_names) != 103L ||
+    any(locked_sources != "CRAN") ||
+    any(locked_remote_types == "url") ||
+    any(locked_repositories != snapshot) ||
+    any(locked_remote_repositories != snapshot) ||
+    any(standard & locked_remote_shas != locked_versions)) {
+  stop("The reviewed Connect lock must contain 103 exact, dated, standard CRAN records.",
+       call. = FALSE)
+}
+if (!identical(locked$packages$terra$description$Version, "1.8-50")) {
+  stop("The reviewed Connect lock must retain terra 1.8-50 for GDAL 3.4 compatibility.",
+       call. = FALSE)
+}
+
+# Generate fresh file checksums and independently discover the package-name
+# closure. Refuse dependency drift, then restore the reviewed package metadata.
+rsconnect::writeManifest(appDir = ".", appPrimaryDoc = "app.R", appFiles = app_files)
+generated <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
+generated_names <- sort(names(generated$packages))
+if (!identical(generated_names, locked_names)) {
+  added <- setdiff(generated_names, locked_names)
+  removed <- setdiff(locked_names, generated_names)
+  stop(sprintf(
+    paste0("Runtime dependency-name drift requires a separately reviewed Connect lock update. ",
+           "Added: %s; removed: %s"),
+    if (length(added)) paste(added, collapse = ", ") else "<none>",
+    if (length(removed)) paste(removed, collapse = ", ") else "<none>"
+  ), call. = FALSE)
+}
+generated$packages <- locked$packages
+generated$platform <- locked$platform
+generated$locale <- locked$locale
+jsonlite::write_json(
+  generated, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null"
+)
+cat(sprintf(
+  "Refreshed six runtime checksums and preserved %d reviewed Connect package records.\n",
+  length(locked_names)
+))
 
 # ---- HARD GATE: a leaked heavy package must never commit silently ----------
 # neonUtilities + arrow are the data-PULL packages: they are referenced ONLY in

@@ -33,13 +33,19 @@ The explicit runtime contract is exactly `app.R`, `helpers.R`,
 3. It reads `manifest.json`, restores packages, and serves. Auto-republishes on every push.
 4. Copy the published URL → set `APP_URL` in `docs/index.html`.
 
-Regenerate the manifest whenever runtime code, data, or dependencies change:
+Refresh the manifest whenever a runtime file changes:
 ```sh
 Rscript --vanilla scripts/write_manifest.R
 ```
 
 Do not hand-write an `appFiles` vector: the script and its regression share the
-single six-file allowlist and enforce pinned package sources/checksums.
+single six-file allowlist and enforce pinned package sources/checksums. Ordinary
+runtime/data rebuilds preserve the reviewed 103-package graph in
+`config/connect-manifest-packages-v1.json`; a dependency change requires a
+separately reviewed lock update. Pull requests restore that exact graph on Ubuntu
+22.04/R 4.5.2, cold-source the six files, start Shiny, and require the Water-specific
+HTTP readiness marker. After a main push, `post-deploy.yml` independently rejects
+Posit host error pages and opens/updates a production-health issue if needed.
 
 **Cold start:** the free tier sleeps. The landing page's pre-warm `fetch(APP_URL)` on load wakes
 it while the visitor reads, so the app is usually warm by the time they click Launch.

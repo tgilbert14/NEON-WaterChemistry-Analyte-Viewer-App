@@ -1,14 +1,9 @@
 {
-  "version": 1,
-  "locale": "C",
+  "schema_version": 1,
   "platform": "4.5.2",
-  "metadata": {
-    "appmode": "shiny",
-    "primary_rmd": null,
-    "primary_html": null,
-    "content_category": null,
-    "has_parameters": false
-  },
+  "locale": "C",
+  "repository": "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15",
+  "source_commit": "31b2e921a80aa262741c44f2282c781f394e1a90",
   "packages": {
     "DBI": {
       "Source": "CRAN",
@@ -3492,26 +3487,5 @@
         "RemoteSha": "2.3.12"
       }
     }
-  },
-  "files": {
-    "app.R": {
-      "checksum": "4980700e871daa3d75860bb8c1057c6b"
-    },
-    "data/codebook.csv": {
-      "checksum": "fe20b84b9377291fe9fb77f39091d464"
-    },
-    "data/neon_swc.rds": {
-      "checksum": "8dceb262af0eed45178bbdb21d847cc6"
-    },
-    "data/search_index.rds": {
-      "checksum": "7eb868669888d79de24c655794c63e9f"
-    },
-    "helpers.R": {
-      "checksum": "4e0a24857faf07fc31a6cbc2247adae2"
-    },
-    "scripts/water_unit_contract.R": {
-      "checksum": "f26a5c12398a86100f491fb89c1e396b"
-    }
-  },
-  "users": null
+  }
 }

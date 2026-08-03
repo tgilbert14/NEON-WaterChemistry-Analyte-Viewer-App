@@ -62,6 +62,49 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+  connect_cold_start:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the immutable source revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Derive the exact reviewed package specifications
+        id: lock_specs
+        run: |
+          set -euo pipefail
+          specs=$(jq -r '[.packages | to_entries[] | .key + "@" + .value.description.Version] | join(", ")' \
+            config/connect-manifest-packages-v1.json)
+          test -n "$specs"
+          echo "packages=$specs" >> "$GITHUB_OUTPUT"
+
+      - name: Set up pinned R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: "4.5.2"
+          use-public-rspm: false
+
+      - name: Restore the exact reviewed Connect package graph
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          packages: ${{ steps.lock_specs.outputs.packages }}
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: water-connect-lock-v1-${{ hashFiles('config/connect-manifest-packages-v1.json') }}
+          install-pandoc: "false"
+          install-quarto: "false"
+
+      - name: Cold-boot the exact six-file Connect runtime
+        run: bash scripts/connect_runtime_smoke.sh --require-exact-packages
+
   build_candidate:
     needs: gate
     if: needs.gate.outputs.run == 'true'
@@ -134,6 +177,7 @@ jobs:
         run: |
           set -euo pipefail
           Rscript --vanilla tests/test_runtime_manifest_files.R
+          Rscript --vanilla tests/test_connect_package_lock.R
           Rscript --vanilla tests/test_unit_canonicalization.R
           Rscript --vanilla tests/test_save_bundle_recovery.R
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
@@ -148,8 +192,12 @@ jobs:
             echo "Verifier accepted an extra positional argument."
             exit 1
           fi
-          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R")'
+          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/verify_connect_runtime.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_connect_package_lock.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R")'
+          bash -n scripts/connect_runtime_smoke.sh scripts/post_deploy_smoke.sh
           git diff --check
+
+      - name: Cold-boot the candidate in its six-file runtime envelope
+        run: bash scripts/connect_runtime_smoke.sh
 
       - name: Package the producer candidate
         run: |
@@ -236,6 +284,7 @@ jobs:
         run: |
           set -euo pipefail
           Rscript --vanilla tests/test_runtime_manifest_files.R
+          Rscript --vanilla tests/test_connect_package_lock.R
           Rscript --vanilla tests/test_unit_canonicalization.R
           Rscript --vanilla tests/test_save_bundle_recovery.R
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
@@ -292,8 +341,8 @@ jobs:
           echo "Committed PR index, codebook, and manifest exactly equal the validated rebuild."
 
   publish_candidate:
-    needs: [gate, build_candidate, validate_candidate]
-    if: github.event_name != 'pull_request' && needs.gate.outputs.run == 'true' && needs.validate_candidate.result == 'success'
+    needs: [gate, connect_cold_start, build_candidate, validate_candidate]
+    if: github.event_name != 'pull_request' && needs.gate.outputs.run == 'true' && needs.connect_cold_start.result == 'success' && needs.validate_candidate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: write
