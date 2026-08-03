@@ -16,8 +16,12 @@ OUT <- file.path("data", "neon_swc.rds")
 # Baseline from the CURRENTLY COMMITTED bundle (on disk before we overwrite it),
 # so the guard is relative to what we already ship rather than a magic number.
 base <- tryCatch(readRDS(OUT)$built, error = function(e) NULL)
+base_bundle <- tryCatch(readRDS(OUT), error = function(e) NULL)
 base_obs   <- as.numeric(base$n_obs   %||% 0)
 base_sites <- as.numeric(base$n_sites %||% 0)
+base_roster <- sort(unique(as.character(base_bundle$sites_meta$site)))
+if (!length(base_roster) || anyNA(base_roster) || any(!nzchar(base_roster)))
+  stop("Committed bundle has no trustworthy site roster; refusing an unauditable refresh.")
 cat(sprintf("Baseline (committed): %d obs, %d sites, through %s\n",
             base_obs, base_sites, base$data_through %||% "—"))
 
@@ -29,18 +33,23 @@ if (is.null(b)) stop("Refresh produced no readable data/neon_swc.rds — abortin
 cat(sprintf("Rebuilt: %d obs, %d sites, partial=%s, through %s\n",
             b$n_obs, b$n_sites, isTRUE(b$partial), b$data_through %||% "—"))
 
-# Completeness guard: refuse to ship a bundle that lost a meaningful share of the
-# record (mass API failure). A few missing site-months are fine; a collapse is not.
-# Floors are relative to the committed baseline so they self-adjust as data grows.
-floor_obs   <- as.integer(0.90 * base_obs)
-floor_sites <- max(28L, as.integer(0.90 * base_sites))   # 34 sites; tolerate a couple offline
-if (b$n_obs < floor_obs)
-  stop(sprintf("Only %d obs (< %d = 90%% of the committed %d) — aborting before commit so a mass NEON-pull failure can't ship a shrunken bundle.",
-               b$n_obs, floor_obs, base_obs))
-if (b$n_sites < floor_sites)
-  stop(sprintf("Only %d sites (< %d) — aborting before commit so a mass NEON-pull failure can't ship a shrunken bundle.",
-               b$n_sites, floor_sites))
+# Completeness guard: a scheduled candidate must retain the exact committed
+# network roster and may not silently lose observations. A legitimate NEON
+# correction that contracts history is reviewable, but never auto-promotable.
+candidate <- readRDS(OUT)
+candidate_roster <- sort(unique(as.character(candidate$sites_meta$site)))
+if (!identical(candidate_roster, base_roster)) {
+  stop(sprintf(
+    "Candidate roster differs from the committed %d-site contract (missing: %s; added: %s).",
+    length(base_roster),
+    paste(setdiff(base_roster, candidate_roster), collapse = ", "),
+    paste(setdiff(candidate_roster, base_roster), collapse = ", ")
+  ))
+}
+if (b$n_obs < base_obs)
+  stop(sprintf("Candidate has %d observations, fewer than committed baseline %d; refusing automatic publication.",
+               b$n_obs, base_obs))
 if (isTRUE(b$partial))
-  cat("NOTE: pull flagged partial (a site/month was missing) but counts cleared the guard — shipping.\n")
+  stop("Candidate is flagged partial; refusing automatic publication.")
 
-cat("Guard passed — bundle is complete enough to ship.\n")
+cat("Guard passed — exact roster retained, observations did not shrink, and candidate is not partial.\n")
