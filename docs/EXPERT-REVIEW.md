@@ -1,19 +1,42 @@
 # Surface water chemistry (grab samples) — Expert Review by Brooke (NEON DP1.20093.001)
-_Devoted product-expert review — June 2026._
+_Historical product-expert review — June 2026, with August 2026 release-candidate addendum._
 
-> I walked this app end-to-end against the NEON grab-sample SOP, the censored-data literature, and what an EPA NARS or USGS reviewer would actually demand — and the verdict is the one I gave the team in my brief: **the statistics chrome here is the suite's gold standard; the geochemistry going INTO it is where the app can still be challenged.** The honesty machinery is genuinely excellent — n on everything, Spearman by default, an n≥8 gate, a real `stats::stl()` (not the 2021 synthetic sine-wave), CV-RMSE against a mean-only baseline, a lag-1 ACF flag, below-detection drawn as open markers, and chemically-correct analyte names (Br = bromide, ANC in meq/L, pH unitless). What's missing is upstream and physical: a non-detect is still entering the math as its reported number on analytes that are 36–57% below the detection limit; there is no plausibility gate, so `ANC = 927 meq/L` at CARI and `Fe = 931 mg/L` flow straight into OLS, STL, the glm, *and* the map's color scale; and the unit field still publishes `NA` for UV254/UV280 in the dictionary export. None of these touch the lag mechanics or the stats — the leverage is exactly where the cascade lesson said it would be: **fix the input, not the estimator.** This is a strong, defensible app one notch of input-QC away from being unimpeachable. — Brooke
+## 2026-08-03 release-candidate addendum
+
+The June prose and scorecard below are retained as the baseline review, not as a
+description of the current candidate. The current state supersedes conflicting
+recommendations:
+
+- A shared fail-closed unit policy pins 34 presentation targets. Row-level unit
+  transitions are observed for 31 external-lab analytes; the three field-derived
+  analytes use explicit fixed extraction units because the field source table has
+  no row-level unit labels.
+- Modal relabelling is explicitly rejected. Registered missing labels require an
+  observed target label; 36 WALK mismatch identities and 12 unresolved legacy
+  TPC/TPN identities are quarantined with count/receipt bounds. The exact legacy
+  runtime removes all 48 groups (99 represented source rows) before app/index use.
+- The TPC/TPN identities are not asserted to be unconverted masses. The current
+  [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
+  supersedes F.1, and the [product change log](https://data.neonscience.org/api/v0/products/DP1.20093.001)
+  says EcoCore particulate C/N was converted to `microgramsPerLiter`; residual
+  `milligram` labels remain unresolved anomalies pending source reconciliation.
+- The site-aware plausibility gate/audit surface, >25% BDL down-weighting,
+  legacy/format-change export disclosure, generated static codebook, and strict
+  codebook verifier are implemented. Fresh exact-head CI/review is still pending.
+
+> **Historical June verdict:** I walked this app end-to-end against the NEON grab-sample SOP, the censored-data literature, and what an EPA NARS or USGS reviewer would actually demand — and the verdict is the one I gave the team in my brief: **the statistics chrome here is the suite's gold standard; the geochemistry going INTO it is where the app can still be challenged.** The honesty machinery is genuinely excellent — n on everything, Spearman by default, an n≥8 gate, a real `stats::stl()` (not the 2021 synthetic sine-wave), CV-RMSE against a mean-only baseline, a lag-1 ACF flag, below-detection drawn as open markers, and chemically-correct analyte names (Br = bromide, ANC in meq/L, pH unitless). The upstream gaps identified here drove the implemented controls summarized above. — Brooke
 
 ## Method fidelity (is the NEON protocol represented correctly?)
 
 This is where the app is most quietly right, and I want it on the record so it isn't regressed.
 
-- **Both ingest streams are correctly identified and labelled.** The bundle stacks `swc_externalLabDataByAnalyte` (the dissolved-chemistry workhorse) and `swc_fieldSuperParent` (the in-situ probe quartet), tagged `source ∈ {External Lab, Field Probe}` (README.md:55, `docs/DATA-TAKEAWAYS.md:16`). That is exactly the DP1.20093.001 design — a discrete grab split/preserved/shipped to an external lab, co-located with a field super-parent probe record. The README's product framing and the About modal (`app.R:514`) both point at the right product page.
+- **Both ingest streams are correctly identified and labelled.** The bundle stacks `swc_externalLabDataByAnalyte` (the dissolved-chemistry workhorse) and `swc_fieldSuperParent` (three in-situ field analytes), tagged `source ∈ {External Lab, Field Probe}`. That is the DP1.20093.001 design—a discrete grab split/preserved/shipped to an external lab, co-located with field-probe records.
 - **Cadence is described honestly.** The STL note — "NEON grab samples are roughly monthly with gaps" (`app.R:239`) — is precisely correct, and the verified ~21 site-visits/site/year (`docs/DATA-TAKEAWAYS.md:7`) confirms this is a **dozens-to-hundreds per-site regime**, NOT the n=6 terrestrial-cascade regime. The app correctly does NOT import a "pooling is mandatory" reflex; per-site verdicts ARE defensible here because the within-site n is in the hundreds.
 - **The field/lab "twins" are handled correctly.** `specificConductanceField` (probe) and `specificConductance` (lab) measure the same quantity by different methods; the predictor's `TWIN` map (`app.R:896-899`) excludes the circular twin before fitting. That is the right call — a USGS reviewer would otherwise flag a model "predicting" lab conductance from field conductance as tautological. Gravimetric `TSS - Dry Mass` is also dropped (`app.R:903`). Good.
 - **Below-detection arrives as strings and is parsed to a flag, value preserved.** The builder parses NEON's `"ND"/"BDL"/"BD"/"1"` codes into a `belowDetection` 0/1 flag and **keeps the reported number, not an imputed half-DL** (`docs/DATA-TAKEAWAYS.md:8,16`). That is the single most important method-fidelity decision on this product and the app got it right — substitution would have been the cardinal error (Helsel 2012).
 - **Replicate provenance is preserved and disclosed.** 12.1% of rows are replicate means with `n_reps` and pre-collapse `value_sd` retained; the grain is enforced by `stopifnot(!anyDuplicated(...))` (`docs/DATA-TAKEAWAYS.md:9`). The hover even labels a multi-rep point ("(n-rep mean)", `app.R:709`). This is more careful than most published water-chemistry figures.
 
-**One method-labelling gap.** The `formatChange` (60,373 rows) / `legacyData` (14,217) flags mean **~30% of the record predates a NEON method/format standardization era** (`docs/DATA-TAKEAWAYS.md:13`). The `lab_flag` is exported in the long CSV (`app.R:998`), which is good — but the *provenance header* (`app.R:1014`) and the on-screen chrome never mention it. A reviewer comparing a pre- and post-2017 trend at one site is comparing across a method boundary without being told. **Fix:** add a `pct_legacy` field to `D$built`, put a one-line legacy-fraction note in `provenance()`, and ideally let a trend spanning the standardization boundary be re-checked split at it.
+**Historical method-labelling gap—implemented.** The `formatChange` / `legacyData` flags show that roughly 30% of the June record predates a method/format standardization era. The long export retains `lab_flag`, and the current provenance header discloses the legacy/format-change share. A split-era sensitivity view remains a possible enhancement.
 
 ## Analysis & metrics — defensible? (with the literature)
 
@@ -25,11 +48,11 @@ The estimators themselves are sound and, unusually, honestly captioned. Where I 
 - **Seasonal** (`app.R:849-892`) — a **real STL** on monthly means, interior gaps linearly interpolated with the fill-count stamped on-chart (`app.R:889`), hard-blocked under 45% real or a gap >12 months (`app.R:862`). This is a true decomposition, disclosed as descriptive-not-forecast. Correct.
 - **Predictor** (`pred_base()` + `kfold_rmse()`, `app.R:929`, `helpers.R:286`) — glm on the 3 best-Pearson analytes, twins excluded, repeated 10-fold CV-RMSE vs a mean-only baseline, `set.seed(42)`, labelled an interpolation aid with optimistic CV-RMSE because predictors are chosen on the full record (`app.R:248`). Honest framing.
 
-**Where the literature says the metric is only defensible with a caveat the app doesn't yet show:**
+**June gaps and their current status:**
 
-1. **Censoring is flagged in plots but not in the math (the #1 trap of this product).** Below-detection values still enter Spearman/Pearson/OLS/STL/glm as their *reported number* — `correlation_table()` has no censoring branch (`helpers.R:234-249`), and `sel_pair()` (`app.R:585`) coerces the raw value. On **Br (56.5% < DL), Mn (38.8%), Fe (36.2%), F (33.9%), Ortho-P (26.0%)** (`docs/DATA-TAKEAWAYS.md:8`, `data/analyte_coverage.csv`) the coefficient is dominated by detection-limit *ties*, not chemistry. Helsel 2012 (*Statistics for Censored Environmental Data*, the NADA framework) is unambiguous: a correlation on heavily-censored data without a censored estimator is exploratory only. The app even *computes* a `ties` flag (`helpers.R:246`) — it's halfway there. **Fix:** surface the per-analyte censored % beside each correlation row, and **grey/down-weight any analyte >25% BDL** the way n<8 rows are already greyed (`app.R:441`); for the heavy-censor pairs, offer Kendall's τ via a censored estimator (NADA `cenken`). Until then, any result on those seven analytes is hypothesis-generating, never a reported effect size.
+1. **Censoring disclosure—minimum control implemented.** Below-detection values remain preserved rather than substituted. The current correlation surface reports per-analyte censored share and greys/down-weights analytes above 25% BDL. Heavy-censor results remain exploratory; a censored estimator such as `cenken` is still a future enhancement.
 
-2. **No plausibility/outlier QC — and the blast radius is wider than the stats tabs.** `ANC = 927 meq/L` at CARI (site median 0.73, next-highest 16.96 — almost certainly a µeq→meq or decimal artifact) and `Fe = 931 mg/L` (median 0.011) (`docs/DATA-TAKEAWAYS.md:12`) flow unchecked into `fit_lm`, `stl`, and `glm`. **And note the map:** `output$map` colors every site by a raw `mean()` (`app.R:1149`) on a `YlGnBu` scale — one ANC=927 singleton blows out the colorbar for the entire continent, making every other site read as floor. One impossible value corrupts a regression, an STL trend, *and* the choropleth simultaneously. A domain reviewer rejects the metric on sight. **Fix:** a per-analyte plausibility range-gate (flag/exclude > p99.9 with a unit-sanity check), surface a "⚠ extreme value" marker, never let a flagged singleton drive `fit_lm`/`stl`/the map mean, and re-run any affected site-analyte trend with the outlier removed before quoting it.
+2. **Plausibility/outlier QC—implemented.** The current site-aware gate keeps flagged singletons such as ANC=927 and Fe=931 out of fits, STL, glm, and map summaries while preserving them in an explicit audit surface. Site-aware ceilings retain genuinely saline PRPO observations.
 
 3. **Multiple comparisons caveated but not corrected; high-ACF p warned but not adjusted.** Screening 33 analytes × 34 sites is a large family; the caveat text is honest (`app.R:443`) but no FDR is offered. And when `|lag1_acf| ≥ 0.5` the app prints "the p-value above is optimistic" (`app.R:779`) but still reports the naive OLS p. **Fix:** an optional Benjamini-Hochberg `q` column on the correlation screen, and an effective-n or block-bootstrap p when `|ACF| ≥ 0.5` — not just a warning string.
 
@@ -38,20 +61,20 @@ The estimators themselves are sound and, unusually, honestly captioned. Where I 
 - **Collection / provenance:** USGS NWQA (National Field Manual, TWRI Book 9) builds field blanks and replicates into the QC chain. NEON's replicate spread is preserved (`value_sd`) but never *shown* as a QC signal. Presenting the replicate CV per analyte would let a user see analytical precision next to the trend — a small, honest add.
 - **Analysis — the charge balance the app doesn't compute.** Hem 1985 treats the **anion–cation charge balance** as the first sanity check on a full major-ion analysis (a complete set should balance to ~5–10%). This bundle has Ca/Mg/Na/K and Cl/SO4/HCO3/ANC — the ingredients are present. A charge-balance % per site-date would be a *physically grounded* QC metric and would have caught the ANC=927 artifact automatically (it would balance to absurdity). Strong candidate for a future tab; **but do not ship it until the unit field is canonical** (below), because charge balance is unit-bearing.
 - **Analysis — censored estimators.** The honest minimum is the BDL down-weighting above; the field-grade version is Kaplan-Meier summaries / ROS / Tobit means and `cenken` correlations (Helsel 2012) for the seven heavy-censor analytes.
-- **Presentation — SUVA is set up but unit-blocked.** The "DOM quantity ↔ quality (SUVA)" preset (DOC vs UV254, `helpers.R:139`) is the *right* pairing and correctly cites Weishaar et al. 2003 (`helpers.R:148`). But SUVA₂₅₄ = (UV₂₅₄ / DOC) × 100 is unit-bearing, and **UV254's published unit is `NA`** in the dictionary export (`data/analyte_coverage.csv:9`, `app.R:1034`). Credit where due: `pretty_unit()` patches the *chart axis* to "abs/cm" for UV analytes (`helpers.R:105-107`), so the on-screen axis is salvaged — but the exported dictionary and any derived SUVA remain unitless-by-omission. **Do not auto-compute SUVA or any molar ratio from this bundle until the builder fixes the UV unit at source.**
+- **Presentation — SUVA remains review-gated, but the metadata defect is fixed in the candidate.** UV254/UV280 now use the explicit `absorbance units` target and the regenerated static codebook is reconciled to the bundle. Do not add a derived SUVA or molar-ratio calculation without a separate scientific contract.
 - **Use:** this app's best use in the suite is as a *well-powered control* — see below.
 
 ## Product-specific honesty & QC traps
 
 The five traps I told the team I would not let slide, scored against this app:
 
-1. **A non-detect is not a zero or half-DL.** ✅ *value preserved, flag carried* — but ⚠ *not handled in the math* (finding 1). Half-done correctly; the harder half remains.
-2. **Units must be canonical before any cross-analyte math.** ⚠ 20 of 34 analytes carry >1 unit string; UV254/UV280 publish `NA`; six analytes mix mg/L with µg/L labels (`docs/DATA-TAKEAWAYS.md:10-11`). The µg/L rows are *mislabeled, not unconverted* (TP "µg/L" median 0.057 vs mg/L 0.025 — a true µg/L total-P would be ~25–57), so the risk is axis-label/cosmetic, not a 1000× value error — but a journal reviewer flags it. **Fix:** pick the **modal** unit (not `dplyr::first()`), coerce every row of an analyte to one canonical unit, and assert single-unit-per-analyte in `validate_bundle()`.
-3. **Detect and gate physically impossible values before they reach a fit.** ❌ *no gate anywhere* (finding 2). The most actionable single fix in the app.
+1. **A non-detect is not a zero or half-DL.** ✅ Value preserved and flag carried; heavy-censor correlations are surfaced and down-weighted, while field-grade censored estimators remain future work.
+2. **Units must be explicit before cross-analyte math.** ✅ The historical modal-relabel recommendation is superseded and must not be implemented. The candidate pins all 34 targets, transition-checks the 31 row-labelled lab analytes, records three fixed field extraction assumptions, and quarantines exact audited mismatches. TPC/TPN residual labels are unresolved anomalies, not presumed masses.
+3. **Detect and gate physically implausible values before a fit.** ✅ Implemented with a site-aware gate and auditable exclusion surface.
 4. **Index/relative vs absolute, named honestly.** ✅ The glm is labelled an interpolation aid with optimistic CV-RMSE (`app.R:248,413`); conductance is correctly framed as a within-site dissolved-load integrator. Keep saying it.
 5. **pH and intensive-variable / log-scale traps.** ✅ pH is unitless in `ANALYTE_TBL` and the "Carbonate system (alkalinity ↔ pH)" preset (`helpers.R:140`) is grounded in carbonate equilibria (Stumm & Morgan). One latent caution: the STL and climatology aggregate the *main* analyte by arithmetic monthly mean (`app.R:852`) — fine for conductance/ANC, but **arithmetic-averaging pH is technically improper** (pH is log-scale/intensive). It's a minor, rarely-hit edge (pH is seldom the seasonal main analyte), but worth a note so no one quotes a "mean pH" trend as exact.
 
-**A genuine reproducibility strength to protect:** single shared builder, `stopifnot` grain check, `set.seed(42)` CV, committed `.rds`, provenance header on every export (`docs/DATA-TAKEAWAYS.md:16,18`). This is re-derivable. Don't regress it. The one FAIR gap: there is no static machine-readable codebook shipped *next to* `neon_swc.rds` — the dictionary is generated on-download inside the app (`app.R:1030`). **Fix:** emit a versioned `codebook.csv`/`.json` in the build documenting column types, units, allowed values, and the below-detection convention.
+**A genuine reproducibility strength to protect:** single shared builder, grain check, seeded CV, committed bundle, and export provenance. The former FAIR gap is closed in the candidate: a versioned static `data/codebook.csv` is regenerated by both build paths and independently reconciled to the exact bundle.
 
 ## Place in the suite / cascade
 
@@ -62,7 +85,7 @@ This app is **climate's downstream water-chemistry fingerprint — it sits besid
 - **Its unique value: a well-powered method-check.** With n in the hundreds per site, this is the suite's best place to *demonstrate that the honest-stats chrome behaves when power is NOT the limiter* — a control against the n=6 false-negative regime that haunts the terrestrial rungs. Which is exactly why finding the input-QC gaps here matters: it's the app where you can't blame n.
 - **It already embodies the suite doctrine.** The leverage is upstream — unit canonicalization, below-detection handling, outlier gating — mirroring the cascade's central lesson that desert "weak ecology" was a *method artifact* (annual aggregation), not bad statistics. **Fix the input, not the estimator.**
 
-## Scorecard
+## June baseline scorecard (historical, superseded by the addendum)
 
 | Dimension | Grade | One-line why |
 |---|---|---|

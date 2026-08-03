@@ -77,8 +77,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Preserve the committed validation baseline
-        run: cp data/neon_swc.rds "$RUNNER_TEMP/water-baseline.rds"
+      - name: Extract the immutable trusted base/main bundle
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            trusted_base="${{ github.event.pull_request.base.sha }}"
+          else
+            git fetch --no-tags --depth=1 origin main
+            trusted_base=$(git rev-parse FETCH_HEAD)
+          fi
+          git fetch --no-tags --depth=1 origin "$trusted_base"
+          git show "$trusted_base:data/neon_swc.rds" > "$RUNNER_TEMP/water-baseline.rds"
+          test -s "$RUNNER_TEMP/water-baseline.rds"
+          echo "Trusted validation base: $trusted_base"
 
       - name: Set up pinned R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
@@ -90,7 +101,7 @@ jobs:
         uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
           packages: >
-            jsonlite, dplyr, tidyr, tibble, readr, shiny, bslib, bsicons,
+            jsonlite, digest, dplyr, tidyr, tibble, readr, shiny, bslib, bsicons,
             ggplot2, plotly@4.12.0, lubridate, DT, leaflet, shinyjs,
             shinycssloaders, cachem, htmltools, rsconnect, cpp11, progress,
             url::https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz,
@@ -124,13 +135,20 @@ jobs:
           set -euo pipefail
           Rscript --vanilla tests/test_runtime_manifest_files.R
           Rscript --vanilla tests/test_unit_canonicalization.R
-          verify_args=("$RUNNER_TEMP/water-baseline.rds")
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]] || \
-             [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.skip_download }}" != "true" ]]; then
-            verify_args+=("--require-current-unit-contract")
+          Rscript --vanilla tests/test_save_bundle_recovery.R
+          Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
+          Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
+          if Rscript --vanilla scripts/verify_refresh_candidate.R \
+               "$RUNNER_TEMP/water-baseline.rds" --require-current-unit-contarct; then
+            echo "Verifier accepted an unknown flag."
+            exit 1
           fi
-          Rscript --vanilla scripts/verify_refresh_candidate.R "${verify_args[@]}"
-          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_unit_canonicalization.R")'
+          if Rscript --vanilla scripts/verify_refresh_candidate.R \
+               "$RUNNER_TEMP/water-baseline.rds" extra-positional; then
+            echo "Verifier accepted an extra positional argument."
+            exit 1
+          fi
+          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R")'
           git diff --check
 
       - name: Package the producer candidate
@@ -161,8 +179,33 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Preserve the committed validation baseline
-        run: cp data/neon_swc.rds "$RUNNER_TEMP/water-baseline.rds"
+      - name: Extract the immutable trusted base/main bundle
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            trusted_base="${{ github.event.pull_request.base.sha }}"
+          else
+            git fetch --no-tags --depth=1 origin main
+            trusted_base=$(git rev-parse FETCH_HEAD)
+          fi
+          git fetch --no-tags --depth=1 origin "$trusted_base"
+          git show "$trusted_base:data/neon_swc.rds" > "$RUNNER_TEMP/water-baseline.rds"
+          test -s "$RUNNER_TEMP/water-baseline.rds"
+          echo "Trusted validation base: $trusted_base"
+
+      - name: Preserve the committed PR-derived bytes
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          for path in data/search_index.rds data/codebook.csv manifest.json; do
+            target="$RUNNER_TEMP/committed-derived/$path"
+            mkdir -p "$(dirname "$target")"
+            cp "$path" "$target"
+          done
+          sha256sum \
+            "$RUNNER_TEMP/committed-derived/data/search_index.rds" \
+            "$RUNNER_TEMP/committed-derived/data/codebook.csv" \
+            "$RUNNER_TEMP/committed-derived/manifest.json"
 
       - name: Download the producer candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -182,7 +225,7 @@ jobs:
       - name: Install validator dependency
         uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          packages: jsonlite, dplyr, tidyr, tibble
+          packages: jsonlite, digest, dplyr, tidyr, tibble
           pak-version: stable
           dependencies: '"hard"'
           cache-version: water-refresh-validator-v2
@@ -194,12 +237,19 @@ jobs:
           set -euo pipefail
           Rscript --vanilla tests/test_runtime_manifest_files.R
           Rscript --vanilla tests/test_unit_canonicalization.R
-          verify_args=("$RUNNER_TEMP/water-baseline.rds")
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]] || \
-             [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.skip_download }}" != "true" ]]; then
-            verify_args+=("--require-current-unit-contract")
+          Rscript --vanilla tests/test_save_bundle_recovery.R
+          Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
+          Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
+          if Rscript --vanilla scripts/verify_refresh_candidate.R \
+               "$RUNNER_TEMP/water-baseline.rds" --require-current-unit-contarct; then
+            echo "Verifier accepted an unknown flag."
+            exit 1
           fi
-          Rscript --vanilla scripts/verify_refresh_candidate.R "${verify_args[@]}"
+          if Rscript --vanilla scripts/verify_refresh_candidate.R \
+               "$RUNNER_TEMP/water-baseline.rds" extra-positional; then
+            echo "Verifier accepted an extra positional argument."
+            exit 1
+          fi
           unexpected=$(git diff --name-only | grep -Ev '^(data/neon_swc[.]rds|data/search_index[.]rds|data/codebook[.]csv|manifest[.]json)$' || true)
           if [ -n "$unexpected" ]; then
             echo "Candidate changed paths outside the publication allowlist:"
@@ -220,6 +270,26 @@ jobs:
           path: ${{ runner.temp }}/water-refresh-validated.tgz
           if-no-files-found: error
           retention-days: 7
+
+      - name: Require committed PR-derived bytes to equal the validated rebuild
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          mismatch=0
+          for path in data/search_index.rds data/codebook.csv manifest.json; do
+            committed="$RUNNER_TEMP/committed-derived/$path"
+            if ! cmp -s "$committed" "$path"; then
+              echo "Committed PR artifact differs from the independently validated rebuild: $path"
+              echo "committed: $(sha256sum "$committed" | awk '{print $1}')"
+              echo "validated: $(sha256sum "$path" | awk '{print $1}')"
+              mismatch=1
+            fi
+          done
+          if (( mismatch != 0 )); then
+            echo "Promote the exact water-refresh-validated artifact and rerun this PR head."
+            exit 1
+          fi
+          echo "Committed PR index, codebook, and manifest exactly equal the validated rebuild."
 
   publish_candidate:
     needs: [gate, build_candidate, validate_candidate]

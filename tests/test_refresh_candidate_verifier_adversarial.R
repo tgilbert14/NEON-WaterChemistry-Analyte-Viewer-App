@@ -1,0 +1,331 @@
+args <- commandArgs(trailingOnly = FALSE)
+file_arg <- sub("^--file=", "", args[grepl("^--file=", args)])
+repo_root <- if (length(file_arg)) {
+  normalizePath(file.path(dirname(file_arg[[1]]), ".."), mustWork = TRUE)
+} else {
+  normalizePath(".", mustWork = TRUE)
+}
+
+if (!requireNamespace("jsonlite", quietly = TRUE)) {
+  stop("jsonlite is required for the verifier adversarial regression.")
+}
+
+runtime_env <- new.env(parent = baseenv())
+sys.source(
+  file.path(repo_root, "scripts", "runtime_manifest_files.R"),
+  envir = runtime_env
+)
+runtime_files <- runtime_env$water_runtime_files(repo_root)
+
+fixture_root <- tempfile("water-verifier-adversarial-")
+dir.create(fixture_root)
+on.exit(unlink(fixture_root, recursive = TRUE), add = TRUE)
+
+copy_fixture_file <- function(path) {
+  source_path <- file.path(repo_root, path)
+  target_path <- file.path(fixture_root, path)
+  dir.create(dirname(target_path), recursive = TRUE, showWarnings = FALSE)
+  stopifnot(file.copy(source_path, target_path, overwrite = TRUE))
+  invisible(target_path)
+}
+
+invisible(lapply(runtime_files, copy_fixture_file))
+invisible(lapply(
+  c("scripts/verify_refresh_candidate.R", "scripts/water_unit_contract.R"),
+  function(path) if (!file.exists(file.path(fixture_root, path))) {
+    copy_fixture_file(path)
+  }
+))
+
+candidate_path <- file.path(fixture_root, "data", "neon_swc.rds")
+index_path <- file.path(fixture_root, "data", "search_index.rds")
+codebook_path <- file.path(fixture_root, "data", "codebook.csv")
+baseline_path <- file.path(fixture_root, "trusted-base.rds")
+stopifnot(file.copy(candidate_path, baseline_path, overwrite = FALSE))
+
+# The committed legacy index predates deterministic source provenance. The
+# production workflow rebuilds it before validation, so mirror that one field in
+# this isolated fixture without relying on the producer's index builder.
+candidate_original <- readRDS(candidate_path)
+index_original <- readRDS(index_path)
+index_original$built$when <- candidate_original$built$when
+index_original$built$product <- candidate_original$built$product
+index_original$built$source <-
+  "data/neon_swc.rds (committed bundle; plausibility-gated)"
+
+# Make the fixture independent of whether tracked derived bytes have already
+# been promoted on this code-review branch. The release codebook describes the
+# effective runtime view, so derive that view with the pure policy helper before
+# adversarial mutations (no ggplot/plotly runtime stack required here).
+policy_env <- new.env(parent = baseenv())
+sys.source(
+  file.path(repo_root, "scripts", "water_unit_contract.R"),
+  envir = policy_env
+)
+runtime_long <- policy_env$canonicalize_runtime_water_units(
+  candidate_original$swc_long
+)$data
+runtime_rows <- split(
+  seq_len(nrow(runtime_long)), as.character(runtime_long$analyte)
+)
+codebook_header <- readLines(codebook_path, warn = FALSE)[1:3]
+codebook_table <- utils::read.csv(
+  codebook_path, comment.char = "#", check.names = FALSE,
+  stringsAsFactors = FALSE, na.strings = character(0)
+)
+dictionary_rows <- which(codebook_table$section == "analyte_dictionary")
+for (row in dictionary_rows) {
+  analyte <- codebook_table$name[[row]]
+  indices <- runtime_rows[[analyte]]
+  n <- length(indices)
+  n_sites <- length(unique(as.character(runtime_long$site[indices])))
+  n_below <- sum(runtime_long$belowDetection[indices])
+  pct_below <- if (n > 0L) round(n_below / n, 4L) else NA_real_
+  codebook_table$units[[row]] <- unique(as.character(runtime_long$units[indices]))
+  codebook_table$definition[[row]] <- sprintf(
+    "Analyte '%s': %d obs across %d sites; canonical unit shown",
+    analyte, n, n_sites
+  )
+  codebook_table$na_semantics[[row]] <- sprintf(
+    "%s below detection (kept, not substituted)",
+    ifelse(is.na(pct_below), "0%", paste0(round(100 * pct_below), "%"))
+  )
+}
+writeLines(codebook_header, codebook_path)
+suppressWarnings(utils::write.table(
+  codebook_table, codebook_path, append = TRUE, sep = ",", row.names = FALSE,
+  col.names = TRUE, qmethod = "double"
+))
+codebook_original <- readLines(codebook_path, warn = FALSE)
+
+write_fixture_manifest <- function() {
+  files <- stats::setNames(lapply(runtime_files, function(path) {
+    list(checksum = unname(tools::md5sum(file.path(fixture_root, path))))
+  }), runtime_files)
+  snapshot <- paste0(
+    "https://packagemanager.posit.co/cran/__linux__/jammy/",
+    "2026-07-15"
+  )
+  package_names <- c(
+    "shiny", "bslib", "bsicons", "dplyr", "tidyr", "readr", "lubridate",
+    "plotly", "DT", "ggplot2", "shinycssloaders", "leaflet", "shinyjs",
+    "cachem", "digest", "htmltools", "jsonlite", "tibble"
+  )
+  packages <- stats::setNames(lapply(package_names, function(package) {
+    list(
+      Source = "CRAN", Repository = snapshot,
+      description = list(Package = package, Version = "fixture")
+    )
+  }), package_names)
+  jsonlite::write_json(
+    list(version = 1L, packages = packages, files = files, users = list()),
+    file.path(fixture_root, "manifest.json"),
+    auto_unbox = TRUE, pretty = TRUE
+  )
+}
+
+reset_fixture <- function() {
+  stopifnot(file.copy(baseline_path, candidate_path, overwrite = TRUE))
+  saveRDS(index_original, index_path, compress = "xz")
+  writeLines(codebook_original, codebook_path)
+  write_fixture_manifest()
+}
+
+run_verifier <- function(expected_pattern = NULL) {
+  old_wd <- setwd(fixture_root)
+  on.exit(setwd(old_wd), add = TRUE)
+  output <- suppressWarnings(system2(
+    file.path(R.home("bin"), "Rscript"),
+    c("--vanilla", "scripts/verify_refresh_candidate.R", baseline_path),
+    stdout = TRUE, stderr = TRUE
+  ))
+  status <- attr(output, "status")
+  if (is.null(status)) status <- 0L
+  output_text <- paste(output, collapse = "\n")
+  if (is.null(expected_pattern)) {
+    stopifnot(identical(status, 0L))
+  } else {
+    stopifnot(status != 0L, grepl(expected_pattern, output_text, fixed = TRUE))
+  }
+  invisible(output_text)
+}
+
+mutate_bundle <- function(mutate) {
+  reset_fixture()
+  candidate <- readRDS(candidate_path)
+  candidate <- mutate(candidate)
+  saveRDS(candidate, candidate_path)
+  write_fixture_manifest()
+}
+
+mutate_index <- function(mutate) {
+  reset_fixture()
+  index <- readRDS(index_path)
+  index <- mutate(index)
+  saveRDS(index, index_path, compress = "xz")
+  write_fixture_manifest()
+}
+
+write_codebook_table <- function(header, table) {
+  writeLines(header, codebook_path)
+  suppressWarnings(utils::write.table(
+    table, codebook_path, append = TRUE, sep = ",", row.names = FALSE,
+    col.names = TRUE, qmethod = "double"
+  ))
+}
+
+reset_fixture()
+run_verifier()
+
+mutate_bundle(function(x) {
+  x$built$n_obs <- x$built$n_obs + 0.5
+  x
+})
+run_verifier("Build receipt n_obs must be an exact integer")
+
+mutate_bundle(function(x) {
+  x$built$n_sites <- as.numeric(x$built$n_sites)
+  x
+})
+run_verifier("Build receipt n_sites must be the exact integer 34")
+
+mutate_bundle(function(x) {
+  x$built$n_analytes <- "garbage"
+  x
+})
+run_verifier("Build receipt n_analytes must be an exact integer")
+
+mutate_bundle(function(x) {
+  x$built$n_below <- x$built$n_below + 1L
+  x
+})
+run_verifier("Build receipt n_below must be an exact integer")
+
+mutate_bundle(function(x) {
+  x$built$partial <- NA
+  x
+})
+run_verifier("Candidate build receipt partial must be the exact logical FALSE")
+
+mutate_index(function(x) {
+  x$n_sites <- as.numeric(x$n_sites)
+  x
+})
+run_verifier("Search index n_sites must be the exact integer 34")
+
+mutate_index(function(x) {
+  x$per_site$n[[1]] <- 0.5
+  x
+})
+run_verifier("Search index per-site counts must be exact bounded integers")
+
+mutate_index(function(x) {
+  x$analytes$n_obs[[1]] <- x$analytes$n_obs[[1]] + 1L
+  x
+})
+run_verifier("Search index analyte counts disagree with per-site rows")
+
+mutate_index(function(x) {
+  x$per_site$units[[1]] <- "inventedUnit"
+  x
+})
+run_verifier("Search index units differ from the established runtime targets")
+
+mutate_index(function(x) {
+  x$built$n_runtime_unit_rows_excluded <-
+    x$built$n_runtime_unit_rows_excluded + 1L
+  x
+})
+run_verifier("Search index runtime-unit receipt disagrees with the source bundle")
+
+mutate_index(function(x) {
+  x$per_site$mean[[1]] <- x$per_site$mean[[1]] + 0.25
+  x
+})
+run_verifier("Search index per-site rows differ from independent recomputation")
+
+reset_fixture()
+bad_header <- codebook_original
+bad_header[[1]] <- sub(
+  "version 1.0.0", "version 9.9.9", bad_header[[1]], fixed = TRUE
+)
+writeLines(bad_header, codebook_path)
+write_fixture_manifest()
+run_verifier("Codebook header, version, product, or build provenance changed")
+
+reset_fixture()
+bad_provenance <- codebook_original
+bad_provenance[[1]] <- sub(
+  substr(candidate_original$built$when, 1L, 10L), "1900-01-01",
+  bad_provenance[[1]], fixed = TRUE
+)
+writeLines(bad_provenance, codebook_path)
+write_fixture_manifest()
+run_verifier("Codebook header, version, product, or build provenance changed")
+
+reset_fixture()
+codebook_header <- codebook_original[1:3]
+codebook_table <- utils::read.csv(
+  codebook_path, comment.char = "#", check.names = FALSE,
+  stringsAsFactors = FALSE, na.strings = character(0)
+)
+first_analyte <- which(codebook_table$section == "analyte_dictionary")[[1]]
+codebook_table$name[[first_analyte]] <- "inventedAnalyte"
+write_codebook_table(codebook_header, codebook_table)
+write_fixture_manifest()
+run_verifier("Codebook analyte roster or scalar contract changed")
+
+reset_fixture()
+codebook_table <- utils::read.csv(
+  codebook_path, comment.char = "#", check.names = FALSE,
+  stringsAsFactors = FALSE, na.strings = character(0)
+)
+first_analyte <- which(codebook_table$section == "analyte_dictionary")[[1]]
+codebook_table$units[[first_analyte]] <- "inventedUnit"
+write_codebook_table(codebook_original[1:3], codebook_table)
+write_fixture_manifest()
+run_verifier("Codebook analyte units disagree with the candidate bundle")
+
+reset_fixture()
+codebook_table <- utils::read.csv(
+  codebook_path, comment.char = "#", check.names = FALSE,
+  stringsAsFactors = FALSE, na.strings = character(0)
+)
+first_analyte <- which(codebook_table$section == "analyte_dictionary")[[1]]
+codebook_table$definition[[first_analyte]] <-
+  "Analyte count intentionally corrupted"
+write_codebook_table(codebook_original[1:3], codebook_table)
+write_fixture_manifest()
+run_verifier("Codebook analyte counts disagree with the candidate bundle")
+
+for (column in c("allowed", "definition", "na_semantics")) {
+  reset_fixture()
+  codebook_table <- utils::read.csv(
+    codebook_path, comment.char = "#", check.names = FALSE,
+    stringsAsFactors = FALSE, na.strings = character(0)
+  )
+  first_tidy <- which(codebook_table$section == "tidy_long_export")[[1]]
+  codebook_table[[column]][[first_tidy]] <- paste("tampered", column)
+  write_codebook_table(codebook_original[1:3], codebook_table)
+  write_fixture_manifest()
+  run_verifier(paste0(
+    "Codebook tidy-export allowed values, definitions, or NA semantics ",
+    "differ from the reviewed contract"
+  ))
+}
+
+reset_fixture()
+manifest_path <- file.path(fixture_root, "manifest.json")
+manifest <- jsonlite::fromJSON(manifest_path, simplifyVector = FALSE)
+manifest$packages$htmltools <- NULL
+jsonlite::write_json(
+  manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE
+)
+run_verifier("Manifest is missing direct runtime package(s): htmltools")
+
+cat(paste0(
+  "Independent verifier rejected fractional/malformed bundle and index ",
+  "receipts; complete index drift; adversarial codebook version, provenance, ",
+  "roster, unit, count, and reviewed-text mutations; plus a missing direct ",
+  "runtime package.\n"
+))

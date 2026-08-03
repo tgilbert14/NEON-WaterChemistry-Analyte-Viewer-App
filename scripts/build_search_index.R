@@ -4,9 +4,9 @@
 #
 #   Rscript scripts/build_search_index.R
 #
-# Writes data/search_index.rds: a tiny list the app loads once at boot (like
-# site_index) and filters in memory, so the search is instant and the app keeps
-# its fast bundled load.
+# Writes data/search_index.rds and refreshes data/codebook.csv from the same
+# fail-closed runtime view. The tiny index loads once at boot and filters in
+# memory, so search is instant and the app keeps its fast bundled load.
 #
 # This is an ANALYTE app (no taxa). The index holds, for every (analyte, site)
 # pair, the app's honest per-site summary — mean / median / n / below-detection
@@ -29,11 +29,14 @@ setwd(root)
 
 source("helpers.R")   # canonical_units, plausibility_ceilings, ceiling_map,
                       # is_plausible, analyte_display, pretty_unit, ANALYTE_TBL
+source(file.path("scripts", "build_swc_bundle.R")) # write_codebook()
 
 D <- readRDS("data/neon_swc.rds")
+D <- apply_runtime_water_unit_contract(D)
+write_codebook(D, file.path("data", "codebook.csv"))
 L <- D$swc_long
 
-## ---- Apply the EXACT app-load gate so the index agrees with the app --------
+## ---- Apply the EXACT app-load gates so the index agrees with the app -------
 CANON_MAP <- canonical_units(L)
 CEIL_TBL  <- plausibility_ceilings(L)
 CEIL_MAP  <- ceiling_map(CEIL_TBL)
@@ -95,7 +98,16 @@ idx <- list(
     # underlying observations had not changed.
     when    = D$built$when %||% D$built$data_through %||% NA_character_,
     product = D$built$product %||% "DP1.20093.001",
-    source  = "data/neon_swc.rds (committed bundle; plausibility-gated)"
+    source  = "data/neon_swc.rds (committed bundle; plausibility-gated)",
+    runtime_unit_policy = D$built$runtime_unit_policy,
+    n_runtime_unit_rows_excluded = D$built$n_runtime_unit_rows_excluded,
+    n_runtime_unit_source_rows_excluded =
+      D$built$n_runtime_unit_source_rows_excluded,
+    n_runtime_unit_labels_rewritten =
+      D$built$n_runtime_unit_labels_rewritten,
+    runtime_unit_exclusion_sha256 = water_unit_receipt_sha256(
+      attr(D, "runtime_unit_exclusions")
+    )
   )
 )
 

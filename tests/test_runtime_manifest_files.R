@@ -9,6 +9,7 @@ source(file.path(repo_root, "scripts", "runtime_manifest_files.R"))
 
 fixture <- tempfile("water-manifest-")
 dir.create(file.path(fixture, "data"), recursive = TRUE)
+dir.create(file.path(fixture, "scripts"), recursive = TRUE)
 on.exit(unlink(fixture, recursive = TRUE, force = TRUE), add = TRUE)
 
 required <- file.path(fixture, WATER_RUNTIME_FILES)
@@ -23,6 +24,8 @@ stopifnot(file.create(file.path(fixture, "www", "decoy.txt")))
 
 actual <- water_runtime_files(fixture)
 stopifnot(identical(actual, WATER_RUNTIME_FILES))
+stopifnot(identical(length(actual), 6L))
+stopifnot("scripts/water_unit_contract.R" %in% actual)
 stopifnot(!any(grepl("neon_swc_[0-9]", actual)))
 stopifnot(!"data/analyte_coverage.csv" %in% actual)
 stopifnot(!"www/decoy.txt" %in% actual)

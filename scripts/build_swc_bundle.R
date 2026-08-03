@@ -5,6 +5,7 @@
 # build_swc_bundle(). One transform, one contract — they cannot drift.
 #----------------------------------------------------------------------
 suppressWarnings(suppressMessages({ library(dplyr); library(tidyr) }))
+source(file.path("scripts", "water_unit_contract.R"))
 
 PRODUCT_CODE <- "DP1.20093.001"
 PRODUCT_URL  <- "https://data.neonscience.org/data-products/DP1.20093.001"
@@ -26,19 +27,6 @@ SITE_LABELS <- c(
 # NEON ships below-detection as the strings "ND"/"BDL" (sometimes "1") — NOT 0/1.
 .below_codes <- c("1", "ND", "BDL", "BD", "TRUE", "true")
 
-# Modal (most-frequent) non-NA value of a character vector. Used to pick ONE
-# canonical unit per analyte instead of dplyr::first(), which grabbed whatever
-# row sorted first and left 20/34 analytes carrying a stray non-modal unit.
-.mode_chr <- function(x) {
-  x <- x[!is.na(x) & nzchar(x)]
-  if (!length(x)) return(NA_character_)
-  names(sort(table(x), decreasing = TRUE))[1]
-}
-
-# UV absorbance has no real NEON unit string (it is an absorbance ratio); stamp a
-# canonical label so the dictionary stops exporting NA.
-.UV_ABS_CODES <- c("UV Absorbance (254 nm)", "UV Absorbance (250 nm)", "UV Absorbance (280 nm)")
-
 # lab_raw  : stacked external-lab rows; cols = site, collectDate, analyte,
 #            analyteConcentration, analyteUnits, belowDetectionQF, externalLabDataQF
 # field_raw: stacked field-probe rows; cols = site, collectDate, waterTemp,
@@ -47,12 +35,17 @@ SITE_LABELS <- c(
 # partial  : TRUE if built from an incomplete pull
 build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
 
+  if (!"laboratoryName" %in% names(lab_raw)) {
+    lab_raw$laboratoryName <- NA_character_
+  }
+
   lab_long <- lab_raw %>%
     transmute(site, collectDate = as.Date(substr(collectDate, 1, 10)),
               analyte, value = suppressWarnings(as.numeric(analyteConcentration)),
               units = analyteUnits,
               below = as.character(belowDetectionQF) %in% .below_codes,
               labFlag = as.character(externalLabDataQF),
+              laboratoryName = as.character(laboratoryName),
               source = "External Lab") %>%
     filter(!is.na(value), !is.na(collectDate))
 
@@ -75,32 +68,21 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
 
   raw_long <- bind_rows(lab_long, field_long)
 
-  # ---- FAIR units (review finding #4): one canonical unit per analyte ---------
-  # Pick the MODAL unit per analyte (not dplyr::first(), which left 20/34 analytes
-  # mislabeled). NEON's handful of microgramsPerLiter labels on otherwise-mg/L
-  # analytes are already attached to mg/L-magnitude values (for example, TP 0.057,
-  # not 57). They are label defects, not values awaiting conversion. Canonicalize
-  # the label only and prove below that the numeric vector remains byte-for-byte
-  # identical. UV absorbance analytes are stamped "absorbance units" because the
-  # source sometimes omits their unit string.
-  canon_tbl <- raw_long %>%
-    dplyr::group_by(analyte) %>%
-    dplyr::summarise(canon_unit = .mode_chr(units), .groups = "drop") %>%
-    dplyr::mutate(canon_unit = ifelse(analyte %in% .UV_ABS_CODES, "absorbance units", canon_unit))
-  canon_map <- setNames(canon_tbl$canon_unit, canon_tbl$analyte)
-
+  # ---- FAIR units (review finding #4): explicit label-repair contract --------
+  # Missing metadata labels may be filled only under the exact established
+  # target map. Non-missing mismatches are never relabelled: only audited legacy
+  # identities may be quarantined. In particular, residual TPC/TPN `milligram`
+  # labels conflict with NEON's current conversion notice; they remain unresolved
+  # legacy anomalies and are excluded with a receipt rather than guessed at.
   values_before_unit_labels <- raw_long$value
-  relabeled <- !is.na(unname(canon_map[raw_long$analyte])) &
-    (is.na(raw_long$units) |
-       raw_long$units != unname(canon_map[raw_long$analyte]))
-
-  raw_long <- raw_long %>%
-    dplyr::mutate(
-      canon_unit = unname(canon_map[analyte]),
-      units = dplyr::coalesce(canon_unit, units)
-    ) %>%
-    dplyr::select(-canon_unit)
-  stopifnot(identical(raw_long$value, values_before_unit_labels))
+  unit_result <- canonicalize_water_unit_labels(
+    raw_long$site, raw_long$collectDate, as.character(raw_long$analyte),
+    raw_long$value, raw_long$units, raw_long$laboratoryName
+  )
+  raw_long <- raw_long[unit_result$keep, , drop = FALSE]
+  raw_long$units <- unit_result$units
+  stopifnot(identical(raw_long$value,
+                      values_before_unit_labels[unit_result$keep]))
 
   # Collapse replicates -> one row per site/date/analyte, KEEPING the replicate
   # count + spread + a real below-detection flag (any rep below DL). Units are now
@@ -148,9 +130,18 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
     n_analytes = dplyr::n_distinct(swc_long$analyte),
     data_through = as.character(max(swc_long$collectDate)),
     n_below = sum(swc_long$belowDetection),
-    unit_policy = "canonical-labels-value-invariant-v1",
-    n_unit_labels_rewritten = as.integer(sum(relabeled)),
-    n_unit_values_changed = 0L)
+    unit_policy = WATER_UNIT_POLICY,
+    n_unit_labels_rewritten = as.integer(sum(
+      unit_result$label_receipt$n_rewritten
+    )),
+    n_unit_rows_excluded = as.integer(sum(
+      unit_result$exclusion_receipt$n_excluded
+    )),
+    n_unit_values_changed = 0L,
+    unit_label_rewrites = unit_result$label_receipt,
+    unit_rewrite_receipt_sha256 = unit_result$label_receipt_sha256,
+    unit_row_exclusions = unit_result$exclusion_receipt,
+    unit_exclusion_receipt_sha256 = unit_result$exclusion_receipt_sha256)
 
   bundle <- list(swc_long = swc_long, swc_wide = swc_wide, sites_meta = sites_meta,
                  analyte_meta = analyte_meta, built = built)
@@ -176,11 +167,35 @@ validate_bundle <- function(b) {
             all(c("site","siteName","domain","state","lat","long",
                   "n_obs","n_analytes","first","last") %in% names(b$sites_meta)),
             all(c("when","product","partial","n_obs","n_sites","n_analytes",
-                  "unit_policy","n_unit_labels_rewritten",
-                  "n_unit_values_changed") %in% names(b$built)),
-            identical(b$built$unit_policy,
-                      "canonical-labels-value-invariant-v1"),
-            identical(as.integer(b$built$n_unit_values_changed), 0L))
+                  WATER_UNIT_RECEIPT_FIELDS) %in% names(b$built)),
+            identical(b$built$unit_policy, WATER_UNIT_POLICY),
+            is.integer(b$built$n_unit_labels_rewritten),
+            length(b$built$n_unit_labels_rewritten) == 1L,
+            !is.na(b$built$n_unit_labels_rewritten),
+            b$built$n_unit_labels_rewritten >= 0L,
+            is.integer(b$built$n_unit_rows_excluded),
+            length(b$built$n_unit_rows_excluded) == 1L,
+            !is.na(b$built$n_unit_rows_excluded),
+            b$built$n_unit_rows_excluded >= 0L,
+            identical(b$built$n_unit_values_changed, 0L),
+            is.data.frame(b$built$unit_label_rewrites),
+            is.data.frame(b$built$unit_row_exclusions),
+            identical(
+              b$built$unit_rewrite_receipt_sha256,
+              water_unit_receipt_sha256(b$built$unit_label_rewrites)
+            ),
+            identical(
+              b$built$unit_exclusion_receipt_sha256,
+              water_unit_receipt_sha256(b$built$unit_row_exclusions)
+            ),
+            identical(
+              b$built$n_unit_labels_rewritten,
+              as.integer(sum(b$built$unit_label_rewrites$n_rewritten))
+            ),
+            identical(
+              b$built$n_unit_rows_excluded,
+              as.integer(sum(b$built$unit_row_exclusions$n_excluded))
+            ))
   invisible(TRUE)
 }
 
@@ -209,7 +224,7 @@ LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","un
               def="Replicate-mean concentration / measurement for the site-date-analyte",
               na="NA only if all replicates were non-numeric"),
   units = list(type="character", units=NA, allowed="canonical NEON unit string",
-              def="Canonical (modal) unit for the analyte; UV absorbance = 'absorbance units'",
+              def="Pinned established unit for the analyte; UV absorbance = 'absorbance units'",
               na="never NA after canonicalization"),
   n_reps = list(type="integer", units="count", allowed=">= 1",
               def="Number of lab/field replicates collapsed into value", na="never NA"),
@@ -260,7 +275,7 @@ write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
     sprintf("# NEON Surface Water Chemistry codebook | version %s | product %s | built %s",
             CODEBOOK_VERSION, bundle$built$product, substr(bundle$built$when, 1, 10)),
     "# section=tidy_long_export documents the in-app Tidy CSV columns (the keep-vector); section=analyte_dictionary documents every emitted analyte",
-    "# units 'NA' = dimensionless or no canonical unit string (e.g. pH, UV absorbance ratio)")
+    "# units 'NA' = not applicable for schema rows; emitted analyte rows carry explicit reviewed targets")
   writeLines(hdr, out)
   suppressWarnings(suppressMessages(
     utils::write.table(cb, out, append = TRUE, sep = ",", row.names = FALSE,
@@ -268,11 +283,60 @@ write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
   invisible(cb)
 }
 
-# write bundle with a timestamped backup of any existing file
-save_bundle <- function(bundle, out = file.path("data","neon_swc.rds")) {
-  if (file.exists(out))
-    file.copy(out, sub("[.]rds$", format(Sys.time(), "_%Y%m%d-%H%M%S.rds"), out), overwrite = FALSE)
-  saveRDS(bundle, out)
+# Write a pending bundle first, then preserve and verify the exact current bytes
+# before promotion. A colliding or failed backup stops before the live file is
+# touched; a failed promotion is restored from the verified backup.
+save_bundle <- function(bundle, out = file.path("data", "neon_swc.rds"),
+                        backup_time = Sys.time(), copy_file = file.copy) {
+  if (!is.function(copy_file)) {
+    stop("copy_file must be a function.", call. = FALSE)
+  }
+  out_dir <- dirname(out)
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  pending <- tempfile(paste0(basename(out), ".pending-"), tmpdir = out_dir)
+  on.exit(if (file.exists(pending)) unlink(pending), add = TRUE)
+  saveRDS(bundle, pending)
+  pending_md5 <- unname(tools::md5sum(pending))
+  if (is.na(pending_md5)) {
+    stop("Could not hash the pending bundle.", call. = FALSE)
+  }
+
+  backup <- NULL
+  if (file.exists(out)) {
+    backup <- sub(
+      "[.]rds$", format(backup_time, "_%Y%m%d-%H%M%S.rds"), out
+    )
+    if (identical(backup, out) || file.exists(backup)) {
+      stop(sprintf("Refusing colliding bundle backup: %s", backup),
+           call. = FALSE)
+    }
+    current_md5 <- unname(tools::md5sum(out))
+    if (is.na(current_md5)) {
+      stop("Could not hash the current bundle before backup.", call. = FALSE)
+    }
+    copied <- copy_file(out, backup, overwrite = FALSE)
+    if (!isTRUE(copied) || !file.exists(backup) ||
+        !identical(unname(tools::md5sum(backup)), current_md5)) {
+      if (file.exists(backup)) unlink(backup)
+      stop(sprintf("Could not create an exact bundle backup: %s", backup),
+           call. = FALSE)
+    }
+  }
+
+  promoted <- copy_file(pending, out, overwrite = TRUE)
+  promotion_ok <- isTRUE(promoted) && file.exists(out) &&
+    identical(unname(tools::md5sum(out)), pending_md5)
+  if (!promotion_ok) {
+    restored <- !is.null(backup) && file.exists(backup) &&
+      isTRUE(copy_file(backup, out, overwrite = TRUE)) &&
+      identical(unname(tools::md5sum(out)),
+                unname(tools::md5sum(backup)))
+    stop(sprintf(
+      "Bundle promotion failed; prior bytes restored: %s",
+      if (restored) "yes" else "no"
+    ), call. = FALSE)
+  }
+  invisible(out)
 }
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a) == 1 && is.na(a))) b else a

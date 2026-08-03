@@ -9,7 +9,7 @@ and a cold-start pre-warm).
 
 ```
   Posit Connect Cloud (or shinylive)        GitHub Pages  (docs/)
-  └─ runs app.R + helpers.R + neon_swc.rds  └─ landing page → "Launch" → app URL
+  └─ runs the six-file runtime allowlist     └─ landing page → "Launch" → app URL
                                                + og:image social card
                                                + fetch() pre-warm ping (cold-start fix)
 ```
@@ -22,9 +22,10 @@ publish Pages.
 
 ## Option A — Posit Connect Cloud (recommended first move; works today)
 
-Connect Cloud deploys an R app straight from a public GitHub repo using `manifest.json`
-(already generated, lists only `app.R`, `helpers.R`, `data/neon_swc.rds` — no legacy/, no
-neonUtilities/mlr/shinydashboard).
+Connect Cloud deploys an R app straight from a public GitHub repo using `manifest.json`.
+The explicit runtime contract is exactly `app.R`, `helpers.R`,
+`scripts/water_unit_contract.R`, `data/codebook.csv`, `data/neon_swc.rds`, and
+`data/search_index.rds`—no recovery backups, cache, `legacy/`, or download-only packages.
 
 1. Sign in at <https://connect.posit.cloud> with GitHub.
 2. **New Content → Shiny → from Git**, pick `tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App`,
@@ -32,18 +33,20 @@ neonUtilities/mlr/shinydashboard).
 3. It reads `manifest.json`, restores packages, and serves. Auto-republishes on every push.
 4. Copy the published URL → set `APP_URL` in `docs/index.html`.
 
-Regenerate the manifest whenever dependencies change:
-```r
-rsconnect::writeManifest(appFiles = c("app.R","helpers.R","data/neon_swc.rds"),
-                         appPrimaryDoc = "app.R")
+Regenerate the manifest whenever runtime code, data, or dependencies change:
+```sh
+Rscript --vanilla scripts/write_manifest.R
 ```
+
+Do not hand-write an `appFiles` vector: the script and its regression share the
+single six-file allowlist and enforce pinned package sources/checksums.
 
 **Cold start:** the free tier sleeps. The landing page's pre-warm `fetch(APP_URL)` on load wakes
 it while the visitor reads, so the app is usually warm by the time they click Launch.
 
 ## Option B — Shinylive / WebAssembly (best long-term: static, zero server, infinite scale)
 
-Because the app has **no runtime dependency** (read-only bundled `.rds`, no neonUtilities), it is
+Because the app has **no live NEON or data-download dependency** (read-only bundled `.rds`), it is
 an ideal shinylive candidate — it could be served entirely from GitHub Pages alongside the
 landing page. **Gate: every package needs a wasm binary.** Check each at
 <https://repo.r-wasm.org/> before committing: `shiny, bslib, bsicons, plotly, DT, ggplot2,
@@ -68,8 +71,7 @@ start entirely. If any package fails the check, stay on Connect Cloud (Option A)
 2. Page goes live at `https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/`
    (or wire a custom subdomain like the Girth Index — add a `CNAME` file in `docs/` and a DNS
    CNAME with the cloud proxy turned off for validation).
-3. Drop a real `docs/og-image.png` (1200×630) so the social card renders — there's a placeholder
-   note in the HTML. A screenshot of the Compare tab works well.
+3. Keep the committed `docs/og-image.png` (1200×630) in sync with substantive cover changes.
 
 ## Retire the old target
 

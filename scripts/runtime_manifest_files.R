@@ -4,6 +4,7 @@
 WATER_RUNTIME_FILES <- c(
   "app.R",
   "helpers.R",
+  "scripts/water_unit_contract.R",
   "data/codebook.csv",
   "data/neon_swc.rds",
   "data/search_index.rds"

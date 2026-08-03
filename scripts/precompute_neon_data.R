@@ -100,9 +100,11 @@ for (s in SITES) {
     ad <- if (file.exists(a_dest)) suppressWarnings(suppressMessages(read_csv(a_dest, show_col_types = FALSE))) else NULL
     pd <- if (file.exists(p_dest)) suppressWarnings(suppressMessages(read_csv(p_dest, show_col_types = FALSE))) else NULL
     if (!is.null(ad) && nrow(ad)) {
+      if (!"laboratoryName" %in% names(ad)) ad$laboratoryName <- NA_character_
       analyte_acc[[length(analyte_acc)+1]] <- ad %>%
         transmute(site = siteID, collectDate, analyte,
                   analyteConcentration, analyteUnits,
+                  laboratoryName = as.character(laboratoryName),
                   belowDetectionQF  = as.character(belowDetectionQF),   # keep raw "ND"/"BDL"
                   externalLabDataQF = as.character(externalLabDataQF))
     }
@@ -126,6 +128,7 @@ partial   <- dplyr::n_distinct(lab_raw$site) < length(SITE_LABELS)
 bundle <- build_swc_bundle(lab_raw, field_raw, coords, partial = partial)
 save_bundle(bundle, file.path(ROOT, "data", "neon_swc.rds"))
 readr::write_csv(bundle$analyte_meta, file.path(ROOT, "data", "analyte_coverage.csv"))
+write_codebook(bundle, file.path(ROOT, "data", "codebook.csv"))
 
 logmsg("DONE. obs=%d sites=%d analytes=%d below-detection=%d partial=%s -> data/neon_swc.rds",
        bundle$built$n_obs, bundle$built$n_sites, bundle$built$n_analytes,

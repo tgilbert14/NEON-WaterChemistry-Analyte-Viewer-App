@@ -22,6 +22,8 @@ lab_raw <- bind_rows(lapply(a_files, function(f) {
   if (!all(c("siteID","collectDate","analyte","analyteConcentration") %in% names(d))) return(NULL)
   tibble(site = d$siteID, collectDate = d$collectDate, analyte = d$analyte,
          analyteConcentration = d$analyteConcentration, analyteUnits = d$analyteUnits,
+         laboratoryName = if ("laboratoryName" %in% names(d))
+           as.character(d$laboratoryName) else NA_character_,
          belowDetectionQF = if ("belowDetectionQF" %in% names(d)) d$belowDetectionQF else NA,
          externalLabDataQF = if ("externalLabDataQF" %in% names(d)) d$externalLabDataQF else NA)
 }))

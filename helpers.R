@@ -5,8 +5,13 @@
 # predict_glm(). No Shiny reactivity here — everything takes plain data frames.
 #----------------------------------------------------------------------
 suppressWarnings(suppressMessages({
-  library(dplyr); library(tidyr); library(ggplot2); library(plotly); library(lubridate)
+  # app.R loads the visualization stack before sourcing this file. Keeping this
+  # shared layer's eager imports to its data-frame dependencies lets the
+  # deterministic search/codebook builder reuse the scientific gates without
+  # loading plotly/ggplot/lubridate merely to define functions.
+  library(dplyr); library(tidyr)
 }))
+source(file.path("scripts", "water_unit_contract.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a) == 1 && is.na(a))) b else a
 # Vectorized NA-coalesce: element-wise "a unless NA, else b" (b recycled). Used
@@ -92,44 +97,83 @@ UNIT_PRETTY <- c(
 )
 
 ## ---- Canonical unit per analyte (review finding #3, units) ----------------
-# The bundle's analyte_meta took dplyr::first(units), so 20/34 analytes carry a
-# stray non-modal unit string and UV254/UV280 publish a literal NA. We DON'T
-# rebuild the bundle; instead canonical_units() picks the MODAL unit per analyte
-# from the long frame at app load and coerces every read through it. The six
-# µg/L-vs-mg/L mixers (verified mislabeled, NOT 1000× off — TP "µg/L" median
-# 0.057 vs mg/L 0.025) are forced to mg/L by label only; values are NOT scaled.
-# UV absorbance has no NEON unit string at all (it's an absorbance ratio) — we
-# stamp the canonical "absorbance units" so the dictionary stops exporting NA.
-CANON_UNIT_OVERRIDE <- c(
-  TP = "milligramsPerLiter", TDP = "milligramsPerLiter",
-  `Ortho - P` = "milligramsPerLiter", `NH4 - N` = "milligramsPerLiter",
-  `NO2 - N` = "milligramsPerLiter", `NO3+NO2 - N` = "milligramsPerLiter",
-  TPC = "microgramsPerLiter", TPN = "microgramsPerLiter",
-  `UV Absorbance (254 nm)` = "absorbance units",
-  `UV Absorbance (250 nm)` = "absorbance units",
-  `UV Absorbance (280 nm)` = "absorbance units"
-)
-# Modal (most-frequent) non-NA unit per analyte; overrides win. Returns a named
-# character vector code -> canonical NEON unit string.
+# The runtime first passes through canonicalize_runtime_water_units(): exact
+# registered mismatch identities are quarantined and registered missing labels
+# are filled only with an observed target label. Once that boundary succeeds,
+# every retained row must already carry its explicit established target. The
+# map below is therefore a validator/presentation lookup, never a modal guess.
 canonical_units <- function(swc_long) {
-  tab <- swc_long |>
-    dplyr::filter(!is.na(units), nzchar(units)) |>
-    dplyr::count(analyte, units, name = "k") |>
-    dplyr::group_by(analyte) |>
-    dplyr::slice_max(k, n = 1, with_ties = FALSE) |>
-    dplyr::ungroup()
-  out <- setNames(tab$units, tab$analyte)
-  ov  <- intersect(names(CANON_UNIT_OVERRIDE), unique(swc_long$analyte))
-  out[ov] <- CANON_UNIT_OVERRIDE[ov]
-  # any analyte with no usable unit string at all (pure-NA) still gets its override
-  miss <- setdiff(names(CANON_UNIT_OVERRIDE), names(out))
-  if (length(miss)) out[miss] <- CANON_UNIT_OVERRIDE[miss]
-  out
+  present <- unique(as.character(swc_long$analyte))
+  unknown <- setdiff(present, names(WATER_ESTABLISHED_UNIT_TARGETS))
+  if (length(unknown)) {
+    stop(sprintf("Unregistered analyte(s) reached the runtime: %s",
+                 paste(sort(unknown), collapse = ", ")), call. = FALSE)
+  }
+  expected <- unname(WATER_ESTABLISHED_UNIT_TARGETS[as.character(swc_long$analyte)])
+  if (anyNA(swc_long$units) || any(!nzchar(swc_long$units)) ||
+      !identical(as.character(swc_long$units), expected)) {
+    stop("Runtime units differ from the explicit established targets.",
+         call. = FALSE)
+  }
+  WATER_ESTABLISHED_UNIT_TARGETS[present]
 }
 # Resolve the canonical unit for one code against a precomputed map, falling back
 # to the raw string when the analyte isn't mapped (defensive).
 canon_unit_of <- function(code, map, fallback = NA_character_) {
   u <- unname(map[code]); ifelse(is.na(u), fallback, u)
+}
+
+# Reconcile the legacy or current bundle once at load. The same function is used
+# by app.R and build_search_index.R, so the UI, exports, metadata, wide matrix,
+# and search catalogue all exclude the identical audited mismatch rows.
+apply_runtime_water_unit_contract <- function(bundle) {
+  if (!is.list(bundle) || !is.data.frame(bundle$swc_long) ||
+      !is.data.frame(bundle$sites_meta) || !is.list(bundle$built)) {
+    stop("Runtime water bundle schema is invalid.", call. = FALSE)
+  }
+  result <- canonicalize_runtime_water_units(bundle$swc_long)
+  bundle$swc_long <- result$data
+
+  bundle$swc_wide <- bundle$swc_long |>
+    dplyr::select(site, collectDate, analyte, value) |>
+    tidyr::pivot_wider(names_from = analyte, values_from = value)
+  bundle$analyte_meta <- bundle$swc_long |>
+    dplyr::group_by(analyte) |>
+    dplyr::summarise(
+      units = dplyr::first(units), n = dplyr::n(),
+      n_sites = dplyr::n_distinct(site),
+      n_below = sum(belowDetection), source = dplyr::first(source),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(dplyr::desc(n))
+
+  site_coverage <- bundle$swc_long |>
+    dplyr::group_by(site) |>
+    dplyr::summarise(
+      n_obs = dplyr::n(), n_analytes = dplyr::n_distinct(analyte),
+      first = min(collectDate), last = max(collectDate),
+      n_dates = dplyr::n_distinct(collectDate), .groups = "drop"
+    )
+  static_site_meta <- bundle$sites_meta |>
+    dplyr::select(-dplyr::any_of(c(
+      "n_obs", "n_analytes", "first", "last", "n_dates"
+    )))
+  bundle$sites_meta <- static_site_meta |>
+    dplyr::inner_join(site_coverage, by = "site")
+
+  bundle$built$n_obs <- as.integer(nrow(bundle$swc_long))
+  bundle$built$n_sites <- as.integer(dplyr::n_distinct(bundle$swc_long$site))
+  bundle$built$n_analytes <- as.integer(dplyr::n_distinct(bundle$swc_long$analyte))
+  bundle$built$n_below <- as.integer(sum(bundle$swc_long$belowDetection))
+  bundle$built$runtime_unit_policy <- WATER_UNIT_POLICY
+  bundle$built$n_runtime_unit_rows_excluded <-
+    result$n_collapsed_rows_excluded
+  bundle$built$n_runtime_unit_source_rows_excluded <-
+    result$n_source_rows_excluded
+  bundle$built$n_runtime_unit_labels_rewritten <-
+    result$n_missing_labels_rewritten
+  attr(bundle, "runtime_unit_exclusions") <- result$excluded
+  bundle
 }
 
 ## ---- Per-analyte plausibility gate (review finding #2, outlier QC) ---------
