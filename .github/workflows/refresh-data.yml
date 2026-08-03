@@ -165,7 +165,17 @@ jobs:
         if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_download == false) }}
         env:
           NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
+          WATER_REFRESH_REVIEW_DIR: ${{ runner.temp }}/water-refresh-review
         run: Rscript --vanilla scripts/refresh_data.R
+
+      - name: Upload full-fetch replay and unit review
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_download == false)) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: water-refresh-review-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/water-refresh-review
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Rebuild deterministic derived bytes
         run: |
@@ -179,6 +189,7 @@ jobs:
           Rscript --vanilla tests/test_runtime_manifest_files.R
           Rscript --vanilla tests/test_connect_package_lock.R
           Rscript --vanilla tests/test_unit_canonicalization.R
+          Rscript --vanilla tests/test_water_refresh_review.R
           Rscript --vanilla tests/test_save_bundle_recovery.R
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
           Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
@@ -192,7 +203,7 @@ jobs:
             echo "Verifier accepted an extra positional argument."
             exit 1
           fi
-          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/verify_connect_runtime.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_connect_package_lock.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R")'
+          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/water_refresh_review.R"); parse("scripts/verify_connect_runtime.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_connect_package_lock.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_water_refresh_review.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R")'
           bash -n scripts/connect_runtime_smoke.sh scripts/post_deploy_smoke.sh
           git diff --check
 
@@ -286,6 +297,7 @@ jobs:
           Rscript --vanilla tests/test_runtime_manifest_files.R
           Rscript --vanilla tests/test_connect_package_lock.R
           Rscript --vanilla tests/test_unit_canonicalization.R
+          Rscript --vanilla tests/test_water_refresh_review.R
           Rscript --vanilla tests/test_save_bundle_recovery.R
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
           Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"

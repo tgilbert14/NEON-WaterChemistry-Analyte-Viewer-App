@@ -18,6 +18,7 @@ CACHE_DIR <- file.path(ROOT, "data", ".neon_cache")
 LOG       <- file.path(ROOT, "data", "precompute_log.txt")
 dir.create(CACHE_DIR, recursive = TRUE, showWarnings = FALSE)
 source(file.path(ROOT, "scripts", "build_swc_bundle.R"))  # SITE_LABELS, PRODUCT_CODE, build_swc_bundle(), save_bundle()
+source(file.path(ROOT, "scripts", "water_refresh_review.R"))
 PRODUCT <- PRODUCT_CODE
 SITES   <- names(SITE_LABELS)
 
@@ -124,6 +125,24 @@ lab_raw   <- bind_rows(analyte_acc)
 field_raw <- bind_rows(field_acc)
 coords    <- sites_meta %>% select(site, neonName, domain, state, lat, long, siteType)
 partial   <- dplyr::n_distinct(lab_raw$site) < length(SITE_LABELS)
+
+# Every full-fetch workflow supplies a runner-temp destination. Persist only the
+# selected public inputs and deterministic unit evidence before the strict
+# builder can stop on a new scientific identity. No credential or cache path is
+# accepted by the writer, and these bytes are not candidate/publisher inputs.
+review_dir <- Sys.getenv("WATER_REFRESH_REVIEW_DIR", "")
+if (nzchar(review_dir)) {
+  logmsg("Persisting public replay inputs and unit-mismatch review evidence...")
+  review_result <- write_water_refresh_review(
+    lab_raw, field_raw, coords, review_dir,
+    source_sha = Sys.getenv("SOURCE_SHA", "")
+  )
+  logmsg(
+    "Review evidence ready: %d mismatch identities; %d require review",
+    review_result$receipt$n_mismatch_identities,
+    review_result$receipt$n_unapproved_identities
+  )
+}
 
 bundle <- build_swc_bundle(lab_raw, field_raw, coords, partial = partial)
 save_bundle(bundle, file.path(ROOT, "data", "neon_swc.rds"))
