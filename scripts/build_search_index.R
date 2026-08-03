@@ -90,7 +90,10 @@ idx <- list(
   analytes  = analytes,
   n_sites   = dplyr::n_distinct(per_site$site),
   built     = list(
-    when    = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    # Derive provenance from the immutable source bundle. A wall-clock stamp
+    # made skip-download refreshes manufacture new index bytes even when the
+    # underlying observations had not changed.
+    when    = D$built$when %||% D$built$data_through %||% NA_character_,
     product = D$built$product %||% "DP1.20093.001",
     source  = "data/neon_swc.rds (committed bundle; plausibility-gated)"
   )

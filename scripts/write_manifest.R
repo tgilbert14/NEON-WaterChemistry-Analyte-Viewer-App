@@ -36,7 +36,7 @@ rsconnect::writeManifest(appDir = ".", appPrimaryDoc = "app.R", appFiles = app_f
 # from source regardless of repo. 1.8-50 is the last release before 1.8-54: it compiles
 # on 3.4.1 and still satisfies raster's terra (>= 1.8-5). terra/raster are install-only
 # (leaflet -> raster -> terra; app never calls terra) -> zero runtime impact. Also pin
-# the repo to the RSPM jammy binary mirror for suite consistency.
+# the repo to the dated RSPM jammy snapshot used by validation.
 local({
   mm <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
   if (!is.null(mm$packages$terra)) {
@@ -45,10 +45,13 @@ local({
     jsonlite::write_json(mm, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null")
   }
   mtxt <- readLines("manifest.json", warn = FALSE)
-  mtxt <- gsub("https://cloud.r-project.org", "https://packagemanager.posit.co/cran/__linux__/jammy/latest", mtxt, fixed = TRUE)
-  mtxt <- gsub("https://packagemanager.posit.co/cran/latest", "https://packagemanager.posit.co/cran/__linux__/jammy/latest", mtxt, fixed = TRUE)
+  snapshot <- "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
+  mtxt <- gsub("https://cloud.r-project.org", snapshot, mtxt, fixed = TRUE)
+  mtxt <- gsub("https://cran.rstudio.com", snapshot, mtxt, fixed = TRUE)
+  mtxt <- gsub("https://packagemanager.posit.co/cran/latest", snapshot, mtxt, fixed = TRUE)
+  mtxt <- gsub("https://packagemanager.posit.co/cran/__linux__/jammy/latest", snapshot, mtxt, fixed = TRUE)
   writeLines(mtxt, "manifest.json")
-  cat("Pinned terra to 1.8-50 + RSPM jammy repo.\n")
+  cat("Pinned terra to 1.8-50 + dated RSPM jammy snapshot.\n")
 })
 
 # ---- HARD GATE: a leaked heavy package must never commit silently ----------

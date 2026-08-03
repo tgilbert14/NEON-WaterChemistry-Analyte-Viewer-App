@@ -1,50 +1,59 @@
-name: Refresh NEON data bundle
+name: Propose NEON water-chemistry refresh
 
-# Monthly rebuild of the surface-water-chemistry bundle (data/neon_swc.rds +
-# data/analyte_coverage.csv), then a direct push to main. Runs late on the FIRST
-# SATURDAY NIGHT of each month (~11pm Arizona time) so any republish lands off-peak.
-# NEON publishes on a lag, so a monthly pull keeps the bundled data current. Posit
-# Connect Cloud auto-republishes on every push to main.
-#
-# This app pulls the NEON PUBLIC API directly (scripts/precompute_neon_data.R) —
-# no neonUtilities, no NEON token needed. A completeness guard in
-# scripts/refresh_data.R aborts before the PR if a bad-API day produced a shrunken
-# bundle, so the committed data is never clobbered with a partial pull.
-# Trigger manually any time from the Actions tab (workflow_dispatch).
+# Producer -> independent validator -> restricted publisher. The scheduled pull
+# can never write main: only exact bytes that pass the candidate contract reach a
+# fixed review branch, and a repository write user makes the PR/merge decision.
 
 on:
   schedule:
-    # Every Sunday 06:00 UTC == Saturday 23:00 America/Phoenix (Arizona, no DST).
-    # Cron can't express "first Saturday of the month", so we fire every Saturday
-    # night and let the `gate` job below proceed only on the first one.
+    # Every Sunday 06:00 UTC == Saturday 23:00 America/Phoenix (no DST).
+    # The gate below allows only the first Saturday night of each month.
     - cron: "0 6 * * 0"
   workflow_dispatch:
     inputs:
       skip_download:
-        description: "Skip the NEON re-pull; just redeploy the committed bundle to main (fast test)"
+        description: "Skip the NEON re-pull; rebuild derived bytes from the committed bundle"
         type: boolean
         default: false
+  pull_request:
+    branches: [main]
 
 permissions:
-  contents: write          # commit the refreshed bundle to the PR branch
-  pull-requests: write     # open/update the data-refresh PR
+  contents: read
+
+concurrency:
+  group: water-chemistry-refresh
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  RENV_CONFIG_REPOS_OVERRIDE: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  OPENBLAS_CORETYPE: Haswell
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
 
 jobs:
-  # Gate: only the FIRST Saturday night (Arizona time) runs the heavy refresh.
-  # Manual runs (workflow_dispatch) always proceed.
   gate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       run: ${{ steps.check.outputs.run }}
     steps:
       - id: check
         run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Pull request validation — proceeding on exact head $SOURCE_SHA."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual run — proceeding."
-            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          dow=$(TZ='America/Phoenix' date +%u)    # 6 = Saturday
-          day=$(TZ='America/Phoenix' date +%-d)   # day-of-month, no leading zero
+          dow=$(TZ='America/Phoenix' date +%u)
+          day=$(TZ='America/Phoenix' date +%-d)
           if [ "$dow" = "6" ] && [ "$day" -le 7 ]; then
             echo "First Saturday in Arizona (day $day) — proceeding."
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -53,72 +62,249 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-  refresh:
+  build_candidate:
     needs: gate
     if: needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
-    env:
-      # NEON requires an API token for downloads from 2026-06-30. precompute_neon_data.R
-      # reads NEON_TOKEN and sends it as the X-API-Token header on every API + file
-      # request. Set this repo secret (Settings -> Secrets and variables -> Actions) to a
-      # token from your NEON "My Account" page; without it, the monthly re-pull will fail
-      # after 2026-06-30 (the app keeps serving its last committed bundle).
-      NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout the immutable source revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}   # push to main -> Connect Cloud auto-redeploys
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - uses: r-lib/actions/setup-r@v2
+      - name: Preserve the committed validation baseline
+        run: cp data/neon_swc.rds "$RUNNER_TEMP/water-baseline.rds"
+
+      - name: Set up pinned R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          use-public-rspm: true
+          r-version: "4.5.2"
+          use-public-rspm: false
 
-      # Pulls the NEON public API directly — only these light deps, no neonUtilities.
-      # leaflet + shinyjs are added so the manifest-regen step (writeManifest) can
-      # snapshot them as runtime deps of the map-first splash (the tile basemap +
-      # the shinyjs show/hide gate between #splash and #mainTabsWrap).
-      - name: Install R packages
-        uses: r-lib/actions/setup-r-dependencies@v2
+      - name: Install build and runtime-manifest dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
           packages: >
-            jsonlite, dplyr, tidyr, readr, leaflet, shinyjs
+            jsonlite, dplyr, tidyr, tibble, readr, shiny, bslib, bsicons,
+            ggplot2, plotly@4.12.0, lubridate, DT, leaflet, shinyjs,
+            shinycssloaders, cachem, htmltools, rsconnect, cpp11, progress,
+            url::https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz,
+            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: water-refresh-geo-closure-v1
+          install-pandoc: "false"
+          install-quarto: "false"
 
-      # Pull + rebuild data/neon_swc.rds, then guard against a shrunken bundle
-      # (the guard stop()s the job before the PR if the pull collapsed).
-      - name: Refresh the surface-water-chemistry bundle (full NEON re-pull)
-        if: ${{ github.event.inputs.skip_download != 'true' }}
-        run: Rscript scripts/refresh_data.R
+      - name: Refresh the complete water-chemistry bundle
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_download == false) }}
+        env:
+          NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
+        run: Rscript --vanilla scripts/refresh_data.R
 
-      # Rebuild the bundled "Search the network" index from the COMMITTED bundle
-      # (no live fetch) so it never drifts from data/neon_swc.rds. Runs on BOTH the
-      # full refresh and the skip_download fast test: it derives from the committed
-      # bundle, so it is a clean no-op (or a real diff) either way.
-      - name: Rebuild the search index
-        run: Rscript scripts/build_search_index.R
-
-      # Regenerate the lean manifest.json so Connect Cloud serves the current
-      # package + data file set (the gate stop()s on a neonUtilities/arrow leak).
-      - name: Regenerate manifest.json
-        run: Rscript scripts/write_manifest.R
-
-      # Commit + push refreshed data DIRECTLY to main. THIS is the deploy: the push
-      # makes Connect Cloud auto-republish (matching the SM / Veg / Plant / Beetle
-      # siblings, and the suite standard of auto-push to the watched branch, not
-      # PR-merge). The completeness guard in refresh_data.R already stop()s before
-      # here if the pull came back shrunken. Guarded so it no-ops when nothing changed.
-      - name: Commit & push refreshed data to main
+      - name: Rebuild deterministic derived bytes
         run: |
-          git config user.name  "neon-data-bot"
-          git config user.email "neon-data-bot@users.noreply.github.com"
-          # Explicit paths only (never a blanket add — analyte_coverage.csv is
-          # gitignored and a blanket add would abort under bash -e). The bundle,
-          # the derived search index, the committed codebook, and the lean manifest
-          # all deploy together so Connect serves a consistent set.
-          git add data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json
-          if git diff --cached --quiet; then
-            echo "No data changes - nothing to commit or deploy."
-          else
-            git commit -m "data: monthly NEON surface-water-chemistry refresh [bot]"
-            git push origin HEAD:main
-            echo "Pushed refreshed data to main - Connect Cloud will redeploy."
+          set -euo pipefail
+          Rscript --vanilla scripts/build_search_index.R
+          Rscript --vanilla scripts/write_manifest.R
+
+      - name: Verify the producer candidate
+        run: |
+          set -euo pipefail
+          Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
+          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/build_search_index.R"); parse("scripts/verify_refresh_candidate.R")'
+          git diff --check
+
+      - name: Package the producer candidate
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/water-refresh.tgz" data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json
+
+      - name: Upload the producer candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: water-refresh-producer-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/water-refresh.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  validate_candidate:
+    needs: [gate, build_candidate]
+    if: needs.gate.outputs.run == 'true' && needs.build_candidate.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the immutable source revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Preserve the committed validation baseline
+        run: cp data/neon_swc.rds "$RUNNER_TEMP/water-baseline.rds"
+
+      - name: Download the producer candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: water-refresh-producer-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/producer-candidate
+
+      - name: Extract the producer candidate
+        run: tar -xzf "$RUNNER_TEMP/producer-candidate/water-refresh.tgz"
+
+      - name: Set up pinned R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: "4.5.2"
+          use-public-rspm: false
+
+      - name: Install validator dependency
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          packages: jsonlite
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: water-refresh-validator-v1
+          install-pandoc: "false"
+          install-quarto: "false"
+
+      - name: Independently verify exact candidate bytes
+        run: |
+          set -euo pipefail
+          Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
+          unexpected=$(git diff --name-only | grep -Ev '^(data/neon_swc[.]rds|data/search_index[.]rds|data/codebook[.]csv|manifest[.]json)$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "Candidate changed paths outside the publication allowlist:"
+            echo "$unexpected"
+            exit 1
           fi
+          git diff --check
+
+      - name: Package independently validated bytes
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/water-refresh-validated.tgz" data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json
+
+      - name: Upload independently validated candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: water-refresh-validated-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/water-refresh-validated.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish_candidate:
+    needs: [gate, build_candidate, validate_candidate]
+    if: github.event_name != 'pull_request' && needs.gate.outputs.run == 'true' && needs.validate_candidate.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout the validated source revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Download the independently validated candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: water-refresh-validated-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/validated-candidate
+
+      - name: Publish or update the review branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor origin/main "$SOURCE_SHA"; then
+            echo "Producer revision does not contain current main; refusing stale publication."
+            exit 1
+          fi
+          tar -xzf "$RUNNER_TEMP/validated-candidate/water-refresh-validated.tgz"
+          if git diff --quiet -- data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json; then
+            echo "No validated data change; no review branch created."
+            exit 0
+          fi
+          unexpected=$(git diff --name-only | grep -Ev '^(data/neon_swc[.]rds|data/search_index[.]rds|data/codebook[.]csv|manifest[.]json)$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "Validated artifact changed paths outside the publication allowlist:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+          branch="automation/water-chemistry-data-refresh"
+          remote_head=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
+          git switch -C "$branch"
+          git config user.name "neon-data-bot"
+          git config user.email "neon-data-bot@users.noreply.github.com"
+          git add data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json
+          git commit -m "data: propose validated water-chemistry refresh [bot]" -m "Produced from $SOURCE_SHA; complete roster, non-shrink baseline, deterministic index, manifest checksums, and independent validation passed."
+          published_commit=$(git rev-parse HEAD)
+          if [[ "$(git rev-parse HEAD^)" != "$SOURCE_SHA" ]]; then
+            echo "Candidate promotion commit is not a direct child of the validated producer revision."
+            exit 1
+          fi
+          if [ -n "$remote_head" ]; then
+            git push --force-with-lease="refs/heads/$branch:$remote_head" origin "$branch:refs/heads/$branch"
+          else
+            git push origin "$branch:refs/heads/$branch"
+          fi
+          pushed_commit=""
+          for attempt in 1 2 3 4 5; do
+            pushed_commit=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
+            [[ "$pushed_commit" == "$published_commit" ]] && break
+            sleep 2
+          done
+          if [[ "$pushed_commit" != "$published_commit" ]]; then
+            echo "Published branch does not resolve to the validated candidate commit."
+            exit 1
+          fi
+
+          pr_count=$(gh pr list --head "$branch" --base main --state open --json url --jq 'length')
+          if (( pr_count > 1 )); then
+            echo "More than one open main PR exists for $branch; refusing ambiguous publication."
+            exit 1
+          fi
+          if (( pr_count == 0 )); then
+            compare_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
+            {
+              echo "### Validated Water Chemistry review branch ready"
+              echo "- Branch: $branch"
+              echo "- Exact head: $published_commit"
+              echo "- Validator run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo "- [Open the reviewer-authenticated PR]($compare_url)"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Validated review branch ready::Open a reviewer-authenticated PR from $branch to main after reviewing run $GITHUB_RUN_ID; that PR event is the exact-head CI trigger."
+            exit 0
+          fi
+
+          pr_record=""
+          for attempt in 1 2 3 4 5; do
+            pr_record=$(gh pr list --head "$branch" --base main --state open --json url,baseRefName,headRefName,headRefOid --jq 'if length == 1 then .[0] | [.url,.baseRefName,.headRefName,.headRefOid] | @tsv else "" end')
+            [[ "$pr_record" == *$'\t'"$published_commit" ]] && break
+            sleep 2
+          done
+          IFS=$'\t' read -r pr_url pr_base pr_head pr_oid <<< "$pr_record"
+          if [[ -z "$pr_record" || "$pr_base" != main || "$pr_head" != "$branch" || "$pr_oid" != "$published_commit" ]]; then
+            echo "Open PR identity does not match main <- $branch at $published_commit."
+            exit 1
+          fi
+          gh pr comment "$pr_url" --body "Updated from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. A repository write user must approve and verify green checks on exact head $published_commit before merge."
+          echo "::notice title=Approve exact-head PR checks::Existing PR updated to $published_commit; do not merge until its exact-head checks are green."
