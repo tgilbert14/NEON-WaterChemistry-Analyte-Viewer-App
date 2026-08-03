@@ -54,6 +54,16 @@ run_tests <- function() {
     # A new unit pair; no value conversion may be attempted by this helper.
     make_rows("WALK", "2019-06-18", "NO3+NO2 - N", "23",
               "microgram", "Example_Lab", "BDL", "formatChange"),
+    # Missing labels exercise both strict-gate failure modes and the one
+    # established rewrite that is supportable because its target is observed.
+    make_rows("ARIK", "2020-01-01", "Ca", "1.1",
+              NA_character_, "Example_Lab"),
+    make_rows("BARC", "2020-02-01", "Br", "1.2",
+              NA_character_, "Example_Lab"),
+    make_rows("BIGC", "2020-03-01", "DOC", "1.3",
+              NA_character_, "Example_Lab"),
+    make_rows("BIGC", "2020-03-02", "DOC", "1.4",
+              "milligramsPerLiter", "Example_Lab"),
     # Target-unit and invalid-value rows never reach the mismatch boundary.
     make_rows("WALK", "2019-07-01", "TP", "0.025",
               "milligramsPerLiter", "Example_Lab"),
@@ -86,10 +96,7 @@ run_tests <- function() {
   stopifnot(
     identical(lab_raw, original_lab),
     identical(review_a, review_b),
-    nrow(review_a) == 3L,
-    identical(review_a$site, c("CRAM", "WALK", "WALK")),
-    identical(review_a$collectDate,
-              c("2017-08-29", "2019-06-18", "2019-07-01")),
+    nrow(review_a) == 6L,
     all(nchar(review_a$source_rows_sha256) == 64L)
   )
 
@@ -98,8 +105,16 @@ run_tests <- function() {
     review_a$collectDate == "2019-06-18"
   walk_audited <- review_a$site == "WALK" &
     review_a$collectDate == "2019-07-01"
+  ca_missing <- review_a$site == "ARIK" &
+    review_a$collectDate == "2020-01-01"
+  br_without_target <- review_a$site == "BARC" &
+    review_a$collectDate == "2020-02-01"
+  doc_with_target <- review_a$site == "BIGC" &
+    review_a$collectDate == "2020-03-01"
   stopifnot(
     sum(cram) == 1L, sum(walk_new) == 1L, sum(walk_audited) == 1L,
+    sum(ca_missing) == 1L, sum(br_without_target) == 1L,
+    sum(doc_with_target) == 1L,
     identical(review_a$analyte[cram], "TPN"),
     identical(review_a$from_unit[cram], "milligram"),
     identical(review_a$n_source_rows[cram], 2L),
@@ -116,7 +131,46 @@ run_tests <- function() {
     identical(review_a$from_unit[walk_new], "microgram"),
     identical(review_a$source_value_min[walk_new], "23"),
     identical(review_a$review_status[walk_audited], "audited-exclusion"),
-    identical(review_a$is_unapproved[walk_audited], "false")
+    identical(review_a$is_unapproved[walk_audited], "false"),
+    identical(review_a$from_unit[ca_missing], WATER_MISSING_UNIT),
+    identical(review_a$review_status[ca_missing],
+              "unapproved-missing-unit-label"),
+    identical(review_a$n_observed_target_rows[ca_missing], 0L),
+    identical(review_a$review_status[br_without_target],
+              "missing-label-repair-without-target"),
+    identical(review_a$n_observed_target_rows[br_without_target], 0L),
+    identical(review_a$review_status[doc_with_target],
+              "approved-missing-label-rewrite"),
+    identical(review_a$n_observed_target_rows[doc_with_target], 1L),
+    identical(review_a$is_unapproved[doc_with_target], "false")
+  )
+
+  gate_message <- function(rows) {
+    expect_error(canonicalize_water_unit_labels(
+      rows$site, as.Date(substr(rows$collectDate, 1L, 10L)), rows$analyte,
+      suppressWarnings(as.numeric(rows$analyteConcentration)),
+      rows$analyteUnits, rows$laboratoryName
+    ))
+  }
+  ca_rows <- lab_raw[lab_raw$site == "ARIK", , drop = FALSE]
+  br_rows <- lab_raw[lab_raw$site == "BARC", , drop = FALSE]
+  doc_rows <- lab_raw[lab_raw$site == "BIGC", , drop = FALSE]
+  stopifnot(
+    grepl("Unapproved missing unit label", gate_message(ca_rows),
+          fixed = TRUE),
+    grepl("Missing-label repair lacks an observed target label",
+          gate_message(br_rows), fixed = TRUE)
+  )
+  doc_result <- canonicalize_water_unit_labels(
+    doc_rows$site, as.Date(substr(doc_rows$collectDate, 1L, 10L)),
+    doc_rows$analyte,
+    suppressWarnings(as.numeric(doc_rows$analyteConcentration)),
+    doc_rows$analyteUnits, doc_rows$laboratoryName
+  )
+  stopifnot(
+    sum(doc_result$label_receipt$n_rewritten) == 1L,
+    identical(doc_result$units,
+              rep("milligramsPerLiter", nrow(doc_rows)))
   )
 
   replay <- water_refresh_replay_inputs(lab_raw, field_raw, coords)
@@ -148,17 +202,14 @@ run_tests <- function() {
     coords[rev(seq_len(nrow(coords))), , drop = FALSE],
     out_b, source_sha = source_sha
   )
-  expected_files <- sort(c(
-    "replay/coords.rds", "replay/field_raw.rds", "replay/lab_raw.rds",
-    "water-refresh-review-receipt.csv",
-    "water-refresh-review-receipt.sha256",
-    "water-unit-mismatch-review.csv"
-  ))
+  expected_files <- sort(WATER_REFRESH_REVIEW_FILES)
   actual_files <- sort(list.files(out_a, recursive = TRUE))
   stopifnot(identical(actual_files, expected_files),
             identical(sort(result_a$files), expected_files),
             identical(result_a$review, result_b$review),
             identical(result_a$receipt, result_b$receipt))
+  validate_water_refresh_review(out_a, expected_source_sha = source_sha)
+  validate_water_refresh_review(out_b, expected_source_sha = source_sha)
 
   file_bytes <- function(path) {
     readBin(path, what = "raw", n = file.info(path)$size)
@@ -179,8 +230,8 @@ run_tests <- function() {
     !grepl(out_a, artifact_text, fixed = TRUE),
     !grepl(out_b, artifact_text, fixed = TRUE),
     identical(result_a$receipt$source_sha, source_sha),
-    identical(result_a$receipt$n_mismatch_identities, 3L),
-    identical(result_a$receipt$n_unapproved_identities, 2L)
+    identical(result_a$receipt$n_mismatch_identities, 6L),
+    identical(result_a$receipt$n_unapproved_identities, 4L)
   )
   stored_replay <- list(
     lab_raw = readRDS(file.path(out_a, "replay", "lab_raw.rds")),
@@ -211,9 +262,52 @@ run_tests <- function() {
     ))
   ))
 
+  expect_error(validate_water_refresh_review(
+    out_a, expected_source_sha = paste(rep("b", 40L), collapse = "")
+  ))
+  unexpected_path <- file.path(out_b, "unexpected.txt")
+  file.create(unexpected_path)
+  expect_error(validate_water_refresh_review(
+    out_b, expected_source_sha = source_sha
+  ))
+  unlink(unexpected_path)
+  write("tamper", file.path(out_b, "water-unit-mismatch-review.csv"),
+        append = TRUE)
+  expect_error(validate_water_refresh_review(
+    out_b, expected_source_sha = source_sha
+  ))
+
   expect_error(write_water_refresh_review(
     lab_raw, field_raw, coords, out_a, source_sha = source_sha
   ))
+  existing_empty <- tempfile("water-review-existing-")
+  dir.create(existing_empty)
+  on.exit(unlink(existing_empty, recursive = TRUE, force = TRUE), add = TRUE)
+  expect_error(write_water_refresh_review(
+    lab_raw, field_raw, coords, existing_empty, source_sha = source_sha
+  ))
+  stopifnot(!length(list.files(existing_empty, all.files = TRUE,
+                               no.. = TRUE)))
+  failed_out <- tempfile("water-review-failed-")
+  bad_lab <- lab_raw[, setdiff(names(lab_raw), "belowDetectionQF"),
+                     drop = FALSE]
+  expect_error(write_water_refresh_review(
+    bad_lab, field_raw, coords, failed_out, source_sha = source_sha
+  ))
+  staging_prefix <- paste0(".", basename(failed_out), ".staging-")
+  sibling_entries <- list.files(dirname(failed_out), all.files = TRUE,
+                                no.. = TRUE)
+  stopifnot(
+    !file.exists(failed_out),
+    !any(startsWith(sibling_entries, staging_prefix))
+  )
+  unspecified_out <- tempfile("water-review-unspecified-")
+  on.exit(unlink(unspecified_out, recursive = TRUE, force = TRUE), add = TRUE)
+  unspecified <- write_water_refresh_review(
+    lab_raw, field_raw, coords, unspecified_out
+  )
+  stopifnot(identical(unspecified$receipt$source_sha, "<UNSPECIFIED>"))
+  validate_water_refresh_review(unspecified_out)
   invalid_dir <- tempfile("water-review-invalid-")
   on.exit(unlink(invalid_dir, recursive = TRUE, force = TRUE), add = TRUE)
   expect_error(write_water_refresh_review(

@@ -168,8 +168,17 @@ jobs:
           WATER_REFRESH_REVIEW_DIR: ${{ runner.temp }}/water-refresh-review
         run: Rscript --vanilla scripts/refresh_data.R
 
-      - name: Upload full-fetch replay and unit review
+      - name: Verify full-fetch replay and unit review integrity
+        id: review_integrity
         if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_download == false)) }}
+        env:
+          WATER_REFRESH_REVIEW_DIR: ${{ runner.temp }}/water-refresh-review
+        run: |
+          set -euo pipefail
+          Rscript --vanilla -e 'source("scripts/water_refresh_review.R"); validate_water_refresh_review(Sys.getenv("WATER_REFRESH_REVIEW_DIR"), expected_source_sha = Sys.getenv("SOURCE_SHA"))'
+
+      - name: Upload full-fetch replay and unit review
+        if: ${{ always() && steps.review_integrity.outcome == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_download == false)) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: water-refresh-review-${{ env.SOURCE_SHA }}
