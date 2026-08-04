@@ -165,33 +165,107 @@ wrong_mass_lab <- make_rows(
 wrong_lab_message <- expect_build_error(wrong_mass_lab)
 stopifnot(grepl("provenance", wrong_lab_message, fixed = TRUE))
 
-# The deployed legacy bundle is safe only after the shared runtime boundary
-# removes the same 48 collapsed mismatch identities (99 represented source
-# rows). Unknown identities and increases beyond audited replicate bounds stop.
-legacy <- readRDS(file.path(repo_root, "data", "neon_swc.rds"))
+# The committed bundle can be either the exact receipt-free legacy bytes or a
+# producer-canonicalized candidate. Derive the runtime expectation from the
+# bundle itself so this regression exercises both states without confusing the
+# 73-row producer audit receipt with rows that remain at the runtime boundary.
+legacy_path <- file.path(repo_root, "data", "neon_swc.rds")
+legacy <- readRDS(legacy_path)
+runtime_source_labels <- water_unit_source_label(legacy$swc_long$units)
+runtime_targets <- unname(WATER_ESTABLISHED_UNIT_TARGETS[
+  as.character(legacy$swc_long$analyte)
+])
+runtime_mismatch <- runtime_source_labels != WATER_MISSING_UNIT &
+  runtime_source_labels != runtime_targets
+expected_runtime_exclusions <- data.frame(
+  site = as.character(legacy$swc_long$site[runtime_mismatch]),
+  collectDate = as.character(legacy$swc_long$collectDate[runtime_mismatch]),
+  analyte = as.character(legacy$swc_long$analyte[runtime_mismatch]),
+  from_unit = runtime_source_labels[runtime_mismatch],
+  n_source_rows = legacy$swc_long$n_reps[runtime_mismatch],
+  stringsAsFactors = FALSE
+)
 runtime_result <- canonicalize_runtime_water_units(legacy$swc_long)
 stopifnot(
-  identical(runtime_result$n_collapsed_rows_excluded, 48L),
-  identical(runtime_result$n_source_rows_excluded, 99L),
-  nrow(runtime_result$data) == nrow(legacy$swc_long) - 48L,
+  identical(runtime_result$excluded, expected_runtime_exclusions),
+  identical(runtime_result$n_collapsed_rows_excluded,
+            as.integer(sum(runtime_mismatch))),
+  identical(runtime_result$n_source_rows_excluded,
+            as.integer(sum(legacy$swc_long$n_reps[runtime_mismatch]))),
+  nrow(runtime_result$data) ==
+    nrow(legacy$swc_long) - sum(runtime_mismatch),
   all(as.character(runtime_result$data$units) == unname(
     WATER_ESTABLISHED_UNIT_TARGETS[as.character(runtime_result$data$analyte)]
   ))
 )
 
-unknown_runtime <- legacy$swc_long
-hit <- which(unknown_runtime$analyte == "TP" &
-               unknown_runtime$units == "microgramsPerLiter")[[1]]
-unknown_runtime$site[[hit]] <- "SYCA"
+producer_receipt_present <- WATER_UNIT_RECEIPT_FIELDS %in% names(legacy$built)
+stopifnot(all(producer_receipt_present) || !any(producer_receipt_present))
+if (all(producer_receipt_present)) {
+  producer_receipt <- legacy$built$unit_row_exclusions
+  producer_keys <- water_unit_identity_key(
+    producer_receipt$site, producer_receipt$collectDate,
+    producer_receipt$analyte, producer_receipt$from_unit
+  )
+  policy_keys <- water_unit_identity_key(
+    WATER_UNIT_EXCLUSION_IDENTITIES$site,
+    WATER_UNIT_EXCLUSION_IDENTITIES$collectDate,
+    WATER_UNIT_EXCLUSION_IDENTITIES$analyte,
+    WATER_UNIT_EXCLUSION_IDENTITIES$from_unit
+  )
+  stopifnot(
+    identical(legacy$built$unit_policy, WATER_UNIT_POLICY),
+    nrow(producer_receipt) == 73L,
+    identical(sort(producer_keys), sort(policy_keys)),
+    is.integer(producer_receipt$n_excluded),
+    !anyNA(producer_receipt$n_excluded),
+    all(producer_receipt$n_excluded >= 0L),
+    all(producer_receipt$n_excluded <= producer_receipt$max_source_rows),
+    identical(legacy$built$n_unit_rows_excluded,
+              as.integer(sum(producer_receipt$n_excluded))),
+    identical(legacy$built$unit_exclusion_receipt_sha256,
+              water_unit_receipt_sha256(producer_receipt)),
+    identical(runtime_result$n_collapsed_rows_excluded, 0L),
+    identical(runtime_result$n_source_rows_excluded, 0L)
+  )
+} else {
+  legacy_sha256 <- digest::digest(file = legacy_path, algo = "sha256")
+  stopifnot(
+    identical(legacy_sha256, WATER_LEGACY_BUNDLE_SHA256),
+    identical(runtime_result$n_collapsed_rows_excluded, 48L),
+    identical(runtime_result$n_source_rows_excluded, 99L)
+  )
+}
+
+# Exercise runtime fail-closed behavior with an explicit audited identity. A
+# producer-canonicalized bundle intentionally contains no residual mismatches,
+# so the adversarial fixtures must not depend on finding one in committed data.
+audited_identity <- WATER_UNIT_EXCLUSION_IDENTITIES[1, , drop = FALSE]
+audited_runtime <- legacy$swc_long[
+  which(legacy$swc_long$analyte == audited_identity$analyte)[[1]],
+  , drop = FALSE
+]
+audited_runtime$site[[1]] <- audited_identity$site[[1]]
+audited_runtime$collectDate[[1]] <- as.Date(audited_identity$collectDate[[1]])
+audited_runtime$analyte[[1]] <- audited_identity$analyte[[1]]
+audited_runtime$units[[1]] <- audited_identity$from_unit[[1]]
+audited_runtime$n_reps[[1]] <- audited_identity$max_source_rows[[1]]
+audited_runtime_result <- canonicalize_runtime_water_units(audited_runtime)
+stopifnot(
+  identical(audited_runtime_result$n_collapsed_rows_excluded, 1L),
+  identical(audited_runtime_result$n_source_rows_excluded,
+            audited_identity$max_source_rows[[1]])
+)
+
+unknown_runtime <- audited_runtime
+unknown_runtime$site[[1]] <- "ZZZZ"
 stopifnot(nzchar(tryCatch({
   canonicalize_runtime_water_units(unknown_runtime)
   ""
 }, error = conditionMessage)))
 
-over_bound_runtime <- legacy$swc_long
-hit <- which(over_bound_runtime$analyte == "TPC" &
-               over_bound_runtime$units == "milligram")[[1]]
-over_bound_runtime$n_reps[[hit]] <- over_bound_runtime$n_reps[[hit]] + 1L
+over_bound_runtime <- audited_runtime
+over_bound_runtime$n_reps[[1]] <- audited_identity$max_source_rows[[1]] + 1L
 stopifnot(nzchar(tryCatch({
   canonicalize_runtime_water_units(over_bound_runtime)
   ""
