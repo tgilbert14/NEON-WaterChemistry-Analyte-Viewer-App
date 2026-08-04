@@ -11,10 +11,18 @@ recommendations:
   transitions are observed for 31 external-lab analytes; the three field-derived
   analytes use explicit fixed extraction units because the field source table has
   no row-level unit labels.
-- Modal relabelling is explicitly rejected. Registered missing labels require an
-  observed target label; 36 WALK mismatch identities and 12 unresolved legacy
-  TPC/TPN identities are quarantined with count/receipt bounds. The exact legacy
-  runtime removes all 48 groups (99 represented source rows) before app/index use.
+- Modal relabelling is explicitly rejected. Registered missing labels require
+  exact `EcoCore_CSU` provenance and an observed target label; the target support
+  can come from another laboratory. WALK concentration-label exclusions require
+  exact Florida International University provenance, while the TPC/TPN
+  exclusions require exact `EcoCore_CSU` provenance. Signed full-fetch replay
+  run 30852990426 expanded the
+  reviewed quarantine from 48 to 73 exact identities: 17 additional WALK-2019
+  concentration-label identities and eight additional unresolved EcoCore_CSU
+  TPC/TPN identities, all count bounded. The replay contains 75 affected source
+  rows and policy v4 changes no numeric value. The still-deployed legacy runtime
+  contains only the original 48 groups (99 represented source rows), all removed
+  before app/index use.
 - The TPC/TPN identities are not asserted to be unconverted masses. The current
   [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
   supersedes F.1, and the [product change log](https://data.neonscience.org/api/v0/products/DP1.20093.001)
@@ -22,7 +30,9 @@ recommendations:
   `milligram` labels remain unresolved anomalies pending source reconciliation.
 - The site-aware plausibility gate/audit surface, >25% BDL down-weighting,
   legacy/format-change export disclosure, generated static codebook, and strict
-  codebook verifier are implemented. Fresh exact-head CI/review is still pending.
+  codebook verifier are implemented. The review validator now reconstructs the
+  exact review from stored replay, and full-fetch candidate validation requires
+  an independent replay rebuild. Fresh exact-head CI/review is still pending.
 
 > **Historical June verdict:** I walked this app end-to-end against the NEON grab-sample SOP, the censored-data literature, and what an EPA NARS or USGS reviewer would actually demand — and the verdict is the one I gave the team in my brief: **the statistics chrome here is the suite's gold standard; the geochemistry going INTO it is where the app can still be challenged.** The honesty machinery is genuinely excellent — n on everything, Spearman by default, an n≥8 gate, a real `stats::stl()` (not the 2021 synthetic sine-wave), CV-RMSE against a mean-only baseline, a lag-1 ACF flag, below-detection drawn as open markers, and chemically-correct analyte names (Br = bromide, ANC in meq/L, pH unitless). The upstream gaps identified here drove the implemented controls summarized above. — Brooke
 

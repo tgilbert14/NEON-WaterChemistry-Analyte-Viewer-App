@@ -37,7 +37,12 @@ stopifnot(file.copy(
   overwrite = TRUE
 ))
 invisible(lapply(
-  c("scripts/verify_refresh_candidate.R", "scripts/water_unit_contract.R"),
+  c(
+    "scripts/verify_refresh_candidate.R",
+    "scripts/water_unit_contract.R",
+    "scripts/build_search_index.R",
+    "scripts/build_swc_bundle.R"
+  ),
   function(path) if (!file.exists(file.path(fixture_root, path))) {
     copy_fixture_file(path)
   }
@@ -48,6 +53,26 @@ index_path <- file.path(fixture_root, "data", "search_index.rds")
 codebook_path <- file.path(fixture_root, "data", "codebook.csv")
 baseline_path <- file.path(fixture_root, "trusted-base.rds")
 stopifnot(file.copy(candidate_path, baseline_path, overwrite = FALSE))
+
+# Rebuild both derived artifacts under the current policy before constructing
+# the valid adversarial fixture. The committed baseline can legitimately carry
+# the prior policy receipt until promotion; verifier tests must exercise the
+# exact candidate-producing path rather than hand-patching only its metadata.
+old_wd <- setwd(fixture_root)
+build_output <- suppressWarnings(system2(
+  file.path(R.home("bin"), "Rscript"),
+  c("--vanilla", "scripts/build_search_index.R"),
+  stdout = TRUE, stderr = TRUE
+))
+setwd(old_wd)
+build_status <- attr(build_output, "status")
+if (is.null(build_status)) build_status <- 0L
+if (!identical(build_status, 0L)) {
+  stop(sprintf(
+    "Could not build the current-policy verifier fixture:\n%s",
+    paste(build_output, collapse = "\n")
+  ), call. = FALSE)
+}
 
 # The committed legacy index predates deterministic source provenance. The
 # production workflow rebuilds it before validation, so mirror that one field in
@@ -68,9 +93,23 @@ sys.source(
   file.path(repo_root, "scripts", "water_unit_contract.R"),
   envir = policy_env
 )
+candidate_receipt_present <- policy_env$WATER_UNIT_RECEIPT_FIELDS %in%
+  names(candidate_original$built)
+stopifnot(all(candidate_receipt_present) || !any(candidate_receipt_present))
+current_candidate <- all(candidate_receipt_present)
 runtime_long <- policy_env$canonicalize_runtime_water_units(
   candidate_original$swc_long
-)$data
+)
+index_original$built$runtime_unit_policy <- policy_env$WATER_UNIT_POLICY
+index_original$built$n_runtime_unit_rows_excluded <-
+  runtime_long$n_collapsed_rows_excluded
+index_original$built$n_runtime_unit_source_rows_excluded <-
+  runtime_long$n_source_rows_excluded
+index_original$built$n_runtime_unit_labels_rewritten <-
+  runtime_long$n_missing_labels_rewritten
+index_original$built$runtime_unit_exclusion_sha256 <-
+  policy_env$water_unit_receipt_sha256(runtime_long$excluded)
+runtime_long <- runtime_long$data
 runtime_rows <- split(
   seq_len(nrow(runtime_long)), as.character(runtime_long$analyte)
 )
@@ -78,6 +117,44 @@ codebook_header <- readLines(codebook_path, warn = FALSE)[1:3]
 codebook_table <- utils::read.csv(
   codebook_path, comment.char = "#", check.names = FALSE,
   stringsAsFactors = FALSE, na.strings = character(0)
+)
+flag_row <- which(
+  codebook_table$section == "tidy_long_export" &
+    codebook_table$name == "lab_flag"
+)
+stopifnot(
+  grepl(
+    if (current_candidate) "version 1.1.0" else "version 1.0.0",
+    codebook_header[[1]], fixed = TRUE
+  ),
+  length(flag_row) == 1L,
+  identical(
+    codebook_table$allowed[[flag_row]],
+    if (current_candidate) {
+      "sorted distinct NEON externalLabDataQF codes joined by ' | '"
+    } else {
+      "NEON externalLabDataQF codes"
+    }
+  ),
+  identical(
+    codebook_table$definition[[flag_row]],
+    if (current_candidate) {
+      paste0(
+        "All distinct external-lab quality flags across the collapsed ",
+        "replicates"
+      )
+    } else {
+      "External-lab quality flag (e.g. legacyData, formatChange)"
+    }
+  ),
+  identical(
+    codebook_table$na_semantics[[flag_row]],
+    if (current_candidate) {
+      "NA when every replicate is unflagged"
+    } else {
+      "NA when unflagged"
+    }
+  )
 )
 dictionary_rows <- which(codebook_table$section == "analyte_dictionary")
 for (row in dictionary_rows) {
@@ -181,6 +258,28 @@ write_codebook_table <- function(header, table) {
 reset_fixture()
 run_verifier()
 
+if (!current_candidate) {
+  # Legacy compatibility is a byte-exact exception, not a general receipt-free
+  # mode. Even a schema-valid timestamp-only mutation with matching index
+  # provenance must be rejected because its bundle SHA is no longer pinned.
+  reset_fixture()
+  receipt_free_candidate <- readRDS(candidate_path)
+  receipt_free_index <- readRDS(index_path)
+  mutated_when <- sub(
+    "T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "T00:00:00Z",
+    receipt_free_candidate$built$when
+  )
+  if (identical(mutated_when, receipt_free_candidate$built$when)) {
+    mutated_when <- sub("T00:00:00Z$", "T00:00:01Z", mutated_when)
+  }
+  receipt_free_candidate$built$when <- mutated_when
+  receipt_free_index$built$when <- mutated_when
+  saveRDS(receipt_free_candidate, candidate_path)
+  saveRDS(receipt_free_index, index_path, compress = "xz")
+  write_fixture_manifest()
+  run_verifier("Receipt-free candidate is not the exact known legacy bundle")
+}
+
 mutate_bundle(function(x) {
   x$built$n_obs <- x$built$n_obs + 0.5
   x
@@ -250,8 +349,10 @@ run_verifier("Search index per-site rows differ from independent recomputation")
 
 reset_fixture()
 bad_header <- codebook_original
+detected_version <- if (current_candidate) "1.1.0" else "1.0.0"
 bad_header[[1]] <- sub(
-  "version 1.0.0", "version 9.9.9", bad_header[[1]], fixed = TRUE
+  paste("version", detected_version), "version 9.9.9",
+  bad_header[[1]], fixed = TRUE
 )
 writeLines(bad_header, codebook_path)
 write_fixture_manifest()

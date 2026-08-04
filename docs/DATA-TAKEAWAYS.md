@@ -10,18 +10,29 @@ section is authoritative for the release candidate:
 - The shared producer/runtime unit policy pins 34 presentation targets. The 31
   external-lab analytes are guarded by row-level source labels; the three field
   analytes use explicit fixed extraction units because their source table has no
-  per-row unit labels. Numeric values are never silently converted.
-- The exact 36 WALK alternate-label identities and 12 residual TPC/TPN
-  `milligram` identities are quarantined. The latter are unresolved legacy
-  anomalies: the current [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
+  per-row unit labels. Missing-label rewrites require exact `EcoCore_CSU`
+  provenance; WALK concentration-label exclusions require exact Florida
+  International University provenance, and TPC/TPN exclusions require exact
+  `EcoCore_CSU` provenance. Numeric values are never silently converted.
+- Signed full-fetch replay run 30852990426 expanded the count-bounded quarantine
+  from the original 48 identities to 73: 17 additional WALK-2019
+  alternate-label identities and eight additional EcoCore_CSU TPC/TPN
+  `milligram` identities. The latter remain unresolved legacy anomalies: the
+  current [revision-H guide](https://data.neonscience.org/api/v0/documents/NEON_waterChem_userGuide_vH)
   supersedes F.1, while the [official product change log](https://data.neonscience.org/api/v0/products/DP1.20093.001)
   says EcoCore particulate C/N data were converted to `microgramsPerLiter`.
-  The candidate does not infer a conversion. Its runtime filter also removes all
-  48 collapsed groups (99 represented source rows) from the legacy app/index.
+  Policy v4 infers no conversion and changes no numeric value. The replay's 73
+  identities represent 75 source rows; the deployed legacy bundle still contains
+  only the original 48 collapsed groups (99 represented source rows), which its
+  runtime filter removes from the app/index.
 - The tracked static `data/codebook.csv` is regenerated from the fail-closed
   effective runtime view. Both build paths refresh it, and the independent
   verifier reconciles its version, provenance, complete text contract, roster,
   units, counts, and below-detection metadata to the bundle.
+- Stored full-fetch replay, not self-consistent review hashes alone, is the
+  review authority. The validator recomputes and byte-compares the unit review;
+  full-fetch candidate validation independently rebuilds the bundle and requires
+  exact equality after normalizing only its producer timestamp.
 - The app now has a site-aware plausibility gate/audit surface, >25% BDL
   down-weighting, and legacy/format-change export disclosure. Older “missing”
   findings below are retained as historical review evidence and marked resolved.
@@ -31,7 +42,7 @@ section is authoritative for the release candidate:
 - **The flagship default verifies.** At **SYCA (Sycamore Creek, AZ)**, `specificConductanceField` vs `ANC` over the full record gives **Pearson r = 0.856, Spearman ρ = 0.873, n = 54 paired** — exactly the README's "r ≈ 0.86" claim. This is a genuine carbonate-terrain ionic-strength↔buffering link, not a cherry-pick.
 - **Sampling is DENSE, not small-n.** Median **~21 site-visits/site/year** (max 30); at SYCA the main analyte pairs with **n = 145 (median)** across 33 other analytes — **0 of 33 fall below the n≥8 reliability floor**. ANC, the thinnest headline analyte, still has **31–117 obs/site (median 78), 0 sites under 30**. This is a fundamentally different power regime from the terrestrial cascade rungs (n=6 site-years).
 - **Below-detection is real and heavily concentrated.** Overall censored rate **7.9% (15,553 / 196,856)**, but it is **wildly analyte-specific**: **Br 56.5%**, **Mn 38.8%**, **Fe 36.2%**, **F 33.9%**, **Ortho-P 26.0%**, **NH4-N 23.5%**, **NO2-N 23.3%**. Conductance/temp/DO/ANC are 0% censored. The flag is carried (`belowDetection`) but the value stored is the reported number, not an imputed half-DL.
-- **Replicate handling is honest and disclosed.** **12.1% of rows (23,794)** are replicate means (`n_reps` 2–12; 173,062 are single grabs); pre-collapse spread is preserved in `value_sd` (non-NA exactly on the 12.1% multi-rep rows). One row per `site×collectDate×analyte` is enforced by `stopifnot(!anyDuplicated(...))`.
+- **Replicate handling is honest and disclosed.** **12.1% of rows (23,794)** are replicate means (`n_reps` 2–12; 173,062 are single grabs); pre-collapse spread is preserved in `value_sd` (non-NA exactly on the 12.1% multi-rep rows). Newly produced bundles canonically order effective source rows before floating-point aggregation and preserve all distinct nonempty replicate lab flags as a sorted ` | `-joined value (codebook 1.1). The exact legacy bundle retains its historical single-flag field and codebook 1.0 until promotion. One row per `site×collectDate×analyte` is enforced by `stopifnot(!anyDuplicated(...))`.
 - **Units are inconsistent at the metadata layer.** **20 of 34 analytes carry >1 distinct unit string.** Two failure modes: (a) **`NA` mixed with a real unit** — `UV Absorbance (254 nm)` is **4,677 rows `NA` + 1,786 "absorbance units"**, and because `analyte_meta`/`analyte_coverage.csv` takes `dplyr::first(units)`, the **published unit for UV254 is literally `NA`**; (b) **mg/L mixed with µg/L** (NH4-N, NO2-N, NO3+NO2-N, Ortho-P, TDP, TP) and µg/L vs "milligram" (TPC, TPN).
 - **The 36 collapsed WALK concentration-label groups across six analytes are label defects, not converted values.** TP "µg/L" rows have **median 0.057** vs mg/L **median 0.025** — a true µg/L total-P would be ~25–57, so these groups contain mg/L-magnitude values wearing a µg/L label. This conclusion does **not** extend to the separately quarantined TPC/TPN anomalies.
 - **Historical June finding—resolved in the app gate.** `ANC` max = **927 meq/L at CARI (2017-09-25)** while that site's ANC median is **0.73** and the next-highest value is **16.96**; `Fe` max is **931 mg/L** (median 0.011). These values remain auditable but the current site-aware plausibility gate keeps them out of fits, STL, glm, and map summaries, while retaining plausible saline PRPO conductance.
@@ -54,7 +65,7 @@ section is authoritative for the release candidate:
 - **[low, historical—candidate fixed] UV254/UV280 exported `NA` units.** The explicit target is now `absorbance units`; the regenerated codebook verifier rejects recurrence.
 
 ### Data science (Quinn — analysis-ready / FAIR)
-- **[high, candidate fixed] Unit metadata was not analysis-ready.** The reviewed contract now pins 34 targets, fills only registered missing labels, quarantines exact audited non-missing mismatches with identity/count/SHA-256 receipts, and never guesses a conversion. TPC/TPN residual labels remain unresolved anomalies pending source reconciliation.
+- **[high, candidate fixed] Unit metadata was not analysis-ready.** The reviewed contract now pins 34 targets, fills only registered missing labels with exact `EcoCore_CSU` provenance, quarantines exact laboratory-bound audited mismatches with identity/count/SHA-256 receipts, and never guesses a conversion. TPC/TPN residual labels remain unresolved anomalies pending source reconciliation.
 - **[med, candidate fixed] The shipped codebook was stale.** Both build paths now emit it and the independent verifier reconciles its schema/version, 34-analyte roster, units, counts, and provenance to the exact bundle.
 - **[low] Reproducibility is good.** Single-builder contract + `stopifnot` grain check + `set.seed(42)` CV + committed `.rds` + provenance header = re-derivable. Keep it.
 

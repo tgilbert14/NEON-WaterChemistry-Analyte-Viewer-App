@@ -45,12 +45,13 @@ run_tests <- function() {
 
   lab_raw <- rbind(
     # Registered TPN/milligram pair but a new, unaudited exact identity.
-    make_rows("CRAM", "2017-08-29T10:00:00Z", "TPN", c("4", "2"),
+    make_rows("CRAM", "2017-08-30T10:00:00Z", "TPN", c("4", "2"),
               "milligram", c("Zulu_Lab", NA_character_),
               c("ND", "0"), c("legacyData", NA_character_)),
     # Exact audited identity: reviewable evidence, not an unapproved change.
     make_rows("WALK", "2019-07-01", "TP", "0.057",
-              "microgramsPerLiter", "Example_Lab", "0", NA_character_),
+              "microgramsPerLiter", "Florida International University",
+              "0", NA_character_),
     # A new unit pair; no value conversion may be attempted by this helper.
     make_rows("WALK", "2019-06-18", "NO3+NO2 - N", "23",
               "microgram", "Example_Lab", "BDL", "formatChange"),
@@ -59,9 +60,9 @@ run_tests <- function() {
     make_rows("ARIK", "2020-01-01", "Ca", "1.1",
               NA_character_, "Example_Lab"),
     make_rows("BARC", "2020-02-01", "Br", "1.2",
-              NA_character_, "Example_Lab"),
+              NA_character_, "EcoCore_CSU"),
     make_rows("BIGC", "2020-03-01", "DOC", "1.3",
-              NA_character_, "Example_Lab"),
+              NA_character_, "EcoCore_CSU"),
     make_rows("BIGC", "2020-03-02", "DOC", "1.4",
               "milligramsPerLiter", "Example_Lab"),
     # Target-unit and invalid-value rows never reach the mismatch boundary.
@@ -132,6 +133,9 @@ run_tests <- function() {
     identical(review_a$source_value_min[walk_new], "23"),
     identical(review_a$review_status[walk_audited], "audited-exclusion"),
     identical(review_a$is_unapproved[walk_audited], "false"),
+    identical(review_a$required_laboratory[walk_audited],
+              "Florida International University"),
+    identical(review_a$provenance_matches_policy[walk_audited], "true"),
     identical(review_a$from_unit[ca_missing], WATER_MISSING_UNIT),
     identical(review_a$review_status[ca_missing],
               "unapproved-missing-unit-label"),
@@ -142,8 +146,108 @@ run_tests <- function() {
     identical(review_a$review_status[doc_with_target],
               "approved-missing-label-rewrite"),
     identical(review_a$n_observed_target_rows[doc_with_target], 1L),
+    identical(review_a$required_laboratory[doc_with_target], "EcoCore_CSU"),
+    identical(review_a$provenance_matches_policy[doc_with_target], "true"),
     identical(review_a$is_unapproved[doc_with_target], "false")
   )
+
+  walk_wrong_lab <- make_rows(
+    "WALK", "2019-07-01", "TP", "0.057", "microgramsPerLiter",
+    "Other_Lab"
+  )
+  walk_missing_lab <- make_rows(
+    "WALK", "2019-07-01", "TP", "0.057", "microgramsPerLiter",
+    NA_character_
+  )
+  walk_wrong_review <- water_unit_mismatch_review(walk_wrong_lab)
+  walk_missing_review <- water_unit_mismatch_review(walk_missing_lab)
+  for (review in list(walk_wrong_review, walk_missing_review)) {
+    stopifnot(
+      nrow(review) == 1L,
+      identical(review$required_laboratory,
+                "Florida International University"),
+      identical(review$provenance_matches_policy, "false"),
+      identical(review$review_status,
+                "audited-identity-provenance-mismatch"),
+      identical(review$is_unapproved, "true")
+    )
+  }
+
+  uv_target <- make_rows(
+    "SYCA", "2026-01-02", "UV Absorbance (254 nm)", "0.12",
+    "absorbance units", "Illinois State Water Survey"
+  )
+  uv_missing <- function(labs, values = "0.11") {
+    make_rows(
+      "SYCA", "2026-01-01", "UV Absorbance (254 nm)", values,
+      NA_character_, labs
+    )
+  }
+  uv_cross_lab_rows <- rbind(uv_missing("EcoCore_CSU"), uv_target)
+  uv_cross_lab_review <- water_unit_mismatch_review(uv_cross_lab_rows)
+  stopifnot(
+    nrow(uv_cross_lab_review) == 1L,
+    identical(uv_cross_lab_review$review_status,
+              "approved-missing-label-rewrite"),
+    identical(uv_cross_lab_review$required_laboratory, "EcoCore_CSU"),
+    identical(uv_cross_lab_review$provenance_matches_policy, "true"),
+    identical(uv_cross_lab_review$n_observed_target_rows, 1L),
+    identical(uv_cross_lab_review$is_unapproved, "false")
+  )
+
+  uv_wrong_rows <- rbind(uv_missing("Other_Lab"), uv_target)
+  uv_missing_lab_rows <- rbind(uv_missing(NA_character_), uv_target)
+  uv_mixed_rows <- rbind(
+    uv_missing(c("EcoCore_CSU", "Other_Lab"), c("0.10", "0.11")),
+    uv_target
+  )
+  uv_whitespace_rows <- rbind(uv_missing("EcoCore_CSU "), uv_target)
+  uv_case_rows <- rbind(uv_missing("ecocore_csu"), uv_target)
+  for (rows in list(
+    uv_wrong_rows, uv_missing_lab_rows, uv_mixed_rows,
+    uv_whitespace_rows, uv_case_rows
+  )) {
+    review <- water_unit_mismatch_review(rows)
+    stopifnot(
+      nrow(review) == 1L,
+      identical(review$required_laboratory, "EcoCore_CSU"),
+      identical(review$provenance_matches_policy, "false"),
+      identical(review$review_status,
+                "missing-label-rewrite-provenance-mismatch"),
+      identical(review$is_unapproved, "true")
+    )
+  }
+
+  uv_no_target_rows <- uv_missing("EcoCore_CSU")
+  uv_invalid_date_target_rows <- rbind(
+    uv_no_target_rows,
+    make_rows(
+      "SYCA", "invalid-date", "UV Absorbance (254 nm)", "0.12",
+      "absorbance units", "Illinois State Water Survey"
+    )
+  )
+  uv_nonnumeric_target_rows <- rbind(
+    uv_no_target_rows,
+    make_rows(
+      "SYCA", "2026-01-02", "UV Absorbance (254 nm)", "not-a-number",
+      "absorbance units", "Illinois State Water Survey"
+    )
+  )
+  for (rows in list(
+    uv_no_target_rows, uv_invalid_date_target_rows,
+    uv_nonnumeric_target_rows
+  )) {
+    review <- water_unit_mismatch_review(rows)
+    stopifnot(
+      nrow(review) == 1L,
+      identical(review$required_laboratory, "EcoCore_CSU"),
+      identical(review$provenance_matches_policy, "true"),
+      identical(review$n_observed_target_rows, 0L),
+      identical(review$review_status,
+                "missing-label-repair-without-target"),
+      identical(review$is_unapproved, "true")
+    )
+  }
 
   gate_message <- function(rows) {
     expect_error(canonicalize_water_unit_labels(
@@ -155,11 +259,32 @@ run_tests <- function() {
   ca_rows <- lab_raw[lab_raw$site == "ARIK", , drop = FALSE]
   br_rows <- lab_raw[lab_raw$site == "BARC", , drop = FALSE]
   doc_rows <- lab_raw[lab_raw$site == "BIGC", , drop = FALSE]
+  wrong_walk_message <- gate_message(walk_wrong_lab)
+  missing_walk_message <- gate_message(walk_missing_lab)
+  wrong_rewrite_message <- gate_message(uv_wrong_rows)
+  missing_rewrite_message <- gate_message(uv_missing_lab_rows)
+  mixed_rewrite_message <- gate_message(uv_mixed_rows)
+  whitespace_rewrite_message <- gate_message(uv_whitespace_rows)
+  case_rewrite_message <- gate_message(uv_case_rows)
   stopifnot(
     grepl("Unapproved missing unit label", gate_message(ca_rows),
           fixed = TRUE),
     grepl("Missing-label repair lacks an observed target label",
-          gate_message(br_rows), fixed = TRUE)
+          gate_message(br_rows), fixed = TRUE),
+    grepl("required laboratory provenance", wrong_walk_message,
+          fixed = TRUE),
+    grepl("required laboratory provenance", missing_walk_message,
+          fixed = TRUE),
+    grepl("required laboratory provenance", wrong_rewrite_message,
+          fixed = TRUE),
+    grepl("required laboratory provenance", missing_rewrite_message,
+          fixed = TRUE),
+    grepl("required laboratory provenance", mixed_rewrite_message,
+          fixed = TRUE),
+    grepl("required laboratory provenance", whitespace_rewrite_message,
+          fixed = TRUE),
+    grepl("required laboratory provenance", case_rewrite_message,
+          fixed = TRUE)
   )
   doc_result <- canonicalize_water_unit_labels(
     doc_rows$site, as.Date(substr(doc_rows$collectDate, 1L, 10L)),
@@ -265,6 +390,73 @@ run_tests <- function() {
   expect_error(validate_water_refresh_review(
     out_a, expected_source_sha = paste(rep("b", 40L), collapse = "")
   ))
+
+  # A self-consistent envelope is not scientific authority. Mutate the stored
+  # lab replay's date, unit, and laboratory, then regenerate every content and
+  # receipt hash while deliberately retaining the stale approval review. The
+  # validator must recompute that review from replay and reject the disagreement.
+  authority_out <- tempfile("water-review-authority-gap-")
+  on.exit(unlink(authority_out, recursive = TRUE, force = TRUE), add = TRUE)
+  dir.create(file.path(authority_out, "replay"), recursive = TRUE)
+  for (relative_path in WATER_REFRESH_REVIEW_FILES) {
+    stopifnot(file.copy(
+      file.path(out_a, relative_path), file.path(authority_out, relative_path),
+      overwrite = FALSE
+    ))
+  }
+  authority_lab_path <- file.path(
+    authority_out, WATER_REFRESH_REVIEW_CONTENT_FILES[["lab_raw"]]
+  )
+  authority_lab <- readRDS(authority_lab_path)
+  authority_hit <- which(
+    authority_lab$site == "WALK" &
+      substr(authority_lab$collectDate, 1L, 10L) == "2019-07-01" &
+      authority_lab$analyte == "TP" &
+      authority_lab$analyteUnits == "microgramsPerLiter"
+  )[[1]]
+  authority_lab$collectDate[[authority_hit]] <- "2019-07-02"
+  authority_lab$analyteUnits[[authority_hit]] <- "microgram"
+  authority_lab$laboratoryName[[authority_hit]] <- "Other_Lab"
+  authority_field <- readRDS(file.path(
+    authority_out, WATER_REFRESH_REVIEW_CONTENT_FILES[["field_raw"]]
+  ))
+  authority_coords <- readRDS(file.path(
+    authority_out, WATER_REFRESH_REVIEW_CONTENT_FILES[["coords"]]
+  ))
+  authority_lab <- water_refresh_replay_inputs(
+    authority_lab, authority_field, authority_coords
+  )$lab_raw
+  saveRDS(authority_lab, authority_lab_path, version = 3L, compress = "xz")
+
+  authority_receipt_path <- file.path(
+    authority_out, WATER_REFRESH_REVIEW_RECEIPT_FILE
+  )
+  authority_receipt <- water_review_read_csv(authority_receipt_path)
+  authority_hash_columns <- c(
+    lab_raw = "lab_raw_sha256", field_raw = "field_raw_sha256",
+    coords = "coords_sha256", unit_review = "unit_review_sha256"
+  )
+  for (name in names(authority_hash_columns)) {
+    authority_receipt[[authority_hash_columns[[name]]]] <-
+      water_review_file_sha256(file.path(
+        authority_out, WATER_REFRESH_REVIEW_CONTENT_FILES[[name]]
+      ))
+  }
+  water_review_write_csv(authority_receipt, authority_receipt_path)
+  writeLines(
+    sprintf(
+      "%s  %s", water_review_file_sha256(authority_receipt_path),
+      WATER_REFRESH_REVIEW_RECEIPT_FILE
+    ),
+    file.path(authority_out, WATER_REFRESH_REVIEW_RECEIPT_SHA_FILE),
+    useBytes = TRUE
+  )
+  authority_message <- expect_error(validate_water_refresh_review(
+    authority_out, expected_source_sha = source_sha
+  ))
+  stopifnot(grepl("does not exactly reproduce", authority_message,
+                  fixed = TRUE))
+
   unexpected_path <- file.path(out_b, "unexpected.txt")
   file.create(unexpected_path)
   expect_error(validate_water_refresh_review(

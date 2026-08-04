@@ -5,11 +5,29 @@
 # mismatch stops the build for scientific review.
 
 WATER_UNIT_POLICY <-
-  "explicit-targets-audited-exclusions-value-invariant-v3"
+  "explicit-targets-audited-exclusions-value-invariant-v4"
 WATER_MISSING_UNIT <- "<MISSING>"
 WATER_EXCLUDED_UNIT <- "<EXCLUDED>"
 WATER_LEGACY_BUNDLE_SHA256 <-
   "dce312128e4392aaecdba535bc92be5d9ae8f1dc0e938745b530bc2a4f7f0868"
+
+# v4 admits only the 25 exact identities (26 source rows) exposed by the
+# failed-safe full fetch below. The signed replay was independently rehashed
+# and deterministically reproduced before these count-bounded quarantines were
+# added; numeric values remain untouched and the rows remain excluded.
+WATER_UNIT_POLICY_V4_EVIDENCE <- list(
+  workflow_run = "30852990426",
+  source_sha = "60aca33c36ced33e6f381ee58a551e379acdaf26",
+  review_schema = "water-refresh-review-v1",
+  prior_unit_policy =
+    "explicit-targets-audited-exclusions-value-invariant-v3",
+  refresh_review_receipt_sha256 =
+    "0f533784f24408a938324bfb0b521e11f1b023ee59527ab1c15e0f6318c8102c",
+  unit_review_sha256 =
+    "c18b00c39f74dae90ae7253dd2371482362b5ce354169826c50dda4281202485",
+  n_new_identities = 25L,
+  n_new_source_rows = 26L
+)
 
 # Exact presentation target for every analyte in the established 34-analyte
 # bundle. The 31 external-lab analytes arrive with row-level unit metadata, so
@@ -54,9 +72,11 @@ WATER_ESTABLISHED_UNIT_TARGETS <- c(
   waterTemp = "celsius"
 )
 
-# Missing labels are metadata omissions, not alternate unit claims. Fill them
-# only for these exact analyte/target pairs and only when a source row carrying
-# the target label is present in the same build.
+# Missing labels are metadata omissions, not alternate unit claims. The signed
+# v4 replay binds every eligible missing-label row to EcoCore_CSU. Fill only
+# these exact analyte/target pairs when that source provenance is exact and a
+# row carrying the target label is present anywhere in the same build. The
+# target-support row is deliberately global; it need not come from EcoCore_CSU.
 WATER_UNIT_LABEL_REWRITES <- data.frame(
   analyte = c(
     "Br", "Cl", "DIC", "DOC", "F", "SO4", "TDN", "TDS", "TN", "TOC",
@@ -67,15 +87,18 @@ WATER_UNIT_LABEL_REWRITES <- data.frame(
     "Br", "Cl", "DIC", "DOC", "F", "SO4", "TDN", "TDS", "TN", "TOC",
     "UV Absorbance (254 nm)", "UV Absorbance (280 nm)"
   )]),
+  required_laboratory = rep("EcoCore_CSU", 12L),
   stringsAsFactors = FALSE
 )
 
 # Non-missing mismatches are excluded, never relabelled. Six concentration
-# pairs are the audited WALK-2019 label defect. The residual TPC/TPN `milligram`
-# identities conflict with NEON's current product change log, which says EcoCore
-# particulate C/N was converted to microgramsPerLiter. They are therefore
-# unresolved legacy unit anomalies: quarantine them conservatively until their
-# source history is reconciled rather than guessing at a conversion.
+# pairs are the audited WALK-2019 label defect. All 53 of those exact identities
+# in the signed v4 replay carry Florida International University provenance, so
+# a missing or different laboratory fails closed. The residual TPC/TPN
+# `milligram` identities conflict with NEON's current product change log, which
+# says EcoCore particulate C/N was converted to microgramsPerLiter. They are
+# therefore unresolved legacy unit anomalies: quarantine them conservatively
+# until their source history is reconciled rather than guessing at a conversion.
 WATER_UNIT_EXCLUSION_RULES <- data.frame(
   analyte = c(
     "NH4 - N", "NO2 - N", "NO3+NO2 - N", "Ortho - P", "TDP", "TP",
@@ -86,7 +109,7 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
     rep("audited-legacy-mislabeled-concentration", 6L),
     rep("unresolved-legacy-particulate-unit-anomaly", 2L)
   ),
-  required_laboratory = c(rep(NA_character_, 6L),
+  required_laboratory = c(rep("Florida International University", 6L),
                           "EcoCore_CSU", "EcoCore_CSU"),
   stringsAsFactors = FALSE
 )
@@ -94,20 +117,31 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
 .water_exclusion_identity_rows <- c(
   "WALK\t2019-06-18\tNH4 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tNH4 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-07-22\tNH4 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-08-13\tNH4 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-09-04\tNH4 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-16\tNH4 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-10-07\tNH4 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-11-04\tNH4 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-12-02\tNH4 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-06-18\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-07-01\tNO2 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-07-22\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-04\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-16\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-10-07\tNO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-11-04\tNO2 - N\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tNO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-06-18\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-07-01\tNO3+NO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-07-22\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tNO3+NO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-09-04\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-09-16\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-10-07\tNO3+NO2 - N\tmicrogramsPerLiter\t2",
+  "WALK\t2019-11-04\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
+  "WALK\t2019-12-02\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-06-18\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-08-13\tOrtho - P\tmicrogramsPerLiter\t2",
@@ -116,28 +150,42 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
   "WALK\t2019-10-07\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-11-04\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tOrtho - P\tmicrogramsPerLiter\t2",
+  "WALK\t2019-06-18\tTDP\tmicrogramsPerLiter\t1",
+  "WALK\t2019-07-01\tTDP\tmicrogramsPerLiter\t1",
   "WALK\t2019-07-22\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-08-13\tTDP\tmicrogramsPerLiter\t2",
+  "WALK\t2019-09-04\tTDP\tmicrogramsPerLiter\t1",
   "WALK\t2019-09-16\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-10-07\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-11-04\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tTDP\tmicrogramsPerLiter\t2",
   "WALK\t2019-06-18\tTP\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tTP\tmicrogramsPerLiter\t2",
+  "WALK\t2019-07-22\tTP\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tTP\tmicrogramsPerLiter\t2",
   "WALK\t2019-09-04\tTP\tmicrogramsPerLiter\t4",
+  "WALK\t2019-09-16\tTP\tmicrogramsPerLiter\t1",
+  "WALK\t2019-10-07\tTP\tmicrogramsPerLiter\t1",
   "WALK\t2019-11-04\tTP\tmicrogramsPerLiter\t2",
   "WALK\t2019-12-02\tTP\tmicrogramsPerLiter\t2",
+  "CRAM\t2017-05-02\tTPC\tmilligram\t1",
   "CRAM\t2017-08-29\tTPC\tmilligram\t12",
   "CUPE\t2017-07-11\tTPC\tmilligram\t2",
   "LECO\t2017-11-27\tTPC\tmilligram\t1",
   "LEWI\t2017-12-13\tTPC\tmilligram\t2",
+  "LIRO\t2017-05-01\tTPC\tmilligram\t1",
   "OKSR\t2017-05-28\tTPC\tmilligram\t2",
   "REDB\t2017-04-18\tTPC\tmilligram\t2",
   "REDB\t2017-04-25\tTPC\tmilligram\t2",
   "WALK\t2017-11-20\tTPC\tmilligram\t1",
+  "CRAM\t2017-05-02\tTPN\tmilligram\t1",
+  "CRAM\t2017-08-29\tTPN\tmilligram\t2",
+  "CUPE\t2017-07-11\tTPN\tmilligram\t1",
   "LECO\t2017-11-27\tTPN\tmilligram\t1",
+  "LEWI\t2017-12-13\tTPN\tmilligram\t1",
+  "LIRO\t2017-05-01\tTPN\tmilligram\t1",
   "OKSR\t2017-05-28\tTPN\tmilligram\t2",
+  "REDB\t2017-04-18\tTPN\tmilligram\t1",
   "REDB\t2017-04-25\tTPN\tmilligram\t2",
   "WALK\t2017-11-20\tTPN\tmilligram\t1"
 )
@@ -304,12 +352,30 @@ validate_water_unit_policy <- function() {
   rewrites <- WATER_UNIT_LABEL_REWRITES
   exclusions <- WATER_UNIT_EXCLUSION_RULES
   identities <- WATER_UNIT_EXCLUSION_IDENTITIES
+  evidence <- WATER_UNIT_POLICY_V4_EVIDENCE
   stopifnot(
+    identical(names(evidence), c(
+      "workflow_run", "source_sha", "review_schema", "prior_unit_policy",
+      "refresh_review_receipt_sha256", "unit_review_sha256",
+      "n_new_identities", "n_new_source_rows"
+    )),
+    grepl("^[0-9]+$", evidence$workflow_run),
+    grepl("^[0-9a-f]{40}$", evidence$source_sha),
+    identical(evidence$review_schema, "water-refresh-review-v1"),
+    identical(evidence$prior_unit_policy,
+              "explicit-targets-audited-exclusions-value-invariant-v3"),
+    grepl("^[0-9a-f]{64}$", evidence$refresh_review_receipt_sha256),
+    grepl("^[0-9a-f]{64}$", evidence$unit_review_sha256),
+    identical(evidence$n_new_identities, 25L),
+    identical(evidence$n_new_source_rows, 26L),
     is.character(targets), length(targets) == 34L,
     !is.null(names(targets)), !anyDuplicated(names(targets)),
     all(nzchar(names(targets))), all(nzchar(targets)),
-    identical(names(rewrites), c("analyte", "from_unit", "to_unit")),
+    identical(names(rewrites), c(
+      "analyte", "from_unit", "to_unit", "required_laboratory"
+    )),
     all(rewrites$from_unit == WATER_MISSING_UNIT),
+    identical(rewrites$required_laboratory, rep("EcoCore_CSU", 12L)),
     !anyDuplicated(water_unit_rule_key(rewrites$analyte,
                                        rewrites$from_unit)),
     all(rewrites$analyte %in% names(targets)),
@@ -320,8 +386,21 @@ validate_water_unit_policy <- function() {
                                        exclusions$from_unit)),
     all(exclusions$analyte %in% names(targets)),
     all(exclusions$from_unit != unname(targets[exclusions$analyte])),
+    identical(
+      exclusions$required_laboratory[
+        exclusions$reason == "audited-legacy-mislabeled-concentration"
+      ],
+      rep("Florida International University", 6L)
+    ),
+    identical(
+      exclusions$required_laboratory[
+        exclusions$reason == "unresolved-legacy-particulate-unit-anomaly"
+      ],
+      rep("EcoCore_CSU", 2L)
+    ),
     identical(names(identities), c("site", "collectDate", "analyte",
                                     "from_unit", "max_source_rows")),
+    nrow(identities) == 73L,
     !anyDuplicated(water_unit_identity_key(
       identities$site, identities$collectDate, identities$analyte,
       identities$from_unit
@@ -413,7 +492,7 @@ canonicalize_water_unit_labels <- function(site, collectDate, analyte, value,
   provenance_bound_row <- mismatch & !is.na(required_lab)
   if (any(provenance_bound_row &
           (is.na(laboratoryName) | laboratoryName != required_lab))) {
-    stop("TPC/TPN anomaly lacks the required EcoCore_CSU provenance receipt.",
+    stop("Audited unit anomaly lacks its required laboratory provenance receipt.",
          call. = FALSE)
   }
 
@@ -431,6 +510,16 @@ canonicalize_water_unit_labels <- function(site, collectDate, analyte, value,
     bad <- unique(kept_analyte[missing & is.na(rewrite_index)])
     stop(sprintf("Unapproved missing unit label requires review: %s",
                  paste(sort(bad), collapse = ", ")), call. = FALSE)
+  }
+  rewrite_required_lab <- rewrite_rules$required_laboratory[rewrite_index]
+  provenance_bound_rewrite <- missing & !is.na(rewrite_required_lab)
+  if (any(provenance_bound_rewrite &
+          (is.na(laboratoryName[keep]) |
+             laboratoryName[keep] != rewrite_required_lab))) {
+    stop(paste0(
+      "Missing-label repair lacks its required laboratory provenance ",
+      "receipt."
+    ), call. = FALSE)
   }
 
   n_rewritten <- tabulate(rewrite_index[missing], nbins = nrow(rewrite_rules))
@@ -460,6 +549,7 @@ canonicalize_water_unit_labels <- function(site, collectDate, analyte, value,
     analyte = rewrite_rules$analyte,
     from_unit = rewrite_rules$from_unit,
     to_unit = rewrite_rules$to_unit,
+    required_laboratory = rewrite_rules$required_laboratory,
     n_rewritten = as.integer(n_rewritten),
     n_target_source = as.integer(n_target_source),
     stringsAsFactors = FALSE

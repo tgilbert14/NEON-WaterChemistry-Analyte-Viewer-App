@@ -3498,19 +3498,19 @@
       "checksum": "4980700e871daa3d75860bb8c1057c6b"
     },
     "data/codebook.csv": {
-      "checksum": "fe20b84b9377291fe9fb77f39091d464"
+      "checksum": "0a844ec7ffc00c2683e56052474a86d1"
     },
     "data/neon_swc.rds": {
-      "checksum": "8dceb262af0eed45178bbdb21d847cc6"
+      "checksum": "cde4e3a856320c02267f62de75dbd482"
     },
     "data/search_index.rds": {
-      "checksum": "7eb868669888d79de24c655794c63e9f"
+      "checksum": "558869270b24b988976c03038398b5a7"
     },
     "helpers.R": {
       "checksum": "4e0a24857faf07fc31a6cbc2247adae2"
     },
     "scripts/water_unit_contract.R": {
-      "checksum": "f26a5c12398a86100f491fb89c1e396b"
+      "checksum": "a82f693ba42728c0db6cc113233f1067"
     }
   },
   "users": null

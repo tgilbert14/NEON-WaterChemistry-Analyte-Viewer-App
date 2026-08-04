@@ -429,8 +429,8 @@ if (!has_unit_contract) {
 
   label_receipt <- bundle$built$unit_label_rewrites
   label_names <- c(
-    "analyte", "from_unit", "to_unit", "n_rewritten",
-    "n_target_source"
+    "analyte", "from_unit", "to_unit", "required_laboratory",
+    "n_rewritten", "n_target_source"
   )
   need(is.data.frame(label_receipt) &&
          identical(names(label_receipt), label_names),
@@ -442,8 +442,11 @@ if (!has_unit_contract) {
     order(WATER_UNIT_LABEL_REWRITES$analyte), , drop = FALSE
   ]
   rownames(expected_labels) <- NULL
-  need(identical(label_receipt[1:3], expected_labels),
+  need(identical(label_receipt[1:4], expected_labels),
        "Candidate unit-rewrite pair allowlist differs from reviewed policy.")
+  need(identical(label_receipt$required_laboratory,
+                 rep("EcoCore_CSU", 12L)),
+       "Candidate unit-rewrite laboratory provenance differs from policy.")
   need(is.integer(label_receipt$n_rewritten) &&
          is.integer(label_receipt$n_target_source) &&
          !anyNA(label_receipt$n_rewritten) &&
@@ -556,10 +559,15 @@ runtime_units <- vapply(
   function(i) unique(as.character(runtime_long$units[i])), character(1)
 )
 codebook_lines <- readLines("data/codebook.csv", warn = FALSE)
+expected_codebook_version <- if (has_unit_contract) "1.1.0" else "1.0.0"
 expected_codebook_header <- c(
   sprintf(
-    "# NEON Surface Water Chemistry codebook | version 1.0.0 | product %s | built %s",
-    bundle$built$product, substr(bundle$built$when, 1L, 10L)
+    paste0(
+      "# NEON Surface Water Chemistry codebook | version %s | ",
+      "product %s | built %s"
+    ),
+    expected_codebook_version, bundle$built$product,
+    substr(bundle$built$when, 1L, 10L)
   ),
   paste0(
     "# section=tidy_long_export documents the in-app Tidy CSV columns ",
@@ -624,7 +632,11 @@ long_allowed <- c(
   value = ">= 0 typical", units = "canonical NEON unit string",
   n_reps = ">= 1", value_sd = ">= 0",
   below_detection = "TRUE/FALSE", implausible_extreme = "TRUE/FALSE",
-  lab_flag = "NEON externalLabDataQF codes",
+  lab_flag = if (has_unit_contract) {
+    "sorted distinct NEON externalLabDataQF codes joined by ' | '"
+  } else {
+    "NEON externalLabDataQF codes"
+  },
   source = "External Lab | Field Probe", product = "DP1.20093.001"
 )
 long_definition <- c(
@@ -650,7 +662,11 @@ long_definition <- c(
     "Flagged above the plausibility ceiling; kept in this raw export, ",
     "excluded from fits/maps/STL/glm"
   ),
-  lab_flag = "External-lab quality flag (e.g. legacyData, formatChange)",
+  lab_flag = if (has_unit_contract) {
+    "All distinct external-lab quality flags across the collapsed replicates"
+  } else {
+    "External-lab quality flag (e.g. legacyData, formatChange)"
+  },
   source = "Measurement origin",
   product = "NEON data product code"
 )
@@ -660,7 +676,11 @@ long_na_semantics <- c(
   value = "NA only if all replicates were non-numeric",
   units = "never NA after canonicalization", n_reps = "never NA",
   value_sd = "NA when n_reps == 1", below_detection = "never NA",
-  implausible_extreme = "never NA", lab_flag = "NA when unflagged",
+  implausible_extreme = "never NA", lab_flag = if (has_unit_contract) {
+    "NA when every replicate is unflagged"
+  } else {
+    "NA when unflagged"
+  },
   source = "never NA", product = "never NA"
 )
 long_codebook <- codebook[codebook$section == "tidy_long_export", , drop = FALSE]

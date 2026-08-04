@@ -27,6 +27,33 @@ SITE_LABELS <- c(
 # NEON ships below-detection as the strings "ND"/"BDL" (sometimes "1") — NOT 0/1.
 .below_codes <- c("1", "ND", "BDL", "BD", "TRUE", "true")
 
+# API/cache enumeration order is not scientific information. Canonically order
+# the effective rows after unit-policy filtering so floating-point mean/sd
+# reductions and every derived byte reproduce from the signed, sorted replay.
+canonical_water_raw_order <- function(x) {
+  order_columns <- c(
+    "site", "collectDate", "analyte", "value", "units", "below",
+    "labFlag", "laboratoryName", "source"
+  )
+  stopifnot(is.data.frame(x), all(order_columns %in% names(x)))
+  order_keys <- lapply(x[order_columns], function(value) {
+    if (is.character(value)) enc2utf8(value) else value
+  })
+  row_order <- do.call(order, c(
+    order_keys, list(na.last = TRUE, method = "radix")
+  ))
+  x[row_order, , drop = FALSE]
+}
+
+# Replicate groups can legitimately carry more than one external-lab quality
+# flag. Preserve every distinct nonempty code in a deterministic representation
+# instead of selecting whichever flagged row happened to arrive first.
+collapse_water_lab_flags <- function(x) {
+  flags <- enc2utf8(as.character(x))
+  flags <- sort(unique(flags[!is.na(flags) & nzchar(flags)]), method = "radix")
+  if (!length(flags)) NA_character_ else paste(flags, collapse = " | ")
+}
+
 # lab_raw  : stacked external-lab rows; cols = site, collectDate, analyte,
 #            analyteConcentration, analyteUnits, belowDetectionQF, externalLabDataQF
 # field_raw: stacked field-probe rows; cols = site, collectDate, waterTemp,
@@ -83,10 +110,11 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
   raw_long$units <- unit_result$units
   stopifnot(identical(raw_long$value,
                       values_before_unit_labels[unit_result$keep]))
+  raw_long <- canonical_water_raw_order(raw_long)
 
   # Collapse replicates -> one row per site/date/analyte, KEEPING the replicate
   # count + spread + a real below-detection flag (any rep below DL). Units are now
-  # canonical per analyte, so first() is safe here.
+  # canonical per analyte, and every distinct lab flag is retained.
   swc_long <- raw_long %>%
     group_by(site, collectDate, analyte) %>%
     summarise(value_sd = stats::sd(value, na.rm = TRUE),   # spread BEFORE collapse
@@ -94,7 +122,7 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
               belowDetection = as.integer(any(below, na.rm = TRUE)),
               units = dplyr::first(units),
               source = dplyr::first(source),
-              labFlag = dplyr::first(stats::na.omit(labFlag)) %||% NA_character_,
+              labFlag = collapse_water_lab_flags(labFlag),
               value = mean(value, na.rm = TRUE),           # collapse LAST
               .groups = "drop") %>%
     relocate(value, .after = analyte) %>%
@@ -204,7 +232,8 @@ validate_bundle <- function(b) {
 # the ACTUAL columns the app's tidy long export emits (the keep-vector) so it can
 # never drift from what ships; every column carries type + units-or-NA + allowed +
 # definition + NA-semantics. CODEBOOK_VERSION is stamped into the header.
-CODEBOOK_VERSION <- "1.0.0"
+CODEBOOK_VERSION <- "1.1.0"
+LEGACY_CODEBOOK_VERSION <- "1.0.0"
 # The keep-vector = the exact columns output$dl_long / long_slice() transmutes.
 # Keep this list in lock-step with app.R long_slice().
 LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","units",
@@ -237,17 +266,43 @@ LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","un
   implausible_extreme = list(type="logical", units=NA, allowed="TRUE/FALSE",
               def="Flagged above the plausibility ceiling; kept in this raw export, excluded from fits/maps/STL/glm",
               na="never NA"),
-  lab_flag = list(type="character", units=NA, allowed="NEON externalLabDataQF codes",
-              def="External-lab quality flag (e.g. legacyData, formatChange)", na="NA when unflagged"),
+  lab_flag = list(type="character", units=NA,
+              allowed="sorted distinct NEON externalLabDataQF codes joined by ' | '",
+              def="All distinct external-lab quality flags across the collapsed replicates",
+              na="NA when every replicate is unflagged"),
   source = list(type="character", units=NA, allowed="External Lab | Field Probe",
               def="Measurement origin", na="never NA"),
   product = list(type="character", units=NA, allowed="DP1.20093.001",
               def="NEON data product code", na="never NA")
 )
 write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
+  receipt_present <- WATER_UNIT_RECEIPT_FIELDS %in% names(bundle$built)
+  if (any(receipt_present) && !all(receipt_present)) {
+    stop("Cannot write a codebook for a partial unit-contract receipt.",
+         call. = FALSE)
+  }
+  current_producer <- all(receipt_present)
+  if (current_producer &&
+      !identical(bundle$built$unit_policy, WATER_UNIT_POLICY)) {
+    stop("Cannot write a current codebook for an unexpected unit policy.",
+         call. = FALSE)
+  }
+  codebook_version <- if (current_producer) {
+    CODEBOOK_VERSION
+  } else {
+    LEGACY_CODEBOOK_VERSION
+  }
   keep <- LONG_EXPORT_KEEP
   rows <- lapply(keep, function(col) {
     d <- .CODEBOOK_DEFS[[col]]
+    if (identical(col, "lab_flag") && !current_producer) {
+      d <- list(
+        type = "character", units = NA,
+        allowed = "NEON externalLabDataQF codes",
+        def = "External-lab quality flag (e.g. legacyData, formatChange)",
+        na = "NA when unflagged"
+      )
+    }
     if (is.null(d)) d <- list(type="", units=NA, allowed="", def="(undocumented)", na="")
     tibble::tibble(name = col, type = d$type,
                    units = ifelse(is.na(d$units), "NA", d$units),
@@ -273,7 +328,8 @@ write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
   cb <- dplyr::bind_rows(long_cb, dict_cb)
   hdr <- c(
     sprintf("# NEON Surface Water Chemistry codebook | version %s | product %s | built %s",
-            CODEBOOK_VERSION, bundle$built$product, substr(bundle$built$when, 1, 10)),
+            codebook_version, bundle$built$product,
+            substr(bundle$built$when, 1, 10)),
     "# section=tidy_long_export documents the in-app Tidy CSV columns (the keep-vector); section=analyte_dictionary documents every emitted analyte",
     "# units 'NA' = not applicable for schema rows; emitted analyte rows carry explicit reviewed targets")
   writeLines(hdr, out)
