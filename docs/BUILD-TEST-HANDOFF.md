@@ -1,5 +1,34 @@
 # Build, test, and handoff record
 
+## 2026-08-04 EDT - Driver knowledge-package closeout / [Codex]
+
+- Added `docs/DRIVER-KNOWLEDGE-PACKAGE.md` and bound it to NEON product
+  `DP1.20093.001`, reviewed source `e2ea753`, independently validated candidate
+  `27512485`, PR #15 exact-head workflow 30876917859, production merge
+  `ee95af3`, Pages workflow 30878152320, and production check 30878153073.
+- Direct inspection of the promoted bundle confirms 200,953 canonical
+  observations, 34 analytes, 34 aquatic sites, 2012-01-31 through 2026-07-15,
+  and `partial = FALSE`. Unit policy v4 records 14,422 approved missing-label
+  rewrites, 75 audited source-row exclusions, and zero numeric-value changes.
+- The canonical bundle has 387 distinct aquatic `site × calendar year` rows;
+  every site has at least six years (observed range 9–15). The suite audit finds
+  zero exact Water-to-terrestrial-Driver site-code joins. Its weaker
+  `domain × calendar year` proxy covers 351/387 rows and is explicitly recorded
+  as a proxy diagnostic, **not** an eligible join or support claim.
+- Formal ecological disposition: **CONTEXT / HOLD DRIVER INGESTION / NO DRIVER
+  BYTE CHANGE**. Water chemistry is condition/context, not flow, a producer
+  rung, or a causal trophic vote. Integration remains **UNMEASURED** pending
+  registered aquatic keys/role, a reviewed adapter, and parity evidence.
+- Separate contract disposition: **ADOPT** the audited-unit identity, signed
+  replay, deterministic quarantine, and exact-runtime receipt patterns; that
+  process decision does not promote an ecological signal.
+- Scope is documentation-only: no runtime, data, manifest, workflow, or
+  production bytes changed. Static documentation checks and `git diff --check`
+  pass on the two-file patch.
+- **Next action:** Register this exact package in the Driver suite synthesis and
+  keep Water ingestion on HOLD until the aquatic key/role/adapter/parity gate is
+  satisfied.
+
 ## 2026-08-03 EDT - signed refresh replay and unit policy v4 / Codex
 
 - Full-fetch diagnostic run
