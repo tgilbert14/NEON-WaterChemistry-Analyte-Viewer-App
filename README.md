@@ -101,13 +101,16 @@ shiny::runApp("app.R")
   synthetic sine-wave "forecast" the original app shipped.
 - **Analyte names and unit handling are explicit and fail closed** (e.g. Br = bromide, not
   bicarbonate; Cl = chloride; ANC in meq/L; pH unitless). For the 31 external-lab analytes,
-  row-level source labels are checked against reviewed targets; only registered missing labels
-  are filled and exact audited legacy mismatches are quarantined. The three field-derived
-  analytes use documented fixed extraction-unit assumptions because their source value table
-  does not supply per-row unit labels. Policy v4 binds its 25 newly admitted quarantine
-  identities to the signed full-fetch replay/run recorded in
-  [`docs/BUILD-TEST-HANDOFF.md`](docs/BUILD-TEST-HANDOFF.md). Numeric values are never silently
-  rescaled.
+  row-level source labels are checked against reviewed targets. Registered missing labels are
+  filled only for exact `EcoCore_CSU` source provenance and with an observed target label;
+  audited WALK concentration-label exclusions require exact Florida International University
+  provenance, while TPC/TPN `milligram` exclusions require exact `EcoCore_CSU` provenance.
+  The three field-derived analytes use documented fixed extraction-unit assumptions because
+  their source value table does not supply per-row unit labels. Policy v4 binds its 25 newly
+  admitted quarantine identities to the signed full-fetch replay/run recorded in
+  [`docs/BUILD-TEST-HANDOFF.md`](docs/BUILD-TEST-HANDOFF.md). Candidate validation recomputes the
+  review from that stored replay and independently rebuilds the scientific bundle; numeric
+  values are never silently rescaled.
 - **Below-detection values are flagged, not hidden.**
 - Regression carries explicit caveats: correlation ≠ causation, and repeated-measures p-values
   are optimistic (a lag-1 autocorrelation flag quantifies it).

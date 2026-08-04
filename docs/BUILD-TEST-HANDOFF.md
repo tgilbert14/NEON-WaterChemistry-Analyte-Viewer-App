@@ -27,10 +27,20 @@
 - Unit policy v4 adds only those exact site/date/analyte/source-label identities
   with their observed source-row counts as upper bounds. It still quarantines
   every mismatch, changes zero numeric values, and fails on a new identity,
-  count increase, wrong EcoCore provenance, unknown analyte, or unsupported
-  missing-label repair. Replaying the signed source under v4 yields 73 audited
+  count increase, missing or inexact required laboratory provenance, unknown
+  analyte, or unsupported missing-label repair. The six WALK concentration
+  families require exact `Florida International University` provenance;
+  TPC/TPN exclusions and all 12 registered missing-label rewrites require exact
+  `EcoCore_CSU` provenance. Target-label support remains global and may come
+  from another laboratory. Replaying the signed source under v4 yields 73 audited
   exclusions, 11,681 approved missing-label identities, and zero unapproved
   identities.
+- The review receipt alone is not treated as scientific authority. Validation
+  canonicalizes the stored replay, recomputes the deterministic review, and
+  requires exact parsed-table and CSV-byte equality with the stored review.
+  Full-fetch candidate validation also rebuilds the bundle from that replay and
+  requires exact object equality after normalizing only the producer timestamp.
+  These strengthened gates still require a fresh exact-head workflow result.
 - Release boundary: exact-head tests, a second authenticated full fetch, clean
   independent candidate verification, reviewer-authenticated PR, merge, and
   live Pages/Connect proof are still required before the refreshed data can

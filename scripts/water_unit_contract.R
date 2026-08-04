@@ -72,9 +72,11 @@ WATER_ESTABLISHED_UNIT_TARGETS <- c(
   waterTemp = "celsius"
 )
 
-# Missing labels are metadata omissions, not alternate unit claims. Fill them
-# only for these exact analyte/target pairs and only when a source row carrying
-# the target label is present in the same build.
+# Missing labels are metadata omissions, not alternate unit claims. The signed
+# v4 replay binds every eligible missing-label row to EcoCore_CSU. Fill only
+# these exact analyte/target pairs when that source provenance is exact and a
+# row carrying the target label is present anywhere in the same build. The
+# target-support row is deliberately global; it need not come from EcoCore_CSU.
 WATER_UNIT_LABEL_REWRITES <- data.frame(
   analyte = c(
     "Br", "Cl", "DIC", "DOC", "F", "SO4", "TDN", "TDS", "TN", "TOC",
@@ -85,15 +87,18 @@ WATER_UNIT_LABEL_REWRITES <- data.frame(
     "Br", "Cl", "DIC", "DOC", "F", "SO4", "TDN", "TDS", "TN", "TOC",
     "UV Absorbance (254 nm)", "UV Absorbance (280 nm)"
   )]),
+  required_laboratory = rep("EcoCore_CSU", 12L),
   stringsAsFactors = FALSE
 )
 
 # Non-missing mismatches are excluded, never relabelled. Six concentration
-# pairs are the audited WALK-2019 label defect. The residual TPC/TPN `milligram`
-# identities conflict with NEON's current product change log, which says EcoCore
-# particulate C/N was converted to microgramsPerLiter. They are therefore
-# unresolved legacy unit anomalies: quarantine them conservatively until their
-# source history is reconciled rather than guessing at a conversion.
+# pairs are the audited WALK-2019 label defect. All 53 of those exact identities
+# in the signed v4 replay carry Florida International University provenance, so
+# a missing or different laboratory fails closed. The residual TPC/TPN
+# `milligram` identities conflict with NEON's current product change log, which
+# says EcoCore particulate C/N was converted to microgramsPerLiter. They are
+# therefore unresolved legacy unit anomalies: quarantine them conservatively
+# until their source history is reconciled rather than guessing at a conversion.
 WATER_UNIT_EXCLUSION_RULES <- data.frame(
   analyte = c(
     "NH4 - N", "NO2 - N", "NO3+NO2 - N", "Ortho - P", "TDP", "TP",
@@ -104,7 +109,7 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
     rep("audited-legacy-mislabeled-concentration", 6L),
     rep("unresolved-legacy-particulate-unit-anomaly", 2L)
   ),
-  required_laboratory = c(rep(NA_character_, 6L),
+  required_laboratory = c(rep("Florida International University", 6L),
                           "EcoCore_CSU", "EcoCore_CSU"),
   stringsAsFactors = FALSE
 )
@@ -366,8 +371,11 @@ validate_water_unit_policy <- function() {
     is.character(targets), length(targets) == 34L,
     !is.null(names(targets)), !anyDuplicated(names(targets)),
     all(nzchar(names(targets))), all(nzchar(targets)),
-    identical(names(rewrites), c("analyte", "from_unit", "to_unit")),
+    identical(names(rewrites), c(
+      "analyte", "from_unit", "to_unit", "required_laboratory"
+    )),
     all(rewrites$from_unit == WATER_MISSING_UNIT),
+    identical(rewrites$required_laboratory, rep("EcoCore_CSU", 12L)),
     !anyDuplicated(water_unit_rule_key(rewrites$analyte,
                                        rewrites$from_unit)),
     all(rewrites$analyte %in% names(targets)),
@@ -378,6 +386,18 @@ validate_water_unit_policy <- function() {
                                        exclusions$from_unit)),
     all(exclusions$analyte %in% names(targets)),
     all(exclusions$from_unit != unname(targets[exclusions$analyte])),
+    identical(
+      exclusions$required_laboratory[
+        exclusions$reason == "audited-legacy-mislabeled-concentration"
+      ],
+      rep("Florida International University", 6L)
+    ),
+    identical(
+      exclusions$required_laboratory[
+        exclusions$reason == "unresolved-legacy-particulate-unit-anomaly"
+      ],
+      rep("EcoCore_CSU", 2L)
+    ),
     identical(names(identities), c("site", "collectDate", "analyte",
                                     "from_unit", "max_source_rows")),
     nrow(identities) == 73L,
@@ -472,7 +492,7 @@ canonicalize_water_unit_labels <- function(site, collectDate, analyte, value,
   provenance_bound_row <- mismatch & !is.na(required_lab)
   if (any(provenance_bound_row &
           (is.na(laboratoryName) | laboratoryName != required_lab))) {
-    stop("TPC/TPN anomaly lacks the required EcoCore_CSU provenance receipt.",
+    stop("Audited unit anomaly lacks its required laboratory provenance receipt.",
          call. = FALSE)
   }
 
@@ -490,6 +510,16 @@ canonicalize_water_unit_labels <- function(site, collectDate, analyte, value,
     bad <- unique(kept_analyte[missing & is.na(rewrite_index)])
     stop(sprintf("Unapproved missing unit label requires review: %s",
                  paste(sort(bad), collapse = ", ")), call. = FALSE)
+  }
+  rewrite_required_lab <- rewrite_rules$required_laboratory[rewrite_index]
+  provenance_bound_rewrite <- missing & !is.na(rewrite_required_lab)
+  if (any(provenance_bound_rewrite &
+          (is.na(laboratoryName[keep]) |
+             laboratoryName[keep] != rewrite_required_lab))) {
+    stop(paste0(
+      "Missing-label repair lacks its required laboratory provenance ",
+      "receipt."
+    ), call. = FALSE)
   }
 
   n_rewritten <- tabulate(rewrite_index[missing], nbins = nrow(rewrite_rules))
@@ -519,6 +549,7 @@ canonicalize_water_unit_labels <- function(site, collectDate, analyte, value,
     analyte = rewrite_rules$analyte,
     from_unit = rewrite_rules$from_unit,
     to_unit = rewrite_rules$to_unit,
+    required_laboratory = rewrite_rules$required_laboratory,
     n_rewritten = as.integer(n_rewritten),
     n_target_source = as.integer(n_target_source),
     stringsAsFactors = FALSE

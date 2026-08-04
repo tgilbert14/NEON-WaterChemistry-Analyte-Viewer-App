@@ -15,6 +15,7 @@ WATER_REFRESH_REVIEW_PRODUCT <- "DP1.20093.001"
 WATER_REFRESH_REVIEW_BELOW_CODES <- c("1", "ND", "BDL", "BD", "TRUE", "true")
 WATER_REFRESH_REVIEW_STATUSES <- c(
   "unregistered-analyte", "unapproved-missing-unit-label",
+  "missing-label-rewrite-provenance-mismatch",
   "missing-label-repair-without-target", "approved-missing-label-rewrite",
   "unapproved-unit-pair", "unapproved-identity",
   "audited-identity-over-bound", "audited-identity-provenance-mismatch",
@@ -285,12 +286,17 @@ water_unit_mismatch_review <- function(lab_raw) {
     audited <- !is.na(identity_index)
     max_rows <- if (audited) identities$max_source_rows[[identity_index]] else NA_integer_
     within_bound <- if (audited) n_source_rows <= max_rows else NA
-    required_lab <- if (!is.na(rule_index))
-      rules$required_laboratory[[rule_index]] else NA_character_
+    missing_label <- from_unit[[i]] == WATER_MISSING_UNIT
+    required_lab <- if (!is.na(rule_index)) {
+      rules$required_laboratory[[rule_index]]
+    } else if (missing_label && !is.na(rewrite_index)) {
+      rewrite_rules$required_laboratory[[rewrite_index]]
+    } else {
+      NA_character_
+    }
     observed_labs <- water_review_key_component(lab$laboratoryName[hit])
     provenance_ok <- if (is.na(required_lab)) NA else
       all(observed_labs == required_lab)
-    missing_label <- from_unit[[i]] == WATER_MISSING_UNIT
     n_target_source <- if (missing_label && !is.na(target_unit[[i]])) {
       as.integer(target_counts[[analyte[[i]]]])
     } else {
@@ -301,6 +307,9 @@ water_unit_mismatch_review <- function(lab_raw) {
       "unregistered-analyte"
     } else if (missing_label && is.na(rewrite_index)) {
       "unapproved-missing-unit-label"
+    } else if (missing_label && !is.na(required_lab) &&
+               !isTRUE(provenance_ok)) {
+      "missing-label-rewrite-provenance-mismatch"
     } else if (missing_label && n_target_source == 0L) {
       "missing-label-repair-without-target"
     } else if (missing_label) {
@@ -522,12 +531,38 @@ validate_water_refresh_review <- function(out_dir, expected_source_sha = NULL) {
       !identical(names(coords), WATER_REFRESH_REPLAY_COORD_COLUMNS)) {
     stop("Refresh-review replay schema is invalid.", call. = FALSE)
   }
+  canonical_replay <- water_refresh_replay_inputs(lab, field, coords)
+  if (!identical(lab, canonical_replay$lab_raw) ||
+      !identical(field, canonical_replay$field_raw) ||
+      !identical(coords, canonical_replay$coords)) {
+    stop("Refresh-review replay bytes are not in canonical row order or type.",
+         call. = FALSE)
+  }
 
-  review <- water_review_read_csv(file.path(
+  review_path <- file.path(
     out_dir, WATER_REFRESH_REVIEW_CONTENT_FILES[["unit_review"]]
-  ))
+  )
+  review <- water_review_read_csv(review_path)
   if (!identical(names(review), names(water_unit_mismatch_review_empty()))) {
     stop("Refresh-review unit-review schema is invalid.", call. = FALSE)
+  }
+  recomputed_review <- water_unit_mismatch_review(lab)
+  recomputed_path <- tempfile("water-review-recomputed-")
+  on.exit(unlink(recomputed_path), add = TRUE)
+  water_review_write_csv(recomputed_review, recomputed_path)
+  recomputed_csv <- water_review_read_csv(recomputed_path)
+  review_bytes <- readBin(
+    review_path, what = "raw", n = file.info(review_path)$size
+  )
+  recomputed_bytes <- readBin(
+    recomputed_path, what = "raw", n = file.info(recomputed_path)$size
+  )
+  if (!identical(review, recomputed_csv) ||
+      !identical(review_bytes, recomputed_bytes)) {
+    stop(paste0(
+      "Refresh-review unit review does not exactly reproduce from the ",
+      "stored replay."
+    ), call. = FALSE)
   }
   if (nrow(review)) {
     if (anyNA(review$review_status) ||
