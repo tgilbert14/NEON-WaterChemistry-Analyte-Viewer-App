@@ -1,5 +1,35 @@
 # Build, test, and handoff record
 
+## 2026-08-05 MST - manifest-producer bslib drift closure / [Codex]
+
+- Started from exact `origin/main` commit
+  `9e2946ca5f07f0c81eac790ad10dcef0c9f0f3d9`. The reviewed production
+  manifest records `bslib` `0.10.0`, but the refresh candidate job that runs
+  `scripts/write_manifest.R` requested versionless `bslib`.
+- Pinned that build/runtime-manifest dependency to exact `bslib@0.10.0` and
+  rolled its cache namespace to
+  `water-refresh-geo-closure-bslib-0.10.0-v2`. The lock-derived
+  `connect_cold_start` lane and its content-addressed cache are unchanged.
+- The producer, independent validator, restricted publisher, unit policy,
+  scientific tests, runtime allowlist, data, and committed manifest are all
+  unchanged. This is **SUITE-PLATFORM / NO RUNTIME OR DRIVER BYTE CHANGE**.
+- A default-branch audit found four remaining apps with versionless `bslib` in
+  jobs that produce a manifest: Breeding Birds (`master` `07c852c2ed56`, CI
+  and refresh), Ground Beetles (`main` `1a768b4ae676`, CI and refresh), Small
+  Mammals (`main` `86a94bcf5303`, CI, refresh, and manifest regeneration), and
+  Vegetation Structure (`main` `d2b7ef08ee24`, CI, refresh, and manifest
+  regeneration). Each committed manifest records `bslib` `0.11.0`.
+- The same audit found no versionless `bslib` manifest producer in Driver,
+  My Little Inverts, Mosquito Pulse, Plant Diversity, or Plant Phenology;
+  those lanes already use an exact version or retained source URL.
+- Ruby safe-loaded both workflow files. Static assertions confirmed the single
+  Water `bslib@0.10.0` pin, rolled cache, retained manifest writer, unchanged
+  runtime/science/config paths, and committed manifest version `0.10.0`.
+  `git diff --check` also passed.
+- Nothing was pushed, merged, refreshed, or deployed. **Next action:** review
+  and publish this exact workflow/docs patch, then close the four reported
+  suite findings in app-specific patches before their next manifest build.
+
 ## 2026-08-04 EDT - Driver knowledge-package closeout / [Codex]
 
 - Added `docs/DRIVER-KNOWLEDGE-PACKAGE.md` and bound it to NEON product
