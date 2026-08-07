@@ -339,3 +339,33 @@
 - Required next proof: exact-head CI, merge of this code-only repair, then one
   full pinned refresh whose independently validated candidate is reviewed and
   merged before production/Connect verification.
+
+## 2026-08-07 13:45 MST - artistic living-poster cover / Claude
+
+- Replaced the old constellation-style `docs/index.html` with the suite's
+  living-poster cover language, closing Water's status as the suite's only
+  no-art cover. New: split poster hero with the serif question headline
+  "What's in the water?" (cyan accent line, h1 aria-label carries the full
+  sentence), lead drawn from the previous cover's own copy ("pick a site, pick
+  an analyte like nitrogen or salt..."), single cyan pill CTA "Pick a water
+  body" to the existing Connect app URL, generated vintage-etching stream
+  artwork (sensor probe + sample bottles; decorative only, depicts no data),
+  cream honesty footer. Zero JavaScript and system fonts only (the old cover's
+  Google Fonts load and inline JS are gone).
+- Preserved verbatim: the full "How it stays honest" body, the CC BY 4.0
+  licensing paragraph, the non-affiliation language, mailto contact, GitHub
+  link, canonical URL, Connect launch URL, DP1.20093.001 provenance, and the
+  34-aquatic-site count. og-image.png regenerated from the new art at 1200x630
+  (same filename, so existing references keep working). New assets:
+  docs/assets/water-living-poster.png (1672x941) + .webp (1672w/840w).
+- Cover-only change: no app, data, manifest, workflow, or science byte
+  changed. Verified with headless Chromium at 1440/1920/800/390/320 widths:
+  no horizontal overflow, h1 exactly two lines everywhere, art-first stacking
+  below 960px, 44px+ controls, reduced-motion/contrast/forced-colors blocks,
+  meaningful image alternatives, no figcaption, no cover-art disclaimer.
+- Style provenance: the layout/tokens mirror the suite covers (Small Mammal,
+  Mosquito, Inverts) and the Driver hub cover merged earlier today
+  (NEON-Driver-Cascade PR #66); the hub's Water card question now matches this
+  cover's actual headline.
+- Next action: merge the cover PR to main, verify the live Pages root and
+  og-image, then update the Driver hub's Water card skin to wear this art.

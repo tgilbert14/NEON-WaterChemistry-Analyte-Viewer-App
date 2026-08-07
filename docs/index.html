@@ -4,526 +4,326 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>NEON Water Chemistry, the Explorer Suite by Desert Data Labs</title>
+  <title>NEON Water Chemistry · Desert Data Labs</title>
   <meta name="description"
-    content="See what is dissolved in the water at NEON's streams and lakes. Pick a site, pick something like nitrogen or salt, and watch it change through the seasons. Then compare sites across the country, using real NEON data." />
-  <meta name="theme-color" content="#04111e" />
+    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers, and streams — pick a site, pick an analyte like nitrogen or salt, and watch it change through the seasons. Real NEON data." />
+  <meta name="theme-color" content="#071a22" />
+  <link rel="canonical" href="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23071a22'/%3E%3Cpath d='M32 12c-9 13.5-15 21 0 30 15-9 9-16.5 0-30Z' fill='none' stroke='%236ee6f0' stroke-width='4.2' stroke-linejoin='round'/%3E%3C/svg%3E" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
-  <meta property="og:title" content="NEON Water Chemistry, Desert Data Labs" />
+  <meta property="og:title" content="NEON Water Chemistry · Desert Data Labs" />
   <meta property="og:description"
-    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Pick a site, pick something like nitrogen or salt, watch it change through the seasons, and compare sites. Real NEON data." />
-  <meta property="og:image"
+    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers, and streams, and watch it change through the seasons. Real NEON data." />
+  <meta property="og:image" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
+  <meta property="og:image:secure_url"
     content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt"
+    content="Vintage screen-print of a clear stream with a scientific sensor probe lowered into a sunlit pool, sample bottles and a field notebook on the bank, dark forest on the left and warm morning sky on the right." />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="NEON Water Chemistry, Desert Data Labs" />
+  <meta name="twitter:title" content="NEON Water Chemistry · Desert Data Labs" />
   <meta name="twitter:description"
-    content="See what is dissolved in the water at NEON's streams and lakes across 34 sites. Real NEON data." />
+    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers, and streams. Real NEON data." />
+  <meta name="twitter:image"
+    content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
+  <meta name="twitter:image:alt"
+    content="Vintage screen-print of a clear stream with a scientific sensor probe lowered into a sunlit pool, sample bottles and a field notebook on the bank, dark forest on the left and warm morning sky on the right." />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
-  <!-- promote to JS layout before paint so there is no flash of the fallback list -->
-  <script>document.documentElement.className += ' js';</script>
+  <link rel="preload" as="image" type="image/webp"
+    imagesrcset="assets/water-living-poster-840.webp 840w, assets/water-living-poster.webp 1672w"
+    imagesizes="(max-width: 700px) 100vw, 66vw" fetchpriority="high" />
 
   <style>
     :root {
-      --bg-0:#04111e; --bg-1:#08233a; --bg-2:#0c3350;
-      --teal:#34c6d8; --teal-rgb:52,198,216; --bright:#6ee6f0;
-      --coral:#4aa3e0; --coral-rgb:74,163,224;
-      --gold:#6ee6c4; --gold-rgb:110,230,196;
-      --ink:#e6f4fb; --dim:#9fc2d6; --line:rgba(255,255,255,.12); --card:rgba(255,255,255,.045);
-      /* analyte-flow layer hues (light -> deep aqua) */
-      --clim:#6ee6f0; --phen:#34c6d8; --prod:#4aa3e0; --cons:#2f7fb8;
+      --night: #071a22;
+      --bright: #6ee6f0;
+      --bright-soft: #a7f1f7;
+      --amber: #e2a448;
+      --paper: #f3e8cb;
+      --paper-dim: #d6d5c0;
+      --ink: #16262c;
+      --ink-dim: #53605f;
+      --line: rgba(243, 232, 203, .2);
+      --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+      --sans: Aptos, Inter, "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     }
+
     * { box-sizing: border-box }
-    html,body { margin:0 }
+    html { background: var(--night); scroll-behavior: smooth }
     body {
-      font-family: Rubik, system-ui, sans-serif; color: var(--ink); background: var(--bg-0);
-      -webkit-font-smoothing: antialiased; line-height: 1.55; overflow-x:hidden;
+      margin: 0; background: var(--night); color: var(--paper);
+      font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased;
+      /* load-bearing: clips the poster art's negative-margin bleed and the mobile
+         100vw full-bleed (which can overshoot by the scrollbar width) */
+      overflow-x: hidden;
     }
-    h1,h2,h3 { font-family: Rubik, sans-serif; line-height: 1.12; margin:0; font-weight:800 }
-    a { color: var(--bright); text-decoration:none }
-    .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px; position:relative; z-index:2 }
+    a { color: inherit }
+    img { max-width: 100% }
 
-    /* ---------- desert-night / circuit sky ---------- */
-    .sky { position: fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;
+    .skip-link {
+      position: fixed; left: 50%; top: -96px; transform: translateX(-50%); z-index: 100;
+      display: inline-flex; align-items: center; min-height: 44px; padding: 0 22px;
+      border-radius: 999px; background: var(--paper); color: var(--night);
+      font-weight: 850; text-decoration: none; transition: top .18s ease;
+    }
+    .skip-link:focus { top: 12px; outline: 3px solid var(--bright); outline-offset: 3px }
+
+    .measure { width: min(1440px, calc(100% - 48px)); margin: 0 auto }
+
+    /* ---------- top bar ---------- */
+    .topline {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      min-height: 82px; border-bottom: 1px solid var(--line);
+    }
+    .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none }
+    .brand-mark {
+      display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+      border: 1px solid rgba(110, 230, 240, .68); color: var(--bright);
+    }
+    .brand-mark svg { width: 17px; height: 17px }
+    .brand b {
+      font-size: .76rem; font-weight: 850; letter-spacing: .16em;
+      text-transform: uppercase; color: var(--paper);
+    }
+    .suite-jump {
+      display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
+      font-size: .74rem; font-weight: 700; letter-spacing: .04em;
+      color: var(--paper-dim); text-decoration: none;
+    }
+    .suite-jump strong { color: var(--bright); font-weight: 850 }
+    .suite-jump .arr { color: var(--amber) }
+    .suite-jump:hover strong { color: var(--bright-soft) }
+
+    /* ---------- poster ---------- */
+    .poster { position: relative; isolation: isolate }
+    .poster::before {
+      content: ""; position: absolute; inset: 0; z-index: -2; pointer-events: none;
       background:
-        radial-gradient(120% 90% at 50% -8%, var(--bg-2), transparent 58%),
-        radial-gradient(140% 120% at 50% 120%, #0e4a66 0%, var(--bg-1) 45%, var(--bg-0) 100%); }
-    .sky::before { content:""; position:absolute; inset:-50%; opacity:.45;
-      background-repeat:repeat; background-size:240px 240px;
-      background-image:
-        radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.5), transparent),
-        radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,230,255,.45), transparent),
-        radial-gradient(1.5px 1.5px at 90px 170px, rgba(110,230,196,.4), transparent);
-      animation: drift 140s linear infinite; }
-    @keyframes drift { to { transform: translateY(240px) } }
-
-    /* ---------- hero ---------- */
-    .hero { position:relative; z-index:2; padding: 46px 0 6px }
-    .brand { display:inline-flex; align-items:center; gap:10px; }
-    .brand svg { width:26px; height:26px; overflow:visible }
-    .brand .stroke { stroke:var(--teal); stroke-width:7; fill:none; stroke-linecap:round }
-    .brand .pip { fill:var(--bright) }
-    .brand b { font-weight:700; font-size:.82rem; letter-spacing:.16em; text-transform:uppercase; color:var(--dim) }
-    .eyebrow { margin-top:18px; font-family: ui-monospace,Menlo,Consolas,monospace; font-size:.72rem;
-      letter-spacing:.26em; text-transform:uppercase; color:var(--teal); }
-    .hero h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); margin:.5rem 0 .6rem; letter-spacing:-.02em;
-      background:linear-gradient(100deg,#fff 10%, var(--bright) 45%, var(--coral) 95%);
-      -webkit-background-clip:text; background-clip:text; color:transparent; }
-    .lead { font-size: clamp(1.05rem,2.2vw,1.24rem); max-width:60ch; margin:0 0 24px; color:var(--ink) }
-    .lead b { color:var(--bright); font-weight:600 }
-
-    /* ---------- standout launch button (the one thing to click) ---------- */
-    .cta-row { display:flex; flex-wrap:wrap; gap:14px; align-items:center }
-    .launch {
-      position:relative; display:inline-flex; align-items:center; gap:11px;
-      font-weight:800; font-size:1.06rem; padding:15px 28px; border-radius:14px;
-      color:#06121a; border:1px solid rgba(255,255,255,.5); overflow:hidden; isolation:isolate;
-      background:linear-gradient(100deg, var(--bright), var(--teal) 45%, #7fe9ff 80%, var(--bright));
-      background-size:220% 100%;
-      box-shadow:0 10px 34px rgba(var(--teal-rgb),.5), 0 0 0 6px rgba(var(--teal-rgb),.08);
-      transition: transform .16s ease, box-shadow .25s ease;
-      animation: ctaFlow 7s linear infinite;
+        radial-gradient(52% 44% at 12% 88%, rgba(110, 230, 240, .09), transparent 70%),
+        radial-gradient(44% 40% at 30% 6%, rgba(226, 164, 72, .06), transparent 72%),
+        var(--night);
     }
-    @keyframes ctaFlow { to { background-position:220% 0 } }
-    .launch::after { content:""; position:absolute; inset:0; z-index:-1; mix-blend-mode:soft-light;
-      background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%);
-      transform:translateX(-120%); transition:transform .6s ease; }
-    .launch:hover { transform: translateY(-2px) scale(1.015);
-      box-shadow:0 16px 46px rgba(var(--teal-rgb),.65), 0 0 0 6px rgba(var(--teal-rgb),.12) }
-    .launch:hover::after { transform:translateX(120%) }
-    .launch .arrow { font-size:1.1em; transition:transform .2s ease }
-    .launch:hover .arrow { transform:translateX(4px) }
-    .ghost { display:inline-flex; align-items:center; gap:8px; padding:14px 22px; border-radius:14px;
-      color:#fff; border:1.5px solid var(--line); font-weight:600; transition:background .2s, border-color .2s }
-    .ghost:hover { background:rgba(255,255,255,.07); border-color:rgba(var(--teal-rgb),.5) }
-    .warm { font-size:.82rem; color:var(--dim); margin-top:14px; min-height:1.2em }
-
-    /* ---------- the constellation (suite hub + signature motion) ---------- */
-    .constel-sec { position:relative; z-index:2; padding: 26px 0 8px }
-    .constel { position:relative; width:100%; max-width:680px; margin:0 auto;
-      aspect-ratio:1/1; max-height:74vh; }
-    .ctraces { position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:1; pointer-events:none }
-    .ctraces line { stroke:rgba(var(--teal-rgb),.5); stroke-width:1.4; stroke-linecap:round;
-      stroke-dasharray:5 9; opacity:0; transition:opacity .5s ease; }
-    .constel.lit .ctraces line { opacity:.6; animation: cascadeFlow 1.5s linear infinite; }
-    @keyframes cascadeFlow { to { stroke-dashoffset:-28 } }    /* energy flows outward from the core */
-
-    /* core = the launch */
-    .ccore {
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      z-index:4; width:var(--core,150px); height:var(--core,150px); --core:clamp(120px,21vmin,168px);
-      display:grid; place-items:center; border-radius:50%; text-align:center; color:#06121a; cursor:pointer;
-      background:radial-gradient(circle at 42% 36%, #eafdff 0%, var(--bright) 30%, var(--teal) 64%, #0a5a66 100%);
-      border:2px solid rgba(255,255,255,.65);
-      box-shadow:0 0 0 7px rgba(var(--teal-rgb),.10), 0 0 46px 6px rgba(var(--teal-rgb),.5), inset 0 0 30px rgba(255,255,255,.4);
-      animation: corePulse 3.6s ease-in-out infinite;
+    .poster::after {
+      content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+      opacity: .16; mix-blend-mode: soft-light;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
     }
-    @keyframes corePulse {
-      0%,100% { box-shadow:0 0 0 7px rgba(var(--teal-rgb),.10), 0 0 46px 6px rgba(var(--teal-rgb),.5), inset 0 0 30px rgba(255,255,255,.4) }
-      50% { box-shadow:0 0 0 12px rgba(var(--teal-rgb),.04), 0 0 66px 12px rgba(var(--teal-rgb),.62), inset 0 0 34px rgba(255,255,255,.5) }
+    .poster-grid {
+      display: grid; grid-template-columns: minmax(340px, .82fr) minmax(0, 1.34fr);
+      align-items: center; min-height: calc(100vh - 82px); min-height: calc(100svh - 82px);
     }
-    .ccore:hover,.ccore:focus-visible { outline:none; transform:translate(-50%,-50%) scale(1.05) }
-    .ccore .clabel { font-weight:800; font-size:clamp(.86rem,2vw,1.02rem); line-height:1.1; padding:0 .5rem }
-    .ccore .csub { display:block; font-weight:700; font-size:.64em; letter-spacing:.14em; text-transform:uppercase;
-      color:#0a4a52; margin-top:.25rem }
+    .poster-copy {
+      position: relative; z-index: 1;
+      max-width: 560px; padding: 54px max(20px, 2vw) 72px 0;
+    }
+    .kicker {
+      margin: 0 0 18px; font-size: .74rem; font-weight: 800; letter-spacing: .22em;
+      text-transform: uppercase; color: var(--bright);
+    }
+    h1 {
+      margin: 0 0 22px; font-family: var(--serif); font-weight: 700;
+      font-size: clamp(3.2rem, 5.4vw, 5.6rem); line-height: .88; letter-spacing: -.055em;
+      color: var(--paper);
+    }
+    h1 span, h1 em { display: block }
+    h1 em { font-style: normal; font-weight: 600; color: var(--bright) }
+    .lead {
+      margin: 0 0 30px; max-width: 38ch; font-size: clamp(1.02rem, 1.5vw, 1.16rem);
+      color: var(--paper-dim);
+    }
+    .button {
+      display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 26px;
+      border-radius: 999px; background: var(--bright); color: var(--night);
+      font-size: .93rem; font-weight: 850; text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, .34);
+      box-shadow: 0 15px 44px rgba(110, 230, 240, .2);
+      transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    .button:hover {
+      background: var(--bright-soft); transform: translateY(-2px);
+      box-shadow: 0 19px 52px rgba(110, 230, 240, .28);
+    }
+    .button svg { width: 17px; height: 17px }
+    .warm { margin: 14px 0 0; font-size: .82rem; color: var(--paper-dim); opacity: .85 }
 
-    /* explorer nodes */
-    .cnode { position:absolute; left:0; top:0; z-index:3;
-      transform:translate(calc(var(--x,0px) - 50%), calc(var(--y,0px) - 50%)); }
-    html.js .cnode { opacity:0 }
-    .constel.lit .cnode { opacity:1 }
-    .cnode-orb { display:grid; place-items:center; width:var(--ns,72px); height:var(--ns,72px); border-radius:50%;
-      color:var(--ink); text-align:center; padding:6px;
-      background:radial-gradient(circle at 38% 32%, rgba(255,255,255,.5), rgba(var(--h,52 198 216),.0) 60%), rgba(8,28,46,.85);
-      border:1.5px solid rgba(var(--hc,var(--teal-rgb)),.6);
-      box-shadow:0 0 16px rgba(var(--hc,var(--teal-rgb)),.35), inset 0 0 12px rgba(255,255,255,.12);
-      transition: transform .22s cubic-bezier(.22,1,.36,1), box-shadow .22s ease, border-color .2s ease; }
-    .constel.lit .cnode-orb { animation: bob 6s ease-in-out infinite; animation-delay: calc(var(--i,0) * -.5s) }
-    @keyframes bob { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-6px) } }
-    .cnode:hover, .cnode:focus-visible { outline:none; z-index:9 }
-    .cnode:hover .cnode-orb, .cnode:focus-visible .cnode-orb {
-      transform:scale(1.16); border-color:#fff;
-      box-shadow:0 0 28px rgba(var(--hc,var(--teal-rgb)),.7), inset 0 0 16px rgba(255,255,255,.22) }
-    .cnode-dot { width:9px; height:9px; border-radius:50%; background:rgb(var(--hc,var(--teal-rgb)));
-      box-shadow:0 0 10px rgb(var(--hc,var(--teal-rgb))) }
-    .cnode-lab { font-size:.68rem; font-weight:700; line-height:1.05; margin-top:4px }
-    .cnode-dot.has-critter { width:40px; height:40px; border-radius:0; background:none; box-shadow:none; }
-    .cnode-dot.has-critter .mascot { width:100%; height:100%; display:block; filter:drop-shadow(0 2px 5px rgba(0,0,0,.45)); transition:transform .25s ease; }
-    .cnode:hover .cnode-dot.has-critter .mascot, .cnode:focus-visible .cnode-dot.has-critter .mascot { transform:scale(1.18) rotate(-4deg); }
-    html:not(.js) .cnode-dot.has-critter { width:28px; height:28px; }
+    .poster-art {
+      position: relative; align-self: stretch;
+      /* bleed to the true viewport edge: the gutter is max(24px, (100vw - 1440px)/2) */
+      margin: 0 min(-24px, calc((1440px - 100vw) / 2)) 0 0;
+    }
+    .poster-art img {
+      display: block; width: 100%; height: 100%;
+      min-height: calc(100vh - 82px); min-height: calc(100svh - 82px);
+      object-fit: cover; object-position: 60% 50%;
+      filter: saturate(.98) contrast(1.03);
+    }
+    .poster-art::before {
+      content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background:
+        linear-gradient(90deg, var(--night) 0%, rgba(7, 26, 34, .74) 10%, transparent 38%),
+        linear-gradient(0deg, rgba(7, 26, 34, .34), transparent 26%);
+    }
 
-    /* ---------- the analyte-flow band (what the viewer does) ---------- */
-    .cascade-band { position:relative; z-index:2; margin: 30px 0 6px; padding:26px 0 }
-    .kick { font-family: ui-monospace,Menlo,Consolas,monospace; font-size:.72rem; letter-spacing:.22em;
-      text-transform:uppercase; color:var(--dim) }
-    .cascade-band h2 { font-size:clamp(1.4rem,3.4vw,1.9rem); margin:.4rem 0 4px;
-      background:linear-gradient(100deg,#fff, var(--bright)); -webkit-background-clip:text; background-clip:text; color:transparent }
-    .cascade-band > .wrap > p { color:var(--dim); margin:0 0 20px; max-width:64ch }
-    .flow { display:grid; gap:0 }
-    .frung { position:relative; display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:14px;
-      background:var(--card); border:1px solid var(--line); border-left:4px solid var(--lc); overflow:hidden }
-    .frung + .frung { margin-top:10px }
-    .frung::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.0;
-      background:linear-gradient(100deg, transparent, rgba(var(--lrgb),.16), transparent); }
-    .frung.pip-on::before { animation: pip 3.2s ease-in-out; }     /* energy pulse sweeps each rung in turn (slowed) */
-    @keyframes pip { 0%{opacity:0; transform:translateX(-30%)} 40%{opacity:1} 100%{opacity:0; transform:translateX(30%)} }
-    .frung .fmark { width:34px; height:34px; flex:0 0 auto; border-radius:9px; position:relative;
-      background:rgba(var(--lrgb),.16); border:1px solid rgba(var(--lrgb),.5) }
-    .frung .fmark::after { content:""; position:absolute; inset:0; margin:auto; width:12px; height:12px; border-radius:50%;
-      background:var(--lc); box-shadow:0 0 12px var(--lc) }
-    .frung .ftxt b { font-weight:800; font-size:1rem } .frung .ftxt span { color:var(--dim); font-size:.86rem }
-    .frung.r1 { --lc:var(--clim); --lrgb:110,230,240 }
-    .frung.r2 { --lc:var(--phen); --lrgb:52,198,216 }
-    .frung.r3 { --lc:var(--prod); --lrgb:74,163,224 }
-    .frung.r4 { --lc:var(--cons); --lrgb:47,127,184 }
-    .frung.r5 { --lc:var(--phen); --lrgb:52,198,216 }
-    .frung.r6 { --lc:var(--clim); --lrgb:110,230,240 }
-    .frung.r7 { --lc:var(--cons); --lrgb:47,127,184 }
-    .cascade-band .hl-head { margin-top:30px }
-    .lead a { color:var(--bright); text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px }
+    /* ---------- paper footer ---------- */
+    .paper-foot { background: var(--paper); color: var(--ink-dim); font-size: .9rem }
+    .paper-foot .measure { padding: 40px 0 56px }
+    .paper-foot b, .paper-foot strong { color: var(--ink) }
+    .paper-foot a { color: #14606a; font-weight: 750; text-underline-offset: 4px }
+    .paper-foot a.foot-cta {
+      display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 6px;
+      font-weight: 800; text-decoration: none; color: #9c5a1c;
+    }
+    .honesty { margin: 18px 0; border-top: 1px solid rgba(22, 38, 44, .18); border-bottom: 1px solid rgba(22, 38, 44, .18) }
+    .honesty summary {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      min-height: 48px; padding: 6px 0; cursor: pointer; list-style: none;
+      font-weight: 850; color: var(--ink);
+    }
+    .honesty summary::-webkit-details-marker { display: none }
+    .honesty summary::after { content: "+"; font-weight: 800; font-size: 1.15rem; color: #9c5a1c }
+    .honesty[open] summary::after { content: "\2212" }
+    .honesty .hbody { padding: 0 0 16px; max-width: 76ch }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: 14px 0 18px }
+    .foot-links a { display: inline-flex; align-items: center; min-height: 44px }
+    .colophon { max-width: 86ch }
+    .colophon a { display: inline-block; padding-block: 10px; margin-block: -10px }
 
-    /* ---------- stats + about ---------- */
-    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:26px 0 0; position:relative; z-index:2 }
-    .stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 14px; text-align:center }
-    .stat .n { font-weight:800; font-size:1.5rem; color:var(--bright) } .stat .l { font-size:.78rem; color:var(--dim) }
-    details.more { margin:30px 0 0; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden }
-    details.more > summary { cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between;
-      gap:1rem; padding:1rem 1.3rem; font-weight:700; color:var(--bright) }
-    details.more > summary::-webkit-details-marker { display:none }
-    details.more > summary::after { content:"+"; color:var(--coral); font-weight:800; font-size:1.2rem }
-    details.more[open] > summary::after { content:"\2212" }
-    details.more[open] { border-color:rgba(var(--teal-rgb),.4) }
-    details.more .mbody { padding:0 1.3rem 1.2rem; color:var(--dim) }
-    details.more .mbody b { color:var(--ink) }
+    /* ---------- focus ---------- */
+    :is(a, summary, .button):focus-visible { outline: 3px solid var(--bright); outline-offset: 4px }
+    .paper-foot :is(a, summary):focus-visible { outline-color: var(--ink) }
 
-    footer { position:relative; z-index:2; border-top:1px solid var(--line); margin-top:34px; padding:26px 0 54px;
-      color:var(--dim); font-size:.9rem }
-    .cta-foot { display:inline-block; margin-bottom:10px; font-weight:700; color:var(--coral) }
+    /* ---------- responsive ---------- */
+    @media (max-width: 960px) {
+      .poster-grid { display: flex; flex-direction: column; min-height: 0 }
+      .poster-art { order: -1; width: 100vw; margin: 0 0 0 calc(50% - 50vw) }
+      .poster-art img { min-height: 0; height: 44vh; height: 44svh; object-position: 58% 55% }
+      .poster-art::before {
+        background: linear-gradient(0deg, var(--night) 0%, rgba(7, 26, 34, .5) 14%, transparent 44%);
+        top: auto; height: 62%; bottom: 0;
+      }
+      .poster-copy { padding: 6px 0 54px; max-width: none }
+      h1 { font-size: clamp(3rem, 10.5vw, 5rem) }
+    }
+    @media (max-width: 700px) {
+      .jump-pre { display: none }
+      h1 { font-size: clamp(2.9rem, 14.5vw, 4.2rem) }
+      .button { width: 100%; justify-content: center }
+    }
+    @media (max-width: 420px) and (max-height: 860px) {
+      .poster-art img { height: 36vh; height: 36svh }
+      h1 { font-size: clamp(2.5rem, 14vw, 3.2rem) }
+    }
+    @media (max-width: 340px) { h1 { font-size: 2.4rem } }
 
-    @media (max-width:560px){ .stats { grid-template-columns:repeat(2,1fr) } .frung { margin-left:0 !important } }
-
-    /* ---------- no-JS fallback: a plain reachable grid of the suite ---------- */
-    html:not(.js) .ctraces, html:not(.js) .ccore .csub { display:none }
-    html:not(.js) .constel { aspect-ratio:auto; max-width:100%; display:grid;
-      grid-template-columns:repeat(2,1fr); gap:12px; padding:8px 0 }
-    html:not(.js) .ccore { position:static; transform:none; width:auto; height:auto; border-radius:14px;
-      grid-column:1/-1; padding:18px; animation:none }
-    html:not(.js) .cnode { position:static; transform:none; opacity:1 }
-    html:not(.js) .cnode-orb { width:auto; height:auto; flex-direction:row; gap:10px; border-radius:14px;
-      padding:14px 16px; justify-content:flex-start; animation:none }
-    html:not(.js) .cnode-lab { font-size:.95rem; margin-top:0 }
-
-    /* ---------- cute creature (top-right hero accent) ---------- */
-    .flybird { position:absolute; top:-6px; right:-6px; width:clamp(150px,23vw,290px);
-      z-index:-1; pointer-events:none; animation: cbBob 4.6s ease-in-out infinite; }
-    .flybird svg { width:100%; height:auto; overflow:visible; display:block }
-    .flybird .halo { transform-box:fill-box; transform-origin:center; animation: cbHalo 5s ease-in-out infinite }
-    .flybird .bird { transform-box:fill-box; transform-origin:50% 72%;
-      filter:drop-shadow(0 7px 14px rgba(3,8,20,.5)) drop-shadow(0 0 13px rgba(52,198,216,.42));
-      animation: cbSquish 4.6s ease-in-out infinite }
-    .flybird .eyes { transform-box:fill-box; transform-origin:center; animation: cbBlink 5.4s ease-in-out infinite }
-    .flybird .ear-l { transform-box:fill-box; transform-origin:55% 88%; animation: cbEarL 3.6s ease-in-out infinite }
-    .flybird .ear-r { transform-box:fill-box; transform-origin:45% 88%; animation: cbEarR 3.6s ease-in-out infinite }
-    .flybird .tail { transform-box:fill-box; transform-origin:12% 60%; animation: cbTail 4.2s ease-in-out infinite }
-    .flybird .spark { transform-box:fill-box; transform-origin:center; animation: cbTwinkle 3.2s ease-in-out infinite }
-    .flybird .s2 { animation-delay:-1.1s } .flybird .s3 { animation-delay:-2.2s } .flybird .s4 { animation-delay:-.6s }
-    @keyframes cbBob { 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-8px) } }
-    @keyframes cbSquish { 0%,100%{ transform:scale(1,1) } 50%{ transform:scale(1.02,.98) } }
-    @keyframes cbHalo { 0%,100%{ opacity:.4; transform:scale(1) } 50%{ opacity:.7; transform:scale(1.06) } }
-    @keyframes cbBlink { 0%,88%,100%{ transform:scaleY(1) } 93%{ transform:scaleY(.08) } }
-    @keyframes cbEarL { 0%,100%{ transform:rotate(0deg) } 50%{ transform:rotate(-7deg) } }
-    @keyframes cbEarR { 0%,100%{ transform:rotate(0deg) } 50%{ transform:rotate(7deg) } }
-    @keyframes cbTail { 0%,100%{ transform:rotate(-3deg) } 50%{ transform:rotate(6deg) } }
-    @keyframes cbTwinkle { 0%,100%{ opacity:.25; transform:scale(.7) } 50%{ opacity:1; transform:scale(1.2) } }
-    @media (max-width:760px){ .flybird{ width:150px; top:-2px; right:-8px; opacity:.75 } }
-    @media (max-width:430px){ .flybird{ display:none } }
-
-    /* interactive: pointer-follow, 3D tilt, bashful tap-reaction */
-    .flybird { pointer-events:auto; cursor:pointer }
-    .flybird .tiltwrap { transition: transform .14s ease-out; transform-style:preserve-3d; will-change:transform }
-    .flybird .eyes > circle { transition: transform .12s ease-out; transform: translate(var(--lx,0px), var(--ly,0px)) }
-    .flybird.react .eyes { animation: cbShy .62s ease }
-    .flybird.react .bird { animation: cbDuck .62s ease }
-    .flybird.react .spark { animation: cbFlare .62s ease }
-    @keyframes cbShy { 0%,100%{ transform:scaleY(1) } 16%,74%{ transform:scaleY(.1) } }
-    @keyframes cbDuck { 0%,100%{ transform:scale(1,1) } 26%{ transform:translateY(4px) scale(1.07,.88) } 60%{ transform:scale(.97,1.04) } }
-    @keyframes cbFlare { 0%,100%{ opacity:.5; transform:scale(1) } 40%{ opacity:1; transform:scale(2) } }
-
-    @media (prefers-reduced-motion: reduce){
-      .sky::before, .launch, .ccore, .constel.lit .cnode-orb, .constel.lit .ctraces line, .frung.pip-on::before { animation:none !important }
-      .flybird, .flybird .halo, .flybird .bird, .flybird .eyes, .flybird .ear-l, .flybird .ear-r, .flybird .tail, .flybird .spark { animation:none !important }
-      .flybird .tiltwrap, .flybird .eyes > circle { transition:none !important; transform:none !important }
-      .launch::after { display:none }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto }
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important }
+      .button:hover { transform: none }
+    }
+    @media (prefers-contrast: more) {
+      .lead, .warm { color: var(--paper) }
+      .paper-foot { color: #37423f }
+      .paper-foot a.foot-cta { color: #7a4413 }
+    }
+    @media (forced-colors: active) {
+      .button, .brand-mark { border: 2px solid ButtonText; forced-color-adjust: auto }
     }
   </style>
 </head>
 
 <body>
-  <div class="sky" aria-hidden="true"></div>
+  <a class="skip-link" href="#main">Skip to the poster</a>
 
-  <header class="hero">
-    <div class="wrap">
-      <div class="flybird" aria-hidden="true">
-        <div class="tiltwrap">
-        <svg viewBox="0 0 300 250" role="img" aria-label="A cute water droplet">
-          <defs>
-            <radialGradient id="cbHalo" cx="50%" cy="48%" r="55%"><stop offset="0%" stop-color="#34c6d8" stop-opacity=".5"/><stop offset="46%" stop-color="#2a7f9a" stop-opacity=".2"/><stop offset="100%" stop-color="#2a7f9a" stop-opacity="0"/></radialGradient>
-            <radialGradient id="cbBody" cx="42%" cy="30%" r="74%"><stop offset="0%" stop-color="#aef1f6"/><stop offset="50%" stop-color="#46c6da"/><stop offset="100%" stop-color="#2a90b2"/></radialGradient>
-          </defs>
-          <circle class="halo" cx="150" cy="138" r="104" fill="url(#cbHalo)"/>
-          <g class="bird">
-            <g class="ear-l"><ellipse cx="92" cy="156" rx="13" ry="10" fill="#46c6da"/></g>
-            <g class="ear-r"><ellipse cx="208" cy="156" rx="13" ry="10" fill="#46c6da"/></g>
-            <path d="M150,58 C112,108 98,146 150,196 C202,146 188,108 150,58 Z" fill="url(#cbBody)"/>
-            <ellipse cx="128" cy="118" rx="13" ry="20" fill="#ffffff" opacity=".4" transform="rotate(-18 128 118)"/>
-            <g fill="#7cf0dd" opacity=".5"><ellipse cx="123" cy="158" rx="10" ry="7"/><ellipse cx="177" cy="158" rx="10" ry="7"/></g>
-            <path d="M138,166 Q150,176 162,166" fill="none" stroke="#1f6f86" stroke-width="2.4" stroke-linecap="round" opacity=".65"/>
-            <g class="eyes">
-              <circle cx="132" cy="142" r="12.5" fill="#0a2230"/><circle cx="168" cy="142" r="12.5" fill="#0a2230"/>
-              <circle cx="127" cy="137" r="4.6" fill="#ffffff"/><circle cx="163" cy="137" r="4.6" fill="#ffffff"/>
-              <circle cx="136" cy="147" r="2" fill="#ffffff" opacity=".75"/><circle cx="172" cy="147" r="2" fill="#ffffff" opacity=".75"/>
-            </g>
-          </g>
-          <g>
-            <circle class="spark s1" cx="64" cy="80" r="3.2" fill="#7cf0dd"/><circle class="spark s2" cx="240" cy="88" r="2.6" fill="#aef1f6"/>
-            <circle class="spark s3" cx="214" cy="48" r="2.2" fill="#6ee6c4"/><circle class="spark s4" cx="84" cy="188" r="2.2" fill="#aef1f6"/>
-            <circle class="spark s2" cx="238" cy="162" r="2.4" fill="#6ee6c4"/>
-          </g>
+  <header class="measure topline">
+    <span class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M12 3v18M8 8l4-4 4 4M7 14h10" />
         </svg>
-        </div>
-      </div>
-      <span class="brand">
-        <svg viewBox="0 0 100 100" aria-hidden="true">
-          <path class="stroke" d="M50 14 L64 30 L50 46 L36 30 Z" />
-          <line class="stroke" x1="50" y1="46" x2="50" y2="86" />
-          <line class="stroke" x1="34" y1="86" x2="66" y2="86" />
-          <circle class="pip" cx="50" cy="62" r="7.5" />
-        </svg>
-        <b>Desert Data Labs</b>
       </span>
-
-      <div class="eyebrow">Part of the NEON Explorer Suite · Water</div>
-      <h1>NEON Water Chemistry</h1>
-      <p class="lead">A Shiny web app for exploring the <a href="https://www.neonscience.org/" target="_blank" rel="noopener">National Ecological Observatory Network</a>'s surface-water chemistry data. It turns lab and sensor readings of what is dissolved in the water at 34 stream and lake sites into trends through time, relationships between two analytes, seasonal patterns, and a quick prediction, with every chart showing the sample size it rests on.</p>
-
-      <div class="cta-row">
-        <a id="launch" class="launch" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
-          Launch the Water Chemistry app <span class="arrow" aria-hidden="true">&rarr;</span>
-        </a>
-        <a class="ghost" href="https://github.com/tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-      <div class="warm" id="warm"></div>
-    </div>
+      <b>Desert Data Labs</b>
+    </span>
+    <a class="suite-jump" href="https://tgilbert14.github.io/NEON-Driver-Cascade/"><span class="jump-pre">Whole
+        suite:</span> <strong>Driver Cascade</strong> <span class="arr" aria-hidden="true">&#8599;</span></a>
   </header>
 
-  <!-- the suite, as a living constellation. The core launches Water Chemistry; each node opens an explorer. -->
-  <section class="constel-sec" aria-label="The NEON Explorer Suite">
-    <div class="wrap">
-      <div class="constel is-noscript" data-constel style="--n:9;">
-        <svg class="ctraces" viewBox="-340 -340 680 680" aria-hidden="true"><g data-traces></g></svg>
-
-        <a class="ccore" data-core href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/" aria-label="Launch the NEON Water Chemistry app">
-          <span class="clabel">Water Chemistry<span class="csub">launch &rarr;</span></span>
-        </a>
-
-        <a class="cnode" style="--i:0; --hc:45,212,191" href="https://tgilbert14.github.io/NEON-Driver-Cascade/" aria-label="NEON Driver Cascade"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120" aria-hidden="true"><path d="M60,20 L92,60 L60,100 L28,60 Z" fill="none" stroke="#2dd4bf" stroke-width="7" stroke-linejoin="round"/><circle cx="60" cy="46" r="7" fill="#5eead4"/><circle cx="60" cy="64" r="5.5" fill="#2dd4bf"/><circle cx="60" cy="80" r="4" fill="#fb8a7e"/></svg></span><span class="cnode-lab">Driver Cascade</span></span></a>
-        <a class="cnode" style="--i:1; --hc:56,168,232" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" aria-label="NEON Small Mammal Tracker"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><g class="mascot-ear-l"><circle cx="42" cy="34" r="14" fill="#5aa0d8"/><circle cx="43" cy="36" r="8" fill="#ffd24a"/></g><g class="mascot-ear-r"><circle cx="78" cy="34" r="14" fill="#5aa0d8"/><circle cx="77" cy="36" r="8" fill="#ffd24a"/></g><path d="M88,82 Q110,94 113,72" fill="none" stroke="#5a93c8" stroke-width="4" stroke-linecap="round"/><ellipse cx="60" cy="66" rx="32" ry="33" fill="#5aa0d8"/><ellipse cx="60" cy="76" rx="20" ry="22" fill="#eaf2ff"/><path d="M55,70 Q60,68 65,70 Q62,77 60,77 Q58,77 55,70 Z" fill="#fb8a7e"/><g class="mascot-eyes"><circle cx="50" cy="60" r="6.5" fill="#0a1a2e"/><circle cx="70" cy="60" r="6.5" fill="#0a1a2e"/><circle cx="48" cy="57.5" r="2.4" fill="#fff"/><circle cx="68" cy="57.5" r="2.4" fill="#fff"/></g></svg></span><span class="cnode-lab">Small Mammals</span></span></a>
-        <a class="cnode" style="--i:2; --hc:245,177,63" href="https://tgilbert14.github.io/NEON-Breeding-Birds/" aria-label="NEON Birds"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><g fill="#f0b94a"><path d="M54,30 L57,16 L62,30 Z"/><path d="M62,30 L65,14 L70,30 Z"/></g><ellipse cx="60" cy="66" rx="32" ry="33" fill="#ffce5a"/><ellipse cx="60" cy="76" rx="19" ry="21" fill="#fff3d6"/><g class="mascot-ear-l"><path d="M30,58 Q14,66 22,86 Q34,80 40,64 Z" fill="#e0714a"/></g><g class="mascot-ear-r"><path d="M90,58 Q106,66 98,86 Q86,80 80,64 Z" fill="#e0714a"/></g><path d="M54,68 L66,68 L60,80 Z" fill="#f0993a"/><g class="mascot-eyes"><circle cx="50" cy="60" r="6.5" fill="#2a160a"/><circle cx="70" cy="60" r="6.5" fill="#2a160a"/><circle cx="48" cy="57.5" r="2.4" fill="#fff"/><circle cx="68" cy="57.5" r="2.4" fill="#fff"/></g></svg></span><span class="cnode-lab">Birds</span></span></a>
-        <a class="cnode" style="--i:3; --hc:54,217,138" href="https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/" aria-label="NEON Ground Beetle Tracker"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><g class="mascot-ear-l"><path d="M50,40 Q40,22 32,16" fill="none" stroke="#d98a3c" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="16" r="4" fill="#e8a24a"/></g><g class="mascot-ear-r"><path d="M70,40 Q80,22 88,16" fill="none" stroke="#d98a3c" stroke-width="3" stroke-linecap="round"/><circle cx="88" cy="16" r="4" fill="#e8a24a"/></g><g stroke="#c47a2c" stroke-width="3" stroke-linecap="round"><path d="M30,62 L16,62"/><path d="M30,78 L18,88"/><path d="M90,62 L104,62"/><path d="M90,78 L102,88"/></g><ellipse cx="60" cy="64" rx="31" ry="34" fill="#36d98a"/><path d="M60,32 L60,96" stroke="#176b46" stroke-width="2" opacity=".5"/><ellipse cx="60" cy="34" rx="14" ry="10" fill="#176b46"/><g class="mascot-eyes"><circle cx="50" cy="58" r="6.5" fill="#0c2a1c"/><circle cx="70" cy="58" r="6.5" fill="#0c2a1c"/><circle cx="48" cy="55.5" r="2.4" fill="#fff"/><circle cx="68" cy="55.5" r="2.4" fill="#fff"/></g></svg></span><span class="cnode-lab">Ground Beetles</span></span></a>
-        <a class="cnode" style="--i:4; --hc:95,209,106" href="https://tgilbert14.github.io/NEON-Plant-Diversity/" aria-label="NEON Plant Diversity"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><path d="M60,60 L60,30" stroke="#4aa050" stroke-width="4" stroke-linecap="round"/><g class="mascot-ear-l"><path d="M60,36 C40,24 24,30 22,46 C40,52 56,46 60,36 Z" fill="#5fd16a"/></g><g class="mascot-ear-r"><path d="M60,36 C80,24 96,30 98,46 C80,52 64,46 60,36 Z" fill="#5fd16a"/></g><ellipse cx="60" cy="76" rx="28" ry="26" fill="#d8cf9e"/><g class="mascot-eyes"><circle cx="51" cy="72" r="6" fill="#3a2a12"/><circle cx="69" cy="72" r="6" fill="#3a2a12"/><circle cx="49" cy="69.5" r="2.2" fill="#fff"/><circle cx="67" cy="69.5" r="2.2" fill="#fff"/></g></svg></span><span class="cnode-lab">Plant Diversity</span></span></a>
-        <a class="cnode" style="--i:5; --hc:106,191,90" href="https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/" aria-label="NEON Plant Phenology"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><path d="M60,98 L60,64" stroke="#5a9a3a" stroke-width="4" stroke-linecap="round"/><g class="mascot-ear-l"><path d="M52,40 C34,30 22,40 26,54 C42,54 52,48 52,40 Z" fill="#e6a92e"/></g><g class="mascot-ear-r"><path d="M68,40 C86,30 98,40 94,54 C78,54 68,48 68,40 Z" fill="#e6a92e"/></g><path d="M60,30 C48,30 44,46 52,58 L68,58 C76,46 72,30 60,30 Z" fill="#9bd24a"/><ellipse cx="60" cy="68" rx="26" ry="26" fill="#8cbf52"/><g class="mascot-eyes"><circle cx="51" cy="66" r="6" fill="#243a16"/><circle cx="69" cy="66" r="6" fill="#243a16"/><circle cx="49" cy="63.5" r="2.2" fill="#fff"/><circle cx="67" cy="63.5" r="2.2" fill="#fff"/></g></svg></span><span class="cnode-lab">Plant Phenology</span></span></a>
-        <a class="cnode" style="--i:6; --hc:78,184,106" href="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/" aria-label="NEON Vegetation Structure"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><rect x="54" y="80" width="12" height="26" rx="3" fill="#8a5a2b"/><g class="mascot-ear-l"><circle cx="40" cy="44" r="15" fill="#4eb86a"/></g><g class="mascot-ear-r"><circle cx="80" cy="44" r="15" fill="#4eb86a"/></g><ellipse cx="60" cy="58" rx="34" ry="30" fill="#4eb86a"/><circle cx="42" cy="66" r="3" fill="#ffd24a"/><circle cx="80" cy="50" r="2.6" fill="#ffd24a"/><g class="mascot-eyes"><circle cx="51" cy="56" r="6.5" fill="#11331f"/><circle cx="69" cy="56" r="6.5" fill="#11331f"/><circle cx="49" cy="53.5" r="2.4" fill="#fff"/><circle cx="69" cy="53.5" r="2.4" fill="#fff"/></g></svg></span><span class="cnode-lab">Veg Structure</span></span></a>
-        <a class="cnode" style="--i:7; --hc:184,242,74" href="https://tgilbert14.github.io/NEON-Mosquito-Pulse/" aria-label="NEON Mosquito Pulse"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><g stroke="#b8f24a" stroke-width="3" stroke-linecap="round" fill="none"><path d="M52,40 Q46,26 50,18"/><path d="M68,40 Q74,26 70,18"/></g><g class="mascot-ear-l"><path d="M34,52 Q14,50 18,74 Q40,72 48,58 Z" fill="#b8f24a" fill-opacity=".9"/></g><g class="mascot-ear-r"><path d="M86,52 Q106,50 102,74 Q80,72 72,58 Z" fill="#b8f24a" fill-opacity=".9"/></g><ellipse cx="60" cy="64" rx="30" ry="33" fill="#7c52e0"/><ellipse cx="60" cy="74" rx="17" ry="19" fill="#cdb6ff"/><path d="M54,74 L66,74 L60,90 Z" fill="#ffc24a"/><g class="mascot-eyes"><circle cx="50" cy="58" r="7" fill="#1a1030"/><circle cx="70" cy="58" r="7" fill="#1a1030"/><circle cx="48" cy="55.5" r="2.5" fill="#fff"/><circle cx="68" cy="55.5" r="2.5" fill="#fff"/></g></svg></span><span class="cnode-lab">Mosquitoes</span></span></a>
-        <a class="cnode" style="--i:8; --hc:43,183,196" href="https://tgilbert14.github.io/NEON-My-Little-Inverts/" aria-label="NEON My Little Inverts"><span class="cnode-orb"><span class="cnode-dot has-critter" aria-hidden="true"><svg class="mascot" viewBox="0 0 120 120"><g stroke="#2bb7c4" stroke-width="3" stroke-linecap="round" fill="none"><path d="M50,38 Q44,24 48,16"/><path d="M70,38 Q76,24 72,16"/></g><g class="mascot-ear-l"><path d="M34,52 Q14,48 16,70 Q38,70 46,58 Z" fill="#7fe7ef" fill-opacity=".85"/></g><g class="mascot-ear-r"><path d="M86,52 Q106,48 104,70 Q82,70 74,58 Z" fill="#7fe7ef" fill-opacity=".85"/></g><g stroke="#0a6f7a" stroke-width="3" stroke-linecap="round" fill="none"><path d="M48,96 Q40,108 30,112"/><path d="M60,98 L60,114"/><path d="M72,96 Q80,108 90,112"/></g><ellipse cx="60" cy="64" rx="30" ry="34" fill="#2bb7c4"/><ellipse cx="60" cy="74" rx="17" ry="22" fill="#9beef5"/><g class="mascot-eyes"><circle cx="50" cy="58" r="6.5" fill="#0b2a30"/><circle cx="70" cy="58" r="6.5" fill="#0b2a30"/><circle cx="48" cy="55.5" r="2.4" fill="#fff"/><circle cx="68" cy="55.5" r="2.4" fill="#fff"/></g></svg></span><span class="cnode-lab">Little Inverts</span></span></a>
+  <main id="main" tabindex="-1">
+    <section class="poster">
+      <div class="measure poster-grid">
+        <div class="poster-copy">
+          <p class="kicker">NEON Water Chemistry &middot; unofficial</p>
+          <h1 aria-label="What's in the water?"><span>What&rsquo;s in</span> <em>the water?</em></h1>
+          <p class="lead">Pick a site, pick an analyte like nitrogen or salt, and watch it change through the
+            seasons.</p>
+          <a class="button" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
+            Pick a water body
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12h15M13 6l6 6-6 6" />
+            </svg>
+          </a>
+          <p class="warm">The hosted app can take a few seconds to wake up.</p>
+        </div>
+        <figure class="poster-art">
+          <picture>
+            <source type="image/webp"
+              srcset="assets/water-living-poster-840.webp 840w, assets/water-living-poster.webp 1672w"
+              sizes="(max-width: 700px) 100vw, 66vw" />
+            <img src="assets/water-living-poster.png" width="1672" height="941" fetchpriority="high" decoding="async"
+              alt="Vintage screen-print of a clear stream: a scientific sensor probe on a cable hangs into a sunlit pool ringed by ripples, sample bottles rest on the gravel bank, dark forest shadows the left side while warm cream morning light opens on the right." />
+          </picture>
+        </figure>
       </div>
-    </div>
-  </section>
+    </section>
+  </main>
 
-  <!-- how the viewer reads: sample -> analyte panel -> trend -> compare -->
-  <section class="cascade-band">
-    <div class="wrap">
-      <span class="kick">What it does</span>
-      <p>The app opens to a map of all the NEON aquatic sites, with one stream or lake already selected. Tap a site to dive into its water chemistry. Each site loads instantly from a data bundle that ships with the app, so there is no waiting on a network call. From there you pick a date range and two of the things measured in the water, then watch how they move together through time, how they relate, what else they track with, their seasonal rhythm, and a quick estimate from a small model.</p>
-      <p>It is built for two audiences: anyone curious about what is dissolved in NEON's streams and lakes, and new field technicians getting to know the analytes measured at their site.</p>
+  <footer class="paper-foot">
+    <div class="measure">
+      <a class="foot-cta" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Get in touch with
+        Desert Data Labs &rarr;</a>
+      <p style="margin:6px 0 0">Explore 34 aquatic sites using public NEON <a
+          href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water
+          Chemistry data &middot; DP1.20093.001</a> (CC BY 4.0). Built by Desert Data Labs; unofficial and not
+        endorsed by NEON, Battelle, or the NSF.</p>
 
-      <h2 class="hl-head">Highlights</h2>
-      <div class="flow" data-flow>
-        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Compare two analytes</b> &middot; <span>Two things in the water through time. A normalized view compares their shape honestly, a raw dual-axis view keeps the original units, and readings too low to measure are drawn as open markers.</span></span></div>
-        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Relationship</b> &middot; <span>A straight-line fit between the two analytes with a 95% confidence band, the R-squared, slope, p-value and sample size, and a flag when readings close in time may overstate the link.</span></span></div>
-        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>Correlations</b> &middot; <span>The main analyte against every other one, as a lollipop chart and a sortable table. Spearman by default with Pearson alongside, the sample size shown per row, and anything under 8 readings flagged as unreliable.</span></span></div>
-        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Seasonal pattern</b> &middot; <span>The month-by-month picture and a real STL decomposition of the actual record, splitting it into season and trend. No made-up forecasts.</span></span></div>
-        <div class="frung r5"><span class="fmark"></span><span class="ftxt"><b>Predictor</b> &middot; <span>A small model that estimates the main analyte from its three best-correlated analytes, with a cross-validated error. Move the sliders for a live estimate.</span></span></div>
-        <div class="frung r6"><span class="fmark"></span><span class="ftxt"><b>Data table and download</b> &middot; <span>The full table behind every chart, with CSV or Excel download for exactly the site and date range you are looking at.</span></span></div>
-        <div class="frung r7"><span class="fmark"></span><span class="ftxt"><b>Site map</b> &middot; <span>All the NEON aquatic sites on one map, with the selected stream or lake highlighted.</span></span></div>
-      </div>
-
-      <div class="stats">
-        <div class="stat"><div class="n">34</div><div class="l">streams &amp; lakes</div></div>
-        <div class="stat"><div class="n">34</div><div class="l">things measured</div></div>
-        <div class="stat"><div class="n">~197k</div><div class="l">real measurements</div></div>
-        <div class="stat"><div class="n">NEON</div><div class="l">published data</div></div>
-      </div>
-
-      <details class="more">
+      <details class="honesty">
         <summary>How it stays honest</summary>
-        <div class="mbody">
-          Everything here is real NEON data, saved ahead of time and bundled with the app. <b>Every number tells you how many measurements it is based on,</b> so you can see
-          when a result rests on plenty of data and when it rests on only a little. When the app draws a
-          line between two things, it shows how well the line fits and warns when readings taken close
-          together in time can make a link look stronger than it is. When it checks whether two things move
-          together, it uses a method that holds up even when the numbers are lopsided, treats anything based
-          on fewer than 8 measurements as shaky, and reminds you that checking many things at once turns up
-          some matches by luck. The seasonal pattern is pulled straight from the real record, not a smooth
-          curve made up to look nice. Amounts too low for the instruments to measure are marked, not hidden.
-          Each thing in the water uses a reviewed unit target; registered legacy unit anomalies are
-          excluded rather than silently converted (and bromide is not bicarbonate, chloride is not
-          chlorine). <b>This is a tool for learning and exploring. It is not affiliated with NEON,
-          Battelle, or the NSF.</b>
+        <div class="hbody">
+          Everything here is real NEON data, saved ahead of time and bundled with the app. Every number tells you how
+          many measurements it is based on, so you can see when a result rests on plenty of data and when it rests on
+          only a little. When the app draws a line between two things, it shows how well the line fits and warns when
+          readings taken close together in time can make a link look stronger than it is. When it checks whether two
+          things move together, it uses a method that holds up even when the numbers are lopsided, treats anything
+          based on fewer than 8 measurements as shaky, and reminds you that checking many things at once turns up some
+          matches by luck. The seasonal pattern is pulled straight from the real record, not a smooth curve made up to
+          look nice. Amounts too low for the instruments to measure are marked, not hidden. Each thing in the water
+          uses a reviewed unit target; registered legacy unit anomalies are excluded rather than silently converted
+          (and bromide is not bicarbonate, chloride is not chlorine). <strong>This is a tool for learning and
+            exploring. It is not affiliated with NEON, Battelle, or the NSF.</strong>
         </div>
       </details>
-    </div>
-  </section>
 
-  <footer>
-    <div class="wrap">
-      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Get in touch with Desert Data Labs →</a><br>
-      Built on NEON's <a href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water Chemistry</a>
-      data by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data comes from the National Ecological Observatory
-      Network (run by Battelle, funded by the NSF). A tool for learning, not affiliated with NEON, Battelle, or the NSF.
-      <br>NEON data are provided under a <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution 4.0 International (CC BY 4.0)</a> license. This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.
+      <div class="foot-links">
+        <a href="https://github.com/tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App" target="_blank"
+          rel="noopener">View on GitHub</a>
+        <a href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Feedback</a>
+      </div>
+
+      <p class="colophon">Built on NEON&rsquo;s Surface Water Chemistry data by <strong>Desert Data Labs</strong>
+        &middot; Tucson, AZ. Data comes from the National Ecological Observatory Network (run by Battelle, funded by
+        the NSF). A tool for learning, not affiliated with NEON, Battelle, or the NSF.<br />
+        NEON data are provided under a <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
+          rel="noopener">Creative Commons Attribution 4.0 International (CC BY 4.0)</a> license. This app aggregates
+        and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is
+        an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.</p>
     </div>
   </footer>
-
-  <script>
-    // ---- the Water Chemistry app (Connect Cloud share URL); pre-warm on load ----
-    var APP_URL = "https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/";
-    (function () {
-      var launch = document.getElementById("launch");
-      var warm = document.getElementById("warm");
-      if (launch) launch.href = APP_URL;
-      try {
-        if (warm) warm.textContent = "Warming up the app…";
-        var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
-        var killer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
-        fetch(APP_URL, { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
-          .then(function () { if (warm) warm.textContent = "The app is ready."; })
-          .catch(function () { if (warm) warm.textContent = ""; })
-          .finally(function () { if (killer) clearTimeout(killer); });
-      } catch (e) {}
-    })();
-
-    // ---- the constellation: lay the 7 explorers on a ring, draw energy traces ----
-    (function () {
-      var root = document.querySelector("[data-constel]");
-      if (!root) return;
-      var nodes = Array.prototype.slice.call(root.querySelectorAll(".cnode"));
-      var tracesG = root.querySelector("[data-traces]");
-      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      root.classList.remove("is-noscript");
-
-      var n = nodes.length, TR = 300; // trace viewBox radius
-      // build a trace from center to each node
-      if (tracesG) {
-        var frag = document.createDocumentFragment();
-        for (var i = 0; i < n; i++) {
-          var th = (i * (360 / n) - 90) * Math.PI / 180;
-          var ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          ln.setAttribute("x1", "0"); ln.setAttribute("y1", "0");
-          ln.setAttribute("x2", (Math.cos(th) * TR).toFixed(1));
-          ln.setAttribute("y2", (Math.sin(th) * TR).toFixed(1));
-          frag.appendChild(ln);
-        }
-        tracesG.appendChild(frag);
-      }
-
-      function place(landed) {
-        var r = root.getBoundingClientRect();
-        var cx = r.width / 2, cy = r.height / 2;
-        var unit = Math.min(r.width, r.height);
-        var rad = unit * 0.40, ns = Math.max(58, unit * 0.135);
-        nodes.forEach(function (nd, i) {
-          nd.style.setProperty("--ns", ns.toFixed(0) + "px");
-          var th = (i * (360 / n) - 90) * Math.PI / 180;
-          var f = landed ? 1 : 0.18;            // start near the core, fly out on land
-          nd.style.setProperty("--x", (cx + Math.cos(th) * rad * f).toFixed(1) + "px");
-          nd.style.setProperty("--y", (cy + Math.sin(th) * rad * f).toFixed(1) + "px");
-        });
-      }
-
-      place(false);
-      // light it up (fly the nodes out + start the energy flow) after a beat
-      function lite() { place(true); root.classList.add("lit"); }
-      if (reduce) { lite(); }
-      else { requestAnimationFrame(function () { requestAnimationFrame(lite); }); setTimeout(lite, 400); }
-
-      var rt;
-      window.addEventListener("resize", function () {
-        clearTimeout(rt); rt = setTimeout(function () { place(root.classList.contains("lit")); }, 120);
-      }, { passive: true });
-    })();
-
-    // ---- the analyte flow: pulse each rung in turn (the reading moving through) ----
-    (function () {
-      var rungs = Array.prototype.slice.call(document.querySelectorAll("[data-flow] .frung"));
-      if (!rungs.length || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      var i = 0;
-      setInterval(function () {
-        rungs.forEach(function (r) { r.classList.remove("pip-on"); });
-        var el = rungs[i % rungs.length];
-        // force reflow so the animation restarts each cycle
-        void el.offsetWidth; el.classList.add("pip-on");
-        i++;
-      }, 1800);
-    })();
-  </script>
-  <script>
-  (function(){
-    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var fb = document.querySelector('.flybird');
-    if(fb){
-      var tilt = fb.querySelector('.tiltwrap');
-      if(!reduce){
-        window.addEventListener('pointermove', function(e){
-          var r = fb.getBoundingClientRect();
-          var cx = r.left + r.width/2, cy = r.top + r.height*0.42;
-          var dx = Math.max(-1,Math.min(1,(e.clientX-cx)/240));
-          var dy = Math.max(-1,Math.min(1,(e.clientY-cy)/240));
-          if(tilt) tilt.style.transform = 'perspective(640px) rotateY('+(dx*9).toFixed(1)+'deg) rotateX('+(-dy*7).toFixed(1)+'deg)';
-          fb.style.setProperty('--lx',(dx*2.6).toFixed(1)+'px');
-          fb.style.setProperty('--ly',(dy*2.1).toFixed(1)+'px');
-        }, {passive:true});
-      }
-      fb.addEventListener('pointerdown', function(){
-        fb.classList.remove('react'); void fb.offsetWidth; fb.classList.add('react');
-        setTimeout(function(){ fb.classList.remove('react'); }, 680);
-      });
-    }
-    var nums = document.querySelectorAll('.stat .n');
-    if(nums.length && 'IntersectionObserver' in window){
-      var run = function(el){
-        var raw0 = el.textContent.trim(), pre='';
-        if(raw0.charAt(0)==='~'||raw0.charAt(0)==='≈'){ pre=raw0.charAt(0); raw0=raw0.slice(1); }
-        var i=0, np='';
-        while(i<raw0.length){ var c=raw0.charAt(i); if((c>='0'&&c<='9')||c===','||c==='.'){ np+=c; i++; } else break; }
-        if(!np || reduce) return;
-        var rest = raw0.slice(i), full = el.textContent.trim();
-        var target = parseFloat(np.replace(/,/g,'')); if(!isFinite(target)) return;
-        var hasComma = np.indexOf(',')>=0, dec=(np.split('.')[1]||'').length;
-        var dur=950, t0=performance.now();
-        function fmt(v){ var s = dec? v.toFixed(dec) : (hasComma? Math.round(v).toLocaleString() : String(Math.round(v))); return pre+s+rest; }
-        function tick(now){ var t=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-t,3); el.textContent=fmt(target*e); if(t<1) requestAnimationFrame(tick); else el.textContent=full; }
-        el.textContent=fmt(0); requestAnimationFrame(tick);
-      };
-      var io = new IntersectionObserver(function(es){ es.forEach(function(en){ if(en.isIntersecting){ io.unobserve(en.target); run(en.target); } }); }, {threshold:.5});
-      nums.forEach(function(n){ io.observe(n); });
-    }
-  })();
-  </script>
 </body>
 
 </html>
