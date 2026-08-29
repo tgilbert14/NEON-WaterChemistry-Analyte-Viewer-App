@@ -15,6 +15,47 @@ suppressWarnings(suppressMessages({
   library(shinyjs)   # map-first splash: show/hide("splash") / show/hide("mainTabsWrap")
 }))
 source("helpers.R")
+
+# ---- basemap --------------------------------------------------------------
+# CARTO watermarks unauthenticated basemaps.cartocdn.com raster tiles ("API KEY
+# REQUIRED", since 2026-08-26; suite record: NEON-Driver-Cascade
+# docs/SUITE-BASEMAP-INCIDENT-2026-08.md). The key rides in the tile URL, so it
+# is a public rate-limited identifier, not a credential; Sys.getenv keeps it out
+# of git and makes rotation a Connect Cloud setting. addProviderTiles() cannot
+# carry it (the bundled CartoDB template has no {apikey} slot), hence addTiles().
+# Accepts either a leaflet provider name or a CARTO variant, so ui.R basemap
+# choices stay exactly as they are and any non-CARTO provider passes straight
+# through. Without the key it falls back to Esri's keyless grey canvas — clean,
+# but content-free past z16 at rural sites, so the cap keeps the zoom honest.
+add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
+  variant <- switch(basemap,
+    "light_all" = ,
+    "CartoDB.Positron" = "light_all",
+    "dark_all" = ,
+    "CartoDB.DarkMatter" = "dark_all",
+    NULL)
+  if (is.null(variant))
+    return(leaflet::addProviderTiles(map, basemap,
+      options = leaflet::providerTileOptions(noWrap = noWrap)))
+  key <- Sys.getenv("CARTO_BASEMAP_KEY", "")
+  if (nzchar(key)) {
+    leaflet::addTiles(map,
+      urlTemplate = sprintf(
+        "https://{s}.basemaps.cartocdn.com/%s/{z}/{x}/{y}{r}.png?key=%s", variant, key),
+      attribution = paste(
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        '&copy; <a href="https://carto.com/attributions">CARTO</a>'),
+      options = leaflet::tileOptions(subdomains = "abcd", maxZoom = 20, noWrap = noWrap))
+  } else {
+    leaflet::addTiles(map,
+      urlTemplate = sprintf(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_%s_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        if (identical(variant, "dark_all")) "Dark" else "Light"),
+      attribution = 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+      options = leaflet::tileOptions(maxNativeZoom = 16, maxZoom = 19, noWrap = noWrap))
+  }
+}
+
 options(shiny.sanitize.errors = TRUE)                 # never leak a raw R error to the page
 shinyOptions(cache = cachem::cache_disk(file.path(tempdir(), "neon-cache"), max_size = 50 * 1024^2))
 
@@ -2011,7 +2052,7 @@ server <- function(input, output, session) {
   ## ---- Explore map: leaflet picker; markers coloured by the main analyte -----
   # Suite standard (matches Small Mammal / My Little Inverts): a STATIC
   # leafletOutput in the UI (its JS deps land in <head> so it binds reliably on
-  # Connect Cloud), a CartoDB.Positron tile basemap, circleMarkers coloured by
+  # Connect Cloud), a keyed CARTO Positron tile basemap via add_suite_basemap(),
   # each site's analyte mean, and the site-choice buttons bound DIRECTLY into each
   # marker popup (NOT a marker_click -> leafletProxy round-trip, which silently
   # fails once the tab has been hidden and re-shown). The base map is drawn once;
@@ -2107,7 +2148,7 @@ server <- function(input, output, session) {
     validate(need(any(is.finite(D$sites_meta$lat) & is.finite(D$sites_meta$long)),
                   "No site coordinates are available in this bundle."))
     leaflet::leaflet(options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) |>
-      leaflet::addProviderTiles("CartoDB.Positron", options = leaflet::providerTileOptions(noWrap = TRUE)) |>
+      add_suite_basemap("CartoDB.Positron", noWrap = TRUE) |>
       leaflet::setView(lng = -96, lat = 44, zoom = 3) |>
       draw_site_markers(isolate(main_a()), isolate(dates_d()), isolate(input$site))
   })
