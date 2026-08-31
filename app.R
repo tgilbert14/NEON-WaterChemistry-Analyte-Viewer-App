@@ -25,8 +25,8 @@ source("helpers.R")
 # carry it (the bundled CartoDB template has no {apikey} slot), hence addTiles().
 # Accepts either a leaflet provider name or a CARTO variant, so ui.R basemap
 # choices stay exactly as they are and any non-CARTO provider passes straight
-# through. Without the key it falls back to Esri's keyless grey canvas — clean,
-# but content-free past z16 at rural sites, so the cap keeps the zoom honest.
+# through. Without a usable key it falls back to Esri's keyless grey canvas —
+# clean, but content-free past z16 at rural sites, so the cap keeps zoom honest.
 add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
   variant <- switch(basemap,
     "light_all" = ,
@@ -37,8 +37,13 @@ add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
   if (is.null(variant))
     return(leaflet::addProviderTiles(map, basemap,
       options = leaflet::providerTileOptions(noWrap = noWrap)))
-  key <- Sys.getenv("CARTO_BASEMAP_KEY", "")
-  if (nzchar(key)) {
+  # Connect Cloud's Variables field stores whatever was pasted, newline and all.
+  # A *missing* key gives CARTO's watermark; a *malformed* one interpolates a
+  # stray character straight into the tile URL and the basemap goes silently
+  # blank instead. So trim the value and require it to look like a CARTO key --
+  # anything else falls through to a basemap that works rather than to no map.
+  key <- trimws(Sys.getenv("CARTO_BASEMAP_KEY", ""))
+  if (grepl("^[A-Za-z0-9_-]+$", key)) {
     leaflet::addTiles(map,
       urlTemplate = sprintf(
         "https://{s}.basemaps.cartocdn.com/%s/{z}/{x}/{y}{r}.png?key=%s", variant, key),
@@ -47,6 +52,9 @@ add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
         '&copy; <a href="https://carto.com/attributions">CARTO</a>'),
       options = leaflet::tileOptions(subdomains = "abcd", maxZoom = 20, noWrap = noWrap))
   } else {
+    message(sprintf(
+      "[basemap] CARTO_BASEMAP_KEY is %s; serving the Esri grey canvas instead.",
+      if (nzchar(key)) "set but not a well-formed key" else "unset"))
     leaflet::addTiles(map,
       urlTemplate = sprintf(
         "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_%s_Gray_Base/MapServer/tile/{z}/{y}/{x}",
