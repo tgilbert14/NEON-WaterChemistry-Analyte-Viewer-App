@@ -207,8 +207,16 @@ current_flag_row <- current_codebook[
   current_codebook$section == "tidy_long_export" &
     current_codebook$name == "lab_flag", , drop = FALSE
 ]
+current_value_row <- current_codebook[
+  current_codebook$section == "tidy_long_export" &
+    current_codebook$name == "value", , drop = FALSE
+]
 stopifnot(
-  grepl("version 1.1.0", current_codebook_lines[[1]], fixed = TRUE),
+  grepl("version 1.2.0", current_codebook_lines[[1]], fixed = TRUE),
+  identical(
+    current_value_row$na_semantics,
+    "NA when every replicate was a non-detect reported with a blank concentration"
+  ),
   nrow(current_flag_row) == 1L,
   identical(
     current_flag_row$allowed,
@@ -378,14 +386,31 @@ legacy_flag_row <- legacy_codebook[
   legacy_codebook$section == "tidy_long_export" &
     legacy_codebook$name == "lab_flag", , drop = FALSE
 ]
+committed_v5 <- all(producer_receipt_present) &&
+  identical(legacy$built$unit_policy, WATER_UNIT_POLICY)
+legacy_value_row <- legacy_codebook[
+  legacy_codebook$section == "tidy_long_export" &
+    legacy_codebook$name == "value", , drop = FALSE
+]
 stopifnot(
   grepl(
-    if (all(producer_receipt_present)) {
+    if (committed_v5) {
+      "version 1.2.0"
+    } else if (all(producer_receipt_present)) {
       "version 1.1.0"
     } else {
       "version 1.0.0"
     },
     legacy_codebook_lines[[1]], fixed = TRUE
+  ),
+  identical(
+    legacy_value_row$na_semantics,
+    if (committed_v5) {
+      paste0("NA when every replicate was a non-detect reported with a ",
+             "blank concentration")
+    } else {
+      "NA only if all replicates were non-numeric"
+    }
   ),
   nrow(legacy_flag_row) == 1L,
   identical(
@@ -421,14 +446,33 @@ runtime_source_labels <- water_unit_source_label(legacy$swc_long$units)
 runtime_targets <- unname(WATER_ESTABLISHED_UNIT_TARGETS[
   as.character(legacy$swc_long$analyte)
 ])
-runtime_mismatch <- runtime_source_labels != WATER_MISSING_UNIT &
+runtime_unit_mismatch <- runtime_source_labels != WATER_MISSING_UNIT &
   runtime_source_labels != runtime_targets
+# Independent restatement of the v5 value quarantine (NEON change log
+# 2026-04-21): Fe/Mn labelled mg/L at six sites, 2012-01-31..2016-06-19.
+runtime_quarantine <- as.character(legacy$swc_long$site) %in%
+  c("ARIK", "BARC", "PRLA", "PRPO", "REDB", "SUGG") &
+  as.character(legacy$swc_long$analyte) %in% c("Fe", "Mn") &
+  runtime_source_labels == "milligramsPerLiter" &
+  legacy$swc_long$collectDate >= as.Date("2012-01-31") &
+  legacy$swc_long$collectDate <= as.Date("2016-06-19")
+runtime_mismatch <- runtime_unit_mismatch | runtime_quarantine
+runtime_reason <- ifelse(
+  runtime_quarantine,
+  "neon-changelog-2026-04-21-usgs-nwqa-ugL-labelled-mgL",
+  WATER_UNIT_EXCLUSION_RULES$reason[match(
+    paste(legacy$swc_long$analyte, runtime_source_labels),
+    paste(WATER_UNIT_EXCLUSION_RULES$analyte,
+          WATER_UNIT_EXCLUSION_RULES$from_unit)
+  )]
+)
 expected_runtime_exclusions <- data.frame(
   site = as.character(legacy$swc_long$site[runtime_mismatch]),
   collectDate = as.character(legacy$swc_long$collectDate[runtime_mismatch]),
   analyte = as.character(legacy$swc_long$analyte[runtime_mismatch]),
   from_unit = runtime_source_labels[runtime_mismatch],
   n_source_rows = legacy$swc_long$n_reps[runtime_mismatch],
+  reason = runtime_reason[runtime_mismatch],
   stringsAsFactors = FALSE
 )
 runtime_result <- canonicalize_runtime_water_units(legacy$swc_long)
@@ -458,7 +502,7 @@ if (all(producer_receipt_present)) {
     WATER_UNIT_EXCLUSION_IDENTITIES$from_unit
   )
   stopifnot(
-    identical(legacy$built$unit_policy, WATER_UNIT_POLICY),
+    legacy$built$unit_policy %in% WATER_UNIT_ACCEPTED_PRODUCER_POLICIES,
     nrow(producer_receipt) == 73L,
     identical(sort(producer_keys), sort(policy_keys)),
     is.integer(producer_receipt$n_excluded),
@@ -469,15 +513,21 @@ if (all(producer_receipt_present)) {
               as.integer(sum(producer_receipt$n_excluded))),
     identical(legacy$built$unit_exclusion_receipt_sha256,
               water_unit_receipt_sha256(producer_receipt)),
-    identical(runtime_result$n_collapsed_rows_excluded, 0L),
-    identical(runtime_result$n_source_rows_excluded, 0L)
+    # A v5 bundle has the quarantine applied at build; a v4 bundle has it
+    # applied here, at the runtime boundary (102 identities, 110 source rows).
+    identical(runtime_result$n_collapsed_rows_excluded,
+              if (committed_v5) 0L else 102L),
+    identical(runtime_result$n_source_rows_excluded,
+              if (committed_v5) 0L else 110L),
+    identical(runtime_result$n_value_quarantine_rows_excluded,
+              if (committed_v5) 0L else 102L)
   )
 } else {
   legacy_sha256 <- digest::digest(file = legacy_path, algo = "sha256")
   stopifnot(
     identical(legacy_sha256, WATER_LEGACY_BUNDLE_SHA256),
-    identical(runtime_result$n_collapsed_rows_excluded, 48L),
-    identical(runtime_result$n_source_rows_excluded, 99L)
+    identical(runtime_result$n_collapsed_rows_excluded, 48L + 102L),
+    identical(runtime_result$n_source_rows_excluded, 99L + 110L)
   )
 }
 
@@ -565,5 +615,35 @@ stopifnot(nzchar(tryCatch({
   validate_bundle(tampered_exclusion)
   ""
 }, error = conditionMessage)))
+
+# Post-2022 non-detects (NEON change log 2022-08-18) carry a blank
+# concentration and "ND" in belowDetectionQF. They survive the build with
+# value NA and belowDetection 1; a blank concentration that is not a non-detect
+# is still dropped.
+nd_rows <- rbind(
+  make_rows("SYCA", "2023-05-02", "Br", NA_real_, "milligramsPerLiter"),
+  make_rows("SYCA", "2023-05-03", "Br", NA_real_, "milligramsPerLiter"),
+  make_rows("SYCA", "2023-05-04", "Br", c(0.02, NA_real_),
+            "milligramsPerLiter")
+)
+nd_rows$belowDetectionQF <- c("ND", "0", "0", "ND")
+nd_bundle <- build_swc_bundle(nd_rows, data.frame(), coords)
+nd_long <- nd_bundle$swc_long
+nd_kept <- nd_long[nd_long$collectDate == as.Date("2023-05-02"), , drop = FALSE]
+nd_mixed <- nd_long[nd_long$collectDate == as.Date("2023-05-04"), , drop = FALSE]
+stopifnot(
+  nrow(nd_kept) == 1L,
+  is.na(nd_kept$value), is.na(nd_kept$value_sd),
+  identical(nd_kept$belowDetection, 1L),
+  identical(nd_kept$n_reps, 1L),
+  !any(nd_long$collectDate == as.Date("2023-05-03")),
+  nrow(nd_mixed) == 1L,
+  identical(nd_mixed$value, 0.02),
+  is.na(nd_mixed$value_sd),
+  identical(nd_mixed$n_reps, 2L),
+  identical(nd_mixed$belowDetection, 1L),
+  identical(nd_bundle$built$n_below, 2L),
+  identical(nd_bundle$built$n_obs, 2L)
+)
 
 cat("Pinned unit targets, audited exclusions, and value-invariance regressions passed.\n")

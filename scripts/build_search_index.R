@@ -44,21 +44,29 @@ CEIL_MAP  <- ceiling_map(CEIL_TBL)
 L$units       <- unname(CANON_MAP[L$analyte]) %|na|% L$units
 L$implausible <- !is_plausible(L$value, L$analyte, CEIL_MAP, site = L$site)
 
-Lg <- L |> filter(!implausible, is.finite(value))   # the gated frame the stats read from
+# The gated frame the stats read from. Blank-concentration non-detects (value
+# NA, belowDetection 1) stay in it so n and pct_below count them.
+Lg <- L |> filter(!implausible)
 
 ## ---- Per-(analyte, site) honest summary ------------------------------------
 # below_detection share is reported (not used to drop rows) so a threshold over a
-# heavily-censored analyte stays auditable. n is the gated sample count.
+# heavily-censored analyte stays auditable. n is the gated sample count including
+# NA-valued non-detects; mean/median/min/max use finite values only. Keep this in
+# lock-step with scripts/verify_refresh_candidate.R, which re-derives it.
+finite_or_na <- function(x, f) {
+  x <- x[is.finite(x)]
+  if (length(x)) f(x) else NA_real_
+}
 per_site <- Lg |>
   mutate(year = as.integer(format(collectDate, "%Y"))) |>
   group_by(analyte, site) |>
   summarise(
     .groups   = "drop",
     n         = dplyr::n(),
-    mean      = mean(value, na.rm = TRUE),
-    median    = stats::median(value, na.rm = TRUE),
-    min       = min(value, na.rm = TRUE),
-    max       = max(value, na.rm = TRUE),
+    mean      = finite_or_na(value, mean),
+    median    = finite_or_na(value, stats::median),
+    min       = finite_or_na(value, min),
+    max       = finite_or_na(value, max),
     n_below   = sum(belowDetection == 1, na.rm = TRUE),
     year_min  = suppressWarnings(min(year, na.rm = TRUE)),
     year_max  = suppressWarnings(max(year, na.rm = TRUE))

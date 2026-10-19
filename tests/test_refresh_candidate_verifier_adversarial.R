@@ -97,6 +97,17 @@ candidate_receipt_present <- policy_env$WATER_UNIT_RECEIPT_FIELDS %in%
   names(candidate_original$built)
 stopifnot(all(candidate_receipt_present) || !any(candidate_receipt_present))
 current_candidate <- all(candidate_receipt_present)
+current_codebook_version <- if (
+  current_candidate &&
+    identical(candidate_original$built$unit_policy,
+              policy_env$WATER_UNIT_POLICY)
+) {
+  "1.2.0"
+} else if (current_candidate) {
+  "1.1.0"
+} else {
+  "1.0.0"
+}
 runtime_long <- policy_env$canonicalize_runtime_water_units(
   candidate_original$swc_long
 )
@@ -124,7 +135,7 @@ flag_row <- which(
 )
 stopifnot(
   grepl(
-    if (current_candidate) "version 1.1.0" else "version 1.0.0",
+    paste("version", current_codebook_version),
     codebook_header[[1]], fixed = TRUE
   ),
   length(flag_row) == 1L,
@@ -280,6 +291,21 @@ if (!current_candidate) {
   run_verifier("Receipt-free candidate is not the exact known legacy bundle")
 }
 
+if (current_candidate) {
+  # The value-quarantine receipt is bound to the producer policy: v5 must carry
+  # an exact one, a v4 bundle must carry none.
+  mutate_bundle(function(x) {
+    if (identical(x$built$unit_policy, policy_env$WATER_UNIT_POLICY)) {
+      x$built$value_quarantine_receipt$n_excluded[[1]] <-
+        x$built$value_quarantine_receipt$n_excluded[[1]] + 1L
+    } else {
+      x$built$n_value_rows_quarantined <- 0L
+    }
+    x
+  })
+  run_verifier("Candidate value-quarantine receipt is invalid")
+}
+
 mutate_bundle(function(x) {
   x$built$n_obs <- x$built$n_obs + 0.5
   x
@@ -349,7 +375,7 @@ run_verifier("Search index per-site rows differ from independent recomputation")
 
 reset_fixture()
 bad_header <- codebook_original
-detected_version <- if (current_candidate) "1.1.0" else "1.0.0"
+detected_version <- current_codebook_version
 bad_header[[1]] <- sub(
   paste("version", detected_version), "version 9.9.9",
   bad_header[[1]], fixed = TRUE

@@ -87,11 +87,18 @@ for (s in SITES) {
     k <- k + 1
     a_dest <- file.path(CACHE_DIR, sprintf("%s_%s_analyte.csv", s, mo))
     p_dest <- file.path(CACHE_DIR, sprintf("%s_%s_parent.csv",  s, mo))
+    r_dest <- file.path(CACHE_DIR, sprintf("%s_%s_release.txt", s, mo))
     a_have <- file.exists(a_dest); p_have <- file.exists(p_dest)
     if (!a_have || !p_have) {
       j <- getJSON(sprintf("https://data.neonscience.org/api/v0/data/%s/%s/%s", PRODUCT, s, mo))
       Sys.sleep(0.2)
       if (is.null(j) || is.null(j$data$files)) { logmsg("  [data MISS] %s %s", s, mo); next }
+      # The API v0 site-month response names its release (e.g. RELEASE-2026 or
+      # PROVISIONAL). Cache it beside the CSVs so a resumed run keeps it.
+      rel <- j$data$release
+      rel <- if (is.character(rel) && length(rel) == 1L && !is.na(rel) &&
+                 nzchar(rel)) rel else NA_character_
+      writeLines(if (is.na(rel)) "" else rel, r_dest)
       files <- j$data$files
       ai <- grep("swc_externalLabDataByAnalyte.*basic.*csv$", files$name)
       pi <- grep("swc_fieldSuperParent.*basic.*csv$",         files$name)
@@ -100,12 +107,18 @@ for (s in SITES) {
     }
     ad <- if (file.exists(a_dest)) suppressWarnings(suppressMessages(read_csv(a_dest, show_col_types = FALSE))) else NULL
     pd <- if (file.exists(p_dest)) suppressWarnings(suppressMessages(read_csv(p_dest, show_col_types = FALSE))) else NULL
+    month_release <- if (file.exists(r_dest)) {
+      r <- readLines(r_dest, warn = FALSE)
+      if (length(r) && nzchar(r[[1]])) r[[1]] else NA_character_
+    } else NA_character_                       # cached before release capture
     if (!is.null(ad) && nrow(ad)) {
       if (!"laboratoryName" %in% names(ad)) ad$laboratoryName <- NA_character_
       analyte_acc[[length(analyte_acc)+1]] <- ad %>%
         transmute(site = siteID, collectDate, analyte,
                   analyteConcentration, analyteUnits,
                   laboratoryName = as.character(laboratoryName),
+                  release = if ("release" %in% names(ad))
+                    as.character(ad$release) else month_release,
                   belowDetectionQF  = as.character(belowDetectionQF),   # keep raw "ND"/"BDL"
                   externalLabDataQF = as.character(externalLabDataQF))
     }
