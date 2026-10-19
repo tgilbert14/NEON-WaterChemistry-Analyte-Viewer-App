@@ -80,9 +80,12 @@ D <- readRDS("data/neon_swc.rds")
 D <- apply_runtime_water_unit_contract(D)
 message(sprintf(
   paste0("[unit-contract] %d collapsed rows (%d represented source rows) ",
-         "quarantined; %d registered missing labels filled."),
+         "quarantined, of which %d rows (%d source rows) are the USGS_NWQA ",
+         "Fe/Mn value quarantine; %d registered missing labels filled."),
   D$built$n_runtime_unit_rows_excluded,
   D$built$n_runtime_unit_source_rows_excluded,
+  D$built$n_runtime_value_quarantine_rows_excluded,
+  D$built$n_runtime_value_quarantine_source_rows_excluded,
   D$built$n_runtime_unit_labels_rewritten
 ))
 
@@ -136,6 +139,13 @@ D$swc_wide <- D$swc_long |>
   dplyr::filter(!implausible) |>
   dplyr::select(site, collectDate, analyte, value) |>
   tidyr::pivot_wider(names_from = analyte, values_from = value)
+# (3) the matching below-detection matrix (same gate, same site/date grain), so
+#     correlation censoring is measured per site on the pair's own samples
+#     rather than borrowed from the network-wide CENSOR_MAP (audit item 20).
+D$bdl_wide <- D$swc_long |>
+  dplyr::filter(!implausible) |>
+  dplyr::select(site, collectDate, analyte, belowDetection) |>
+  tidyr::pivot_wider(names_from = analyte, values_from = belowDetection, values_fn = max)
 # (1)+(3) add a real censored fraction to the already reconciled analyte metadata.
 D$analyte_meta <- D$analyte_meta |>
   dplyr::mutate(units = unname(CANON_MAP[analyte]) %|na|% units,
@@ -571,7 +581,13 @@ aqua_theme <- bs_theme(
     .wc-pop-info { background: rgba(14,124,155,.12); color: #0E7C9B; }
     .wc-pop-info:hover { background: rgba(14,124,155,.2); }
     [data-bs-theme='dark'] .wc-pop-info { background: rgba(70,198,218,.16); color: #7fd6e6; }
-    .leaflet-control.legend { border-radius: 10px; font-size: 11px; }
+    .leaflet-control.legend { border-radius: 10px; font-size: 11px; pointer-events: none; }
+    /* an open marker popup owns the map: hide the legend so it never covers Explore/About */
+    .leaflet-container:has(.leaflet-popup) .info.legend { display: none; }
+    @media (max-width: 700px) {
+      .leaflet-control.legend.info { font-size: 10px; padding: 4px 6px; }
+      .info.legend i { width: 12px; height: 12px; }
+    }
 
     /* ====================================================================== *
      *  PAGE MUST SCROLL. page_fillable clamps the page to 100vh with          *
@@ -735,8 +751,8 @@ GLOSSARY <- list(
   censor   = HTML("<b>Below detection (BDL)</b> means the lab couldn't measure the analyte above its
     detection limit. We keep the reported number (drawn as an <b>open marker</b>) and never substitute a
     zero. But when a large share of an analyte's samples are below detection, a correlation is dominated by
-    detection-limit <b>ties</b>, not real chemistry, so we <b>grey out</b> any analyte with &gt; 25% below
-    detection and treat it as <b>exploratory only</b> (Helsel 2012).")
+    detection-limit <b>ties</b>, not real chemistry, so we <b>grey out</b> any pair whose matched samples here
+    are 25% or more below detection and treat it as <b>exploratory only</b> (Helsel 2012).")
 )
 # small (?) icon that pops a plain-language explanation on click/hover
 help_pop <- function(key, ttl = NULL)
@@ -765,7 +781,7 @@ Shiny.addCustomMessageHandler('wc_save_state', function(msg){ try{ localStorage.
    across several frames. A 'resize' makes every Leaflet map invalidateSize and
    re-fit the settled width instead of painting half-width / grey tiles. Mirrors
    the flagship Small Mammal kickMaps handler. */
-Shiny.addCustomMessageHandler('kickMaps', function(){
+Shiny.addCustomMessageHandler('kickMaps', function(msg){
   var kick = function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} };
   if (window.requestAnimationFrame) requestAnimationFrame(kick);
   [80, 250, 500, 900].forEach(function(t){ setTimeout(kick, t); });
@@ -1044,9 +1060,7 @@ ui <- page_fillable(
       card(full_screen = TRUE,
         card_header("This is dense, honest water-chemistry data"),
         div(class = "p-2",
-          tags$p(class = "scope-note", style = "font-size:.95rem; margin-bottom:.6rem",
-            HTML(sprintf("You're looking at <b>%s</b> water-chemistry samples from one NEON aquatic site, with hundreds of records per site rather than a handful. Pick a tab above, or jump straight to the relationship between two analytes.",
-                         format(D$built$n_obs %||% 0, big.mark = ",")))),
+          uiOutput("overview_scope"),
           tags$p(class = "scope-note", style = "margin-bottom:0",
             bs_icon("shield-check"),
             HTML(" <b>How the stats stay honest:</b> every statistic shows its sample size; correlations default to Spearman with an n ≥ 8 reliability flag; the seasonal view is a real STL decomposition of the monthly record, not a forecast; below-detection values are flagged, never hidden; and one per-analyte plausibility gate keeps a single artifact from driving any fit, the trend, the predictor, or the map's colour scale."))))
@@ -1311,6 +1325,11 @@ server <- function(input, output, session) {
 
   ## ---- Site change -> analyte choices + date span ----
   observeEvent(input$site, {
+    # freeze the site-dependent inputs until the update* calls below land, so no
+    # reactive pairs the old site's analytes/dates with the new site for a frame
+    freezeReactiveValue(input, "dates")
+    freezeReactiveValue(input, "analyte_main")
+    freezeReactiveValue(input, "analyte_secondary")
     p <- site_present(input$site)
     ch <- analyte_choices(p)
     keep_main <- if (main_a() %in% p) main_a() else pick_default_analytes(input$site)[1]
@@ -1359,6 +1378,15 @@ server <- function(input, output, session) {
     D$swc_wide |> filter(site == input$site, collectDate >= d[1], collectDate <= d[2])
   }) |> bindCache(input$site, dates_d())
 
+  # below-detection twin of wide_site (same rows): per-site correlation censoring
+  bdl_site <- reactive({
+    req(input$site); d <- dates_d(); req(length(d) == 2)
+    D$bdl_wide |> filter(site == input$site, collectDate >= d[1], collectDate <= d[2])
+  }) |> bindCache(input$site, dates_d())
+
+  # censored share of the active pair on its own matched samples (badge + summary)
+  pair_censor <- reactive(pair_censor_share(sel_long(), main_a(), sec_a()))
+
   sel_pair <- reactive({
     w <- wide_site(); req(main_a() %in% names(w), sec_a() %in% names(w))
     if (identical(main_a(), sec_a())) return(tibble(collectDate = as.Date(character()), x = numeric(), y = numeric()))
@@ -1370,8 +1398,10 @@ server <- function(input, output, session) {
 
   # one Pearson correlation table per (site, main, range) — reused by the table and the predictor
   cor_base <- reactive({
-    correlation_table(wide_site() |> select(-collectDate, -dplyr::any_of("site")),
-                      main_a(), method = "pearson", min_n = 8, censor_map = CENSOR_MAP)
+    # collectDate is kept (non-numeric, never screened) to align bdl_site rows
+    correlation_table(wide_site() |> select(-dplyr::any_of("site")),
+                      main_a(), method = "pearson", min_n = 8, censor_map = CENSOR_MAP,
+                      bdl_site = bdl_site())
   }) |> bindCache(input$site, main_a(), dates_d())
 
   preset_match <- reactive({
@@ -1409,6 +1439,23 @@ server <- function(input, output, session) {
                      class = "cb-report")),
       # clickable QC marker — only when this site/analyte owns an excluded extreme
       uiOutput("qc_chip_band", inline = TRUE))
+  })
+
+  # Overview scope line: THIS site's record (from sites_meta), then the network
+  # total, so the per-site and network counts are never conflated.
+  output$overview_scope <- renderUI({
+    sm <- D$sites_meta[D$sites_meta$site == input$site, ]
+    fmt <- function(x) format(if (length(x) && !is.na(x[1])) x[1] else 0, big.mark = ",")
+    when <- function(x) if (length(x) && !is.na(x[1])) format(as.Date(x[1]), "%b %Y") else "unknown"
+    tags$p(class = "scope-note", style = "font-size:.95rem; margin-bottom:.6rem",
+      HTML(sprintf(paste0(
+        "This record holds <b>%s</b> measurements of <b>%s</b> analytes on <b>%s</b> sampling dates ",
+        "at %s (%s), %s to %s. The whole network holds <b>%s</b> measurements across <b>%s</b> aquatic sites."),
+        fmt(sm$n_obs), fmt(sm$n_analytes), fmt(sm$n_dates),
+        htmltools::htmlEscape(if (length(sm$siteName) && !is.na(sm$siteName[1])) sm$siteName[1] else input$site),
+        htmltools::htmlEscape(input$site),
+        when(sm$first), when(sm$last),
+        fmt(D$built$n_obs), fmt(D$built$n_sites))))
   })
 
   # "Change site" -> re-show the picker splash (hide the main tabs), then nudge
@@ -1503,7 +1550,15 @@ server <- function(input, output, session) {
           value_box(tagList("Correlation · Spearman ρ ",
                             tags$span(onclick = "event.stopPropagation()", help_pop("spearman", "Spearman ρ"))),
                     ifelse(is.na(r), "—", sprintf("%.2f", r)),
-                    if (n > 0) paste0("n = ", n, " paired") else "select two analytes", theme = r_theme)),
+                    tagList(
+                      if (n > 0) paste0("n = ", n, " paired") else "select two analytes",
+                      { pc <- pair_censor()
+                        if (!is.na(r) && is.finite(pc$share) && pc$share >= 0.25)
+                          tags$div(class = "small",
+                            sprintf("%.0f%% of pairs below detection ", 100 * pc$share),
+                            tags$span(onclick = "event.stopPropagation()",
+                                      help_pop("censor", "Below-detection handling"))) }),
+                    theme = r_theme)),
       value_box("Field site", input$site, sm$siteName %||% input$site, theme = "dark")
     )
   })
@@ -1629,21 +1684,21 @@ server <- function(input, output, session) {
         tags$p(HTML(sprintf("<b>Temporal autocorrelation (lag-1):</b> %s (%s). %s",
                             ifelse(is.na(ac), "—", sprintf("%.2f", ac)), ac_flag,
                             "High values mean the p-value above is optimistic.")))),
-      # clickable censoring badge — only when a fitted analyte is heavily below DL;
-      # one short clause + a (?) that opens the existing explanation (no wall of text)
-      { cen <- CENSOR_MAP[c(main_a(), sec_a())]; cen <- cen[is.finite(cen) & cen >= 0.25]
-        if (length(cen)) div(class = "px-2 pb-2 scope-note",
-          bs_icon("exclamation-triangle"),
-          sprintf(" %s heavily below detection, exploratory only ",
-                  paste(analyte_display(names(cen)), collapse = " & ")),
+      # clickable censoring badge — only when THIS pair, on its own matched samples
+      # at this site/window, is >= 25% below detection (either member); one short
+      # clause naming the censored analyte(s) + a (?) to the existing explanation
+      { note <- pair_censor_note(pair_censor(), main_a(), sec_a())
+        if (!is.null(note)) div(class = "px-2 pb-2 scope-note",
+          bs_icon("exclamation-triangle"), paste0(" ", note, " "),
           help_pop("censor", "Below-detection handling")) }
     )
   })
 
   ## ---- Correlations ----
   cor_tbl <- reactive({
-    correlation_table(wide_site() |> select(-collectDate, -dplyr::any_of("site")),
-                      main_a(), method = input$cor_method, min_n = 8, censor_map = CENSOR_MAP)
+    correlation_table(wide_site() |> select(-dplyr::any_of("site")),
+                      main_a(), method = input$cor_method, min_n = 8, censor_map = CENSOR_MAP,
+                      bdl_site = bdl_site())
   }) |> bindCache(input$site, main_a(), input$cor_method, dates_d())
 
   output$cor_lolli <- renderPlotly({ safe_plotly({
@@ -1704,7 +1759,11 @@ server <- function(input, output, session) {
   })
 
   output$clim <- renderPlotly({ safe_plotly({
-    df <- main_monthly()
+    raw <- main_monthly()
+    # counts disclose every sample (incl. blank-value non-detects); only finite
+    # values are plotted
+    n_all <- nrow(raw); k_bdl <- sum(raw$belowDetection == 1, na.rm = TRUE)
+    df <- raw |> filter(is.finite(value))
     if (nrow(df) < 6) return(plotly_message("Not enough samples for a monthly climatology.", mode()))
     df <- df |> mutate(month = month(collectDate, label = TRUE), year = year(collectDate)) |>
       add_count(month, name = "n_month")
@@ -1715,15 +1774,24 @@ server <- function(input, output, session) {
                                     pretty_unit(units, analyte), "<br>", month, ": n = ", n_month)),
                   width = .15, height = 0, size = 1.8, color = COL$main, alpha = .55) +
       labs(x = NULL, y = axis_title(main_a(), unit),
-           title = paste0("Monthly climatology · ", analyte_display(main_a()))) +
+           title = paste0("Monthly climatology · ", analyte_display(main_a()),
+                          " · n = ", n_all, if (k_bdl > 0) paste0(" (", k_bdl, " below DL)") else "")) +
       theme_neon()
     ggplotly(pp, tooltip = "text") |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_climatology"))
   }, mode()) })
 
   output$stl <- renderPlotly({ safe_plotly({
     df <- main_monthly()
+    # an all-non-detect month (blank values) is NA, not NaN; any_bdl marks months
+    # holding a below-detection sample (drawn as hollow markers)
     ms <- df |> mutate(ym = floor_date(collectDate, "month")) |>
-      group_by(ym) |> summarise(v = mean(value, na.rm = TRUE), .groups = "drop") |> arrange(ym)
+      group_by(ym) |>
+      summarise(v = { mv <- mean(value, na.rm = TRUE); if (is.nan(mv)) NA_real_ else mv },
+                any_bdl = any(belowDetection == 1, na.rm = TRUE), .groups = "drop") |>
+      filter(!is.na(v)) |> arrange(ym)
+    n_all <- nrow(df); k_bdl <- sum(df$belowDetection == 1, na.rm = TRUE)
+    mixes_dl <- bdl_mixes_eras(df$collectDate, df$belowDetection)
+    show_mc  <- nrow(df) > 0 && spans_method_change(main_a(), min(df$collectDate), max(df$collectDate))
     if (nrow(ms) < 24 || as.numeric(diff(range(ms$ym))) < 365 * 2)
       return(plotly_message("Need ≥ 24 months across ≥ 2 years for an STL decomposition.\nWiden the date range.", mode()))
     full <- tibble(ym = seq(min(ms$ym), max(ms$ym), by = "month")) |> left_join(ms, by = "ym")
@@ -1743,25 +1811,36 @@ server <- function(input, output, session) {
     tsv <- ts(v, frequency = 12, start = c(year(min(full$ym)), month(min(full$ym))))
     dec <- stats::stl(tsv, s.window = "periodic", robust = TRUE)
     cmp <- as.data.frame(dec$time.series)
-    out <- tibble(ym = full$ym, observed = full$v,
+    out <- tibble(ym = full$ym, observed = full$v, any_bdl = full$any_bdl %in% TRUE,
                   trend = cmp$trend, seasonal = cmp$seasonal, remainder = cmp$remainder)
     unit <- pretty_unit(df$units[1], main_a())
     p1 <- plot_ly(out, x = ~ym) |>
-      add_trace(y = ~observed, type = "scatter", mode = "markers", name = "observed",
-                marker = list(color = "rgba(120,130,140,.6)", size = 5),
-                hovertemplate = paste0("%{x|%b %Y}<br>%{y:.3g} ", unit, "<extra></extra>")) |>
-      add_trace(y = ~trend, type = "scatter", mode = "lines", name = "trend",
-                line = list(color = COL$main, width = 3),
+      add_trace(data = out |> filter(!any_bdl), y = ~observed, type = "scatter", mode = "markers",
+                name = "observed", marker = list(color = "rgba(120,130,140,.6)", size = 5),
+                hovertemplate = paste0("%{x|%b %Y}<br>%{y:.3g} ", unit, "<extra></extra>"))
+    if (any(out$any_bdl))
+      p1 <- p1 |> add_trace(data = out |> filter(any_bdl), y = ~observed, type = "scatter", mode = "markers",
+                name = "month with a below-DL sample",
+                marker = list(color = "rgba(120,130,140,.85)", size = 6, symbol = "circle-open"),
+                hovertemplate = paste0("%{x|%b %Y}<br>%{y:.3g} ", unit, " (incl. below-DL)<extra></extra>"))
+    p1 <- p1 |>
+      add_trace(data = out, y = ~trend, type = "scatter", mode = "lines", name = "trend",
+                line = list(color = if (mixes_dl) "#8a949c" else COL$main, width = 3),
                 hovertemplate = "trend %{y:.3g}<extra></extra>") |>
-      add_trace(y = ~(trend + seasonal), type = "scatter", mode = "lines", name = "trend + seasonal",
+      add_trace(data = out, y = ~(trend + seasonal), type = "scatter", mode = "lines", name = "trend + seasonal",
                 line = list(color = COL$secondary, width = 1.4, dash = "dot"), opacity = .8,
                 hovertemplate = "%{y:.3g}<extra></extra>") |>
       layout(yaxis = list(title = axis_title(main_a(), df$units[1])), xaxis = list(title = ""),
              legend = list(orientation = "h", y = -0.18, x = 0), margin = list(t = 46, b = 64),
              title = list(
                text = paste0("<span style='font-size:11.5px;color:#9aa4ad;font-weight:400'>",
-                             n_real, " of ", n_tot, " months real · ", n_fill, " interpolated before decomposition</span>"),
+                             n_real, " of ", n_tot, " months real · ", n_fill, " interpolated before decomposition",
+                             " · n = ", n_all, if (k_bdl > 0) paste0(" (", k_bdl, " below DL)") else "",
+                             if (show_mc) " · lab method change Jul 2019 (lower detection limits)" else "",
+                             if (mixes_dl) " · trend partly tracks the detection limit" else "",
+                             "</span>"),
                x = 0, xanchor = "left", y = 0.99, yanchor = "top"))
+    if (show_mc) p1 <- add_method_change_marker(p1)
     p1 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_STL"))
   }, mode()) })
 
@@ -1895,7 +1974,7 @@ server <- function(input, output, session) {
     if (!nrow(s)) return(0)
     mean(grepl("formatChange|legacyData", s$labFlag), na.rm = TRUE)
   }
-  provenance <- function() sprintf("# NEON Surface Water Chemistry %s | site %s | built %s | data through %s | values are replicate means (n_reps); below_detection = reported below the analytical detection limit | implausible extremes (> per-analyte p99.9 & 50x median) excluded from fits/maps | %.0f%% of rows carry a legacy/formatChange method-standardization flag",
+  provenance <- function() sprintf("# NEON Surface Water Chemistry %s | site %s | built %s | data through %s | values are replicate means (n_reps); below_detection = reported below the analytical detection limit; non-detects reported with a blank concentration carry value NA and below_detection TRUE | implausible extremes (> per-analyte p99.9 & 50x median) excluded from fits/maps | %.0f%% of rows carry a legacy/formatChange method-standardization flag",
                                    D$built$product, input$site, substr(D$built$when, 1, 10), D$built$data_through, 100 * pct_legacy_slice())
 
   output$dl_long <- downloadHandler(
@@ -2038,23 +2117,30 @@ server <- function(input, output, session) {
   output$two_sites <- renderPlotly({ safe_plotly({
     d <- dates_d(); A <- main_a(); s1 <- input$site; s2 <- input$site_b %||% DEF_SITE_B
     df <- D$swc_long |> filter(analyte == A, site %in% c(s1, s2),
-                               collectDate >= d[1], collectDate <= d[2], !implausible) |> arrange(collectDate)
+                               collectDate >= d[1], collectDate <= d[2], !implausible,
+                               is.finite(value)) |> arrange(collectDate)   # blank-value non-detects not plotted
     if (!nrow(df)) return(plotly_message("No data for this analyte at these sites in this window.", mode()))
     unit <- df$units[1]
     lab <- function(s) paste0(s, " · ", D$sites_meta$siteName[match(s, D$sites_meta$site)])
-    df <- df |> mutate(siteLab = ifelse(site == s1, lab(s1), lab(s2)))
+    df <- df |> mutate(siteLab = ifelse(site == s1, lab(s1), lab(s2)),
+                       bdl = belowDetection %in% 1)
     pal <- setNames(c(COL$main, COL$secondary), c(lab(s1), lab(s2)))
-    plot_ly(df, x = ~collectDate, y = ~value, color = ~siteLab, colors = pal,
-            type = "scatter", mode = "markers+lines", marker = list(size = 6), line = list(width = 2),
-            hovertemplate = ~paste0("<b>", siteLab, "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ", pretty_unit(unit, A), "<extra></extra>")) |>
+    p2 <- plot_ly(df, x = ~collectDate, y = ~value, color = ~siteLab, colors = pal,
+            type = "scatter", mode = "markers+lines", line = list(width = 2),
+            # hollow markers = reported below the detection limit
+            marker = list(size = 6, symbol = ~ifelse(bdl, "circle-open", "circle")),
+            hovertemplate = ~paste0("<b>", siteLab, "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ", pretty_unit(unit, A),
+                                    ifelse(bdl, " (below DL)", ""), "<extra></extra>")) |>
       layout(hovermode = "x unified",
              yaxis = list(title = axis_title(A, unit)),
              xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
                           spikethickness = 1, spikecolor = "#9aa7b0", spikedash = "dot"),
              legend = list(orientation = "h", y = -0.22, x = 0), margin = list(t = 48, b = 74),
              title = list(text = paste0(analyte_display(A), " · two sites"), font = list(size = 14),
-                          x = 0, xanchor = "left", y = 0.98, yanchor = "top")) |>
-      plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
+                          x = 0, xanchor = "left", y = 0.98, yanchor = "top"))
+    if (spans_method_change(A, min(df$collectDate), max(df$collectDate)))
+      p2 <- add_method_change_marker(p2)
+    p2 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
   }, mode()) })
 
   ## ---- Explore map: leaflet picker; markers coloured by the main analyte -----
@@ -2073,19 +2159,25 @@ server <- function(input, output, session) {
   map_site_avg <- function(ana, d) {
     D$swc_long |>
       filter(analyte == ana, collectDate >= d[1], collectDate <= d[2], !implausible) |>
-      group_by(site) |> summarise(avg = mean(value, na.rm = TRUE), nobs = dplyr::n(), .groups = "drop")
+      # nobs = every sample (incl. blank-value non-detects); an all-NA site is
+      # NA, not NaN; n_below = below-detection count
+      group_by(site) |>
+      summarise(avg = { mv <- mean(value, na.rm = TRUE); if (is.nan(mv)) NA_real_ else mv },
+                nobs = dplyr::n(), n_below = sum(belowDetection == 1, na.rm = TRUE),
+                .groups = "drop")
   }
 
   # the choice card bound to each marker: site facts + the two buttons. They fire
   # the SAME inputs the server already handles (mapExplore loads + jumps to
   # Compare; mapInfo opens the About modal) — so no new server wiring is needed.
-  map_popup_html <- function(code, ana, avg, nobs, unit) {
+  map_popup_html <- function(code, ana, avg, nobs, unit, n_below = 0L) {
     sm <- D$sites_meta[D$sites_meta$site == code, ]
     where <- paste(stats::na.omit(c(as.character(sm$state[1]),
       if (!is.na(sm$domain[1])) paste("NEON", sm$domain[1]) else NA)), collapse = " &middot; ")
     val <- if (is.finite(avg))
-      sprintf("<div class='wc-pop-v'><b>%s</b>: %s %s <span class='wc-pop-sub'>(avg, n=%s)</span></div>",
-              analyte_display(ana), signif(avg, 3), unit, format(nobs, big.mark = ",")) else
+      sprintf("<div class='wc-pop-v'><b>%s</b>: %s %s <span class='wc-pop-sub'>(avg, n=%s%s)</span></div>",
+              analyte_display(ana), signif(avg, 3), unit, format(nobs, big.mark = ","),
+              if (isTRUE(n_below > 0)) sprintf(", %s below DL", format(n_below, big.mark = ",")) else "") else
       sprintf("<div class='wc-pop-v wc-pop-na'>no %s in this window</div>", analyte_display(ana))
     cov <- sprintf("<div class='wc-pop-n'><b>%s</b> obs &middot; <b>%s</b> analytes</div>",
                    format(ifelse(is.na(sm$n_obs[1]), 0L, sm$n_obs[1]), big.mark = ","),
@@ -2120,22 +2212,25 @@ server <- function(input, output, session) {
       dom <- c(csc$cmin, csc$cmax); if (dom[1] == dom[2]) dom[2] <- dom[1] + 1e-9
       pal <- leaflet::colorNumeric("YlGnBu", domain = dom)   # darker = higher
     }
-    pop_opts <- leaflet::popupOptions(maxWidth = 300, minWidth = 230, autoPan = TRUE,
-      autoPanPadding = c(40, 55), keepInView = TRUE, closeButton = TRUE,
+    # phone (<700px): bigger tap targets and the legend moved off the popup's footprint
+    is_narrow <- isTRUE(isolate(narrow()))
+    pop_opts <- leaflet::popupOptions(maxWidth = 260, minWidth = 200, autoPan = TRUE,
+      autoPanPadding = c(12, 40), keepInView = FALSE, closeButton = TRUE,
       closeOnClick = FALSE, className = "wc-pop-card")
     pops <- function(df) vapply(seq_len(nrow(df)),
-      function(i) as.character(map_popup_html(df$site[i], ana, df$avg[i], df$nobs[i], unit)), character(1))
+      function(i) as.character(map_popup_html(df$site[i], ana, df$avg[i], df$nobs[i], unit,
+                                              df$n_below[i] %||% 0L)), character(1))
 
     if (nrow(no_v))
       map <- leaflet::addCircleMarkers(map, data = no_v, lng = ~long, lat = ~lat, group = "sites",
-        radius = ifelse(no_v$is_sel, 9, 5.5), stroke = TRUE, weight = ifelse(no_v$is_sel, 2.4, .8),
+        radius = if (is_narrow) ifelse(no_v$is_sel, 11, 8) else ifelse(no_v$is_sel, 9, 5.5), stroke = TRUE, weight = ifelse(no_v$is_sel, 2.4, .8),
         color = ifelse(no_v$is_sel, COL$secondary, "#ffffff"), fillColor = "#cdd5da", fillOpacity = .85,
         label = lapply(no_v$site, function(s) htmltools::HTML(sprintf("<b>%s</b> &middot; tap for options", s))),
         popup = pops(no_v), popupOptions = pop_opts,
         options = leaflet::markerOptions(riseOnHover = TRUE))
     if (nrow(has_v))
       map <- leaflet::addCircleMarkers(map, data = has_v, lng = ~long, lat = ~lat, group = "sites",
-        radius = ifelse(has_v$is_sel, 12, 8), stroke = TRUE, weight = ifelse(has_v$is_sel, 2.6, 1),
+        radius = if (is_narrow) ifelse(has_v$is_sel, 14, 11) else ifelse(has_v$is_sel, 12, 8), stroke = TRUE, weight = ifelse(has_v$is_sel, 2.6, 1),
         color = ifelse(has_v$is_sel, COL$secondary, "#ffffff"), fillColor = pal(csc$z), fillOpacity = .9,
         label = lapply(seq_len(nrow(has_v)), function(i) htmltools::HTML(sprintf(
           "<b>%s</b> &middot; %s %s", has_v$site[i], signif(has_v$avg[i], 3), unit))),
@@ -2144,7 +2239,7 @@ server <- function(input, output, session) {
     if (!is.null(csc)) {
       ttl <- HTML(sprintf("%s<br><span style='font-weight:400'>%s%s</span>", analyte_display(ana),
                           unit, if (isTRUE(csc$log)) " (log)" else ""))
-      map <- leaflet::addLegend(map, position = "bottomright", colors = pal(csc$tickvals),
+      map <- leaflet::addLegend(map, position = if (is_narrow) "topright" else "bottomright", colors = pal(csc$tickvals),
                                 labels = csc$ticktext, title = ttl, opacity = .9, className = "info legend")
     }
     map
@@ -2163,8 +2258,11 @@ server <- function(input, output, session) {
   # keep the map alive while the Explore tab is hidden so leafletProxy stays valid
   outputOptions(output, "map", suspendWhenHidden = FALSE)
 
-  # re-colour markers + legend when the analyte, window, or selected site changes
-  observeEvent(list(main_a(), dates_d(), input$site), {
+  # re-colour markers + legend when the analyte, window, or selected site changes.
+  # narrow() is a trigger too: the base map is drawn with isolate() and may paint
+  # before client_w arrives, so a phone's first frame would otherwise keep desktop
+  # marker radii and the bottom-right legend until the next analyte change.
+  observeEvent(list(main_a(), dates_d(), input$site, narrow()), {
     draw_site_markers(leaflet::leafletProxy("map"), main_a(), dates_d(), input$site)
   }, ignoreInit = TRUE)
 
@@ -2193,6 +2291,8 @@ server <- function(input, output, session) {
   enter_site <- function(site, tab = "Overview") {
     if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
     updateSelectizeInput(session, "site", selected = site)
+    # close any open marker popup so autoPan never loops on the soon-hidden map
+    tryCatch(leaflet::leafletProxy("map") |> leaflet::clearPopups(), error = function(e) NULL)
     shinyjs::hide("splash"); shinyjs::show("mainTabsWrap")
     shinyjs::hide("splashGuide")
     nav_select("main_tabs", tab)
