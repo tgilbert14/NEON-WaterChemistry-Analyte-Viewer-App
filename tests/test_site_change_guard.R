@@ -32,3 +32,15 @@ stopifnot(grepl("lang\\s*=\\s*\"en\"", page_call, perl = TRUE))
 stopifnot(!grepl("window_title\\s*=", page_call, perl = TRUE))
 
 cat("Site-change guard passed: no frozen site-dependent inputs; plain page title and lang set.\n")
+
+# The picker map's first render lands behind a hidden splash when the startup
+# resolver auto-enters a deep-linked or resumed site; a leaflet widget rendered
+# into display:none never gets its view or layers. The map must re-render once
+# on "Change site": renderLeaflet reads map_render_nonce, the resolver marks the
+# hidden render, and the changeSite observer bumps the nonce.
+stopifnot(grepl("renderLeaflet\\(\\{\\s*\\n\\s*map_render_nonce\\(\\)", src, perl = TRUE))
+stopifnot(grepl("map_hidden_render\\(TRUE\\)", src, perl = TRUE))
+change_site <- regmatches(src, regexpr("observeEvent\\(input\\$changeSite(.|\n){0,900}", src, perl = TRUE))
+stopifnot(length(change_site) == 1L,
+          grepl("map_render_nonce\\(map_render_nonce\\(\\) \\+ 1L\\)", change_site, perl = TRUE))
+cat("Picker-map re-render guard passed.\n")

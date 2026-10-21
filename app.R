@@ -1244,6 +1244,15 @@ server <- function(input, output, session) {
   # Welcome modal is suppressed for a deep-linked / resumed visitor (they came for
   # the view, not the tour). Read once by the welcome observer below.
   auto_entered <- reactiveVal(FALSE)
+  # The picker map lives on #splash. When the startup resolver auto-enters a
+  # deep-linked or resumed site, #splash is hidden BEFORE output$map's first
+  # value reaches the client, and a leaflet widget whose first render lands in
+  # a display:none container never gets its view or layers (no markers, no
+  # tiles after "Change site"; a resize cannot repair it). So remember that the
+  # first render was hidden and re-render the map once, on the first "Change
+  # site", while the splash is visible again. map_render_nonce is the trigger.
+  map_hidden_render <- reactiveVal(FALSE)
+  map_render_nonce  <- reactiveVal(0L)
 
   ## ---- Onboarding modal (once) ----
   observeEvent(input$welcome_seen, once = TRUE, ignoreNULL = FALSE, {
@@ -1470,6 +1479,12 @@ server <- function(input, output, session) {
     loaded(FALSE)                                  # stop persisting / advertising the view
     updateQueryString("?", mode = "replace")       # don't carry a stale deep link onto the splash
     shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
+    # first render happened behind a hidden splash (auto-entered start): render
+    # the map again now that the splash is visible (see map_hidden_render)
+    if (isTRUE(map_hidden_render())) {
+      map_hidden_render(FALSE)
+      map_render_nonce(map_render_nonce() + 1L)
+    }
     session$sendCustomMessage("kickMaps", list())
   })
 
@@ -2253,6 +2268,7 @@ server <- function(input, output, session) {
   # base map drawn ONCE (tiles + view + initial markers, isolated so changes go
   # through the proxy below instead of a full re-render)
   output$map <- leaflet::renderLeaflet({
+    map_render_nonce()   # bumped once by "Change site" after a hidden first render
     validate(need(any(is.finite(D$sites_meta$lat) & is.finite(D$sites_meta$long)),
                   "No site coordinates are available in this bundle."))
     leaflet::leaflet(options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) |>
@@ -2592,6 +2608,7 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "analyte_secondary", selected = target$sec)
     # (dates are not restored — a resumed/shared view lands on the site full span)
     auto_entered(TRUE)              # suppress the first-visit Welcome modal this load
+    map_hidden_render(TRUE)         # the picker map's first render will land hidden
     enter_site(site, tab = land_tab)
   })
 }
