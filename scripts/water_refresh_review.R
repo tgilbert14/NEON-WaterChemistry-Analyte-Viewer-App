@@ -25,6 +25,10 @@ WATER_REFRESH_REVIEW_APPROVED_STATUSES <- c(
   "audited-exclusion", "approved-missing-label-rewrite"
 )
 
+# Fixed replay contract. Extra input columns (notably the per-row NEON
+# `release` tag captured by precompute_neon_data.R) are dropped
+# deterministically by water_refresh_replay_inputs(); a replayed build therefore
+# skips the release check and relies on the value-quarantine median guard.
 WATER_REFRESH_REPLAY_LAB_COLUMNS <- c(
   "site", "collectDate", "analyte", "analyteConcentration", "analyteUnits",
   "laboratoryName", "belowDetectionQF", "externalLabDataQF"
@@ -237,7 +241,11 @@ water_unit_mismatch_review <- function(lab_raw) {
   lab <- replay$lab_raw
   parsed_date <- suppressWarnings(as.Date(substr(lab$collectDate, 1L, 10L)))
   parsed_value <- suppressWarnings(as.numeric(lab$analyteConcentration))
-  eligible <- !is.na(parsed_date) & !is.na(parsed_value)
+  # Mirror build_swc_bundle(): a blank concentration is eligible only when the
+  # row is a below-detection code (post-2022 NEON non-detects); any other
+  # non-numeric concentration is dropped exactly as the builder drops it.
+  below_code <- lab$belowDetectionQF %in% WATER_REFRESH_REVIEW_BELOW_CODES
+  eligible <- !is.na(parsed_date) & (!is.na(parsed_value) | below_code)
   if (!any(eligible)) return(water_unit_mismatch_review_empty())
 
   site <- water_review_key_component(lab$site)
@@ -327,6 +335,7 @@ water_unit_mismatch_review <- function(lab_raw) {
     }
 
     values <- parsed_value[hit]
+    values <- values[!is.na(values)]   # NA-valued non-detects carry no value
     raw_rows <- water_review_sort_frame(lab[hit, , drop = FALSE])
     data.frame(
       review_schema = WATER_REFRESH_REVIEW_SCHEMA,
@@ -359,9 +368,15 @@ water_unit_mismatch_review <- function(lab_raw) {
       n_distinct_value_text = as.integer(length(unique(
         lab$analyteConcentration[hit]
       ))),
-      source_value_min = water_review_number(min(values)),
-      source_value_median = water_review_number(stats::median(values)),
-      source_value_max = water_review_number(max(values)),
+      source_value_min = water_review_number(
+        if (length(values)) min(values) else NA_real_
+      ),
+      source_value_median = water_review_number(
+        if (length(values)) stats::median(values) else NA_real_
+      ),
+      source_value_max = water_review_number(
+        if (length(values)) max(values) else NA_real_
+      ),
       n_below_detection_rows = as.integer(sum(
         lab$belowDetectionQF[hit] %in% WATER_REFRESH_REVIEW_BELOW_CODES
       )),

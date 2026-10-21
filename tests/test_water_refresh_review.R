@@ -507,6 +507,26 @@ run_tests <- function() {
   ))
   stopifnot(!dir.exists(invalid_dir))
 
+  # Blank-concentration non-detects are kept by the builder, so they must be
+  # eligible for unit review too; a blank non-ND row stays ineligible, and a
+  # mixed group summarizes only its numeric values.
+  nd_review <- water_unit_mismatch_review(rbind(
+    make_rows("SYCA", "2023-05-02", "Br", NA_real_, "microgramsPerLiter",
+              "Other_Lab", below = "ND"),
+    make_rows("SYCA", "2023-05-03", "Br", NA_real_, "microgramsPerLiter",
+              "Other_Lab", below = "0"),
+    make_rows("SYCA", "2023-05-04", "Br", c(0.02, NA_real_),
+              "microgramsPerLiter", "Other_Lab", below = c("0", "ND"))
+  ))
+  stopifnot(
+    identical(nd_review$collectDate, c("2023-05-02", "2023-05-04")),
+    identical(nd_review$n_source_rows, c(1L, 2L)),
+    is.na(nd_review$source_value_min[[1]]),
+    identical(nd_review$source_value_min[[2]], sprintf("%.17g", 0.02)),
+    identical(nd_review$n_below_detection_rows, c(1L, 1L)),
+    all(nd_review$review_status == "unapproved-unit-pair")
+  )
+
   cat("Deterministic Water refresh replay/review evidence tests passed.\n")
 }
 

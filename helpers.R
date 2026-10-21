@@ -172,6 +172,13 @@ apply_runtime_water_unit_contract <- function(bundle) {
     result$n_source_rows_excluded
   bundle$built$n_runtime_unit_labels_rewritten <-
     result$n_missing_labels_rewritten
+  # identity-keyed value quarantine (USGS_NWQA Fe/Mn, NEON changeLog
+  # 2026-04-21); a subset of the two exclusion counts above, surfaced so the
+  # app and the index can report it on its own
+  bundle$built$n_runtime_value_quarantine_rows_excluded <-
+    result$n_value_quarantine_rows_excluded
+  bundle$built$n_runtime_value_quarantine_source_rows_excluded <-
+    result$n_value_quarantine_source_rows_excluded
   attr(bundle, "runtime_unit_exclusions") <- result$excluded
   bundle
 }
@@ -475,6 +482,87 @@ safe_plotly <- function(expr, mode = "light") {
 
 ## ---- Real computations ---------------------------------------------------
 
+# NEON nutrient method change (changeLog 2021-12-03): from 2019-07-01 these
+# analytes moved to frozen samples with lower detection limits, so a series
+# spanning the date mixes two detection regimes. Charts mark the boundary.
+METHOD_CHANGE_2019 <- c("NO3+NO2 - N", "NO2 - N", "NH4 - N", "Ortho - P", "TP", "TDP")
+METHOD_CHANGE_DATE <- as.Date("2019-07-01")
+# TRUE when `code` is a method-change analyte and [d1, d2] straddles the date.
+spans_method_change <- function(code, d1, d2) {
+  isTRUE(code %in% METHOD_CHANGE_2019) && isTRUE(d1 < METHOD_CHANGE_DATE) &&
+    isTRUE(d2 >= METHOD_CHANGE_DATE)
+}
+
+# Dashed vertical marker + small label at the 2019-07-01 method change (plotly).
+add_method_change_marker <- function(p, color = "#8a949c") {
+  plotly::layout(p,
+    shapes = list(list(type = "line", xref = "x", yref = "paper",
+                       x0 = METHOD_CHANGE_DATE, x1 = METHOD_CHANGE_DATE, y0 = 0, y1 = 1,
+                       line = list(color = color, width = 1.2, dash = "dash"))),
+    annotations = list(list(x = METHOD_CHANGE_DATE, y = 1, xref = "x", yref = "paper",
+                            text = "lab method change", showarrow = FALSE,
+                            xanchor = "left", yanchor = "top", xshift = 3,
+                            font = list(size = 10, color = color))))
+}
+# Does a series mix detection-limit eras? TRUE when one calendar year is >= 50%
+# below detection while another is <= 10% (a DL regime change, e.g. Br), or the
+# whole window is > 25% below detection. Then a fitted trend partly tracks the
+# detection limit, not the water.
+# A calendar year counts toward the era test only with >= min_n samples, so a
+# lone below-DL sample in a thin year cannot flip the trend grey by itself.
+bdl_mixes_eras <- function(dates, bdl, min_n = 6) {
+  b <- !is.na(bdl) & bdl == 1
+  if (!length(b)) return(FALSE)
+  yr <- as.integer(format(dates, "%Y"))
+  n_yr <- tapply(b, yr, length)
+  sh <- tapply(b, yr, mean)[n_yr >= min_n]
+  (length(sh) >= 2 && any(sh >= 0.50) && any(sh <= 0.10)) || mean(b) > 0.25
+}
+
+# Flag text for a heavily censored correlation row: name which member drives it.
+censor_flag <- function(pb, pbm, pba, thresh = 0.25) {
+  pct <- function(x) sprintf("%.0f%%", 100 * x)
+  mh <- is.finite(pbm) & pbm >= thresh; ph <- is.finite(pba) & pba >= thresh
+  ifelse(mh & ph, sprintf("censored (both %s / %s <DL)", pct(pbm), pct(pba)),
+  ifelse(mh,      sprintf("censored (main %s <DL)", pct(pbm)),
+  ifelse(ph,      sprintf("censored (partner %s <DL)", pct(pba)),
+                  sprintf("censored (pair %s <DL)", pct(pb)))))
+}
+
+# Censored share of an analyte pair on its OWN matched samples in a site/window.
+# `sl` is the long slice (site, collectDate, analyte, value, belowDetection);
+# matched = dates where both A and B were sampled (a finite value or a
+# below-detection row). A pair row is censored when either member is below
+# detection. n here can exceed the fit's n once NA-valued non-detects exist;
+# the share then describes the sampled pairs, not only the fitted ones.
+# Returns list(n, share, pA, pB).
+pair_censor_share <- function(sl, A, B) {
+  empty <- list(n = 0L, share = NA_real_, pA = NA_real_, pB = NA_real_)
+  if (is.null(sl) || !nrow(sl) || identical(A, B)) return(empty)
+  # a date counts as sampled when the analyte has a finite value OR is a
+  # below-detection row (post-2022 NDs carry value NA); so NA non-detects stay
+  # in the censoring denominator even though they can enter no fit
+  sampled <- is.finite(sl$value) | (!is.na(sl$belowDetection) & sl$belowDetection == 1)
+  a <- sl[sl$analyte == A & sampled, c("collectDate", "belowDetection")]
+  b <- sl[sl$analyte == B & sampled, c("collectDate", "belowDetection")]
+  a <- a[!duplicated(a$collectDate), , drop = FALSE]
+  b <- b[!duplicated(b$collectDate), , drop = FALSE]
+  j <- merge(a, b, by = "collectDate", suffixes = c("_a", "_b"))
+  if (!nrow(j)) return(empty)
+  ba <- !is.na(j$belowDetection_a) & j$belowDetection_a == 1
+  bb <- !is.na(j$belowDetection_b) & j$belowDetection_b == 1
+  list(n = nrow(j), share = mean(ba | bb), pA = mean(ba), pB = mean(bb))
+}
+# One-clause note naming which member(s) are censored, or NULL under thresh.
+pair_censor_note <- function(pc, A, B, thresh = 0.25) {
+  if (is.null(pc) || !is.finite(pc$share) || pc$share < thresh) return(NULL)
+  who <- c(if (is.finite(pc$pA) && pc$pA >= thresh) sprintf("%s %.0f%%", analyte_display(A), 100 * pc$pA),
+           if (is.finite(pc$pB) && pc$pB >= thresh) sprintf("%s %.0f%%", analyte_display(B), 100 * pc$pB))
+  lead <- if (length(who)) paste(who, collapse = " & ") else
+    sprintf("%.0f%% of %s / %s pairs", 100 * pc$share, analyte_display(A), analyte_display(B))
+  paste0(lead, " below detection in this window, exploratory only")
+}
+
 # Correlation of `main` vs every other numeric column of a per-site wide frame.
 # Reports n (paired), Pearson r, Spearman rho, p-value of the chosen method,
 # and an honesty flag. min_n is the reliability floor (default 8).
@@ -482,14 +570,33 @@ safe_plotly <- function(expr, mode = "light") {
 # table down-weight heavily-censored analytes (Br 57%, Mn/Fe/F ~34-39% below DL):
 # a Spearman/Pearson there is dominated by detection-limit ties, not chemistry
 # (Helsel 2012), so those rows are marked heavy_censor and greyed like low-n.
+# bdl_site (preferred; audit 2026-10-18 item 20): the SAME site/window as
+# wide_site, pivoted from belowDetection (one row per collectDate). When given,
+# the censored share is measured on the pair's own matched samples — a row is
+# censored when EITHER member is below detection — so a site that is clean for
+# an analyte the network censors heavily is not greyed, and vice versa. The
+# network-wide censor_map is only the fallback when bdl_site is NULL.
+# wide_site must keep its collectDate column for the bdl_site alignment
+# (a Date column is non-numeric, so it never enters the screened analytes).
 correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
-                              min_n = 8, censor_map = NULL, censor_thresh = 0.25) {
+                              min_n = 8, censor_map = NULL, censor_thresh = 0.25,
+                              bdl_site = NULL) {
   method <- match.arg(method)
   if (is.null(wide_site) || !main %in% names(wide_site)) return(NULL)
   m <- suppressWarnings(as.numeric(wide_site[[main]]))
   num <- names(wide_site)[vapply(wide_site, is.numeric, logical(1))]
   others <- setdiff(num, main)
   pct_bdl <- function(a) if (!is.null(censor_map) && a %in% names(censor_map)) unname(censor_map[a]) else NA_real_
+  use_site_bdl <- !is.null(bdl_site) && "collectDate" %in% names(wide_site) &&
+    "collectDate" %in% names(bdl_site)
+  bidx <- if (use_site_bdl) match(wide_site$collectDate, bdl_site$collectDate) else NULL
+  # per-row below-detection indicator aligned to wide_site (FALSE when unknown)
+  bdl_col <- function(a) {
+    if (!a %in% names(bdl_site)) return(rep(FALSE, nrow(wide_site)))
+    v <- suppressWarnings(as.numeric(bdl_site[[a]]))[bidx]
+    !is.na(v) & v == 1
+  }
+  bm_all <- if (use_site_bdl) bdl_col(main) else NULL
   ptest <- function(x, y, mth) suppressWarnings(tryCatch(stats::cor.test(x, y, method = mth)$p.value, error = function(e) NA_real_))
   # lag-1 ACF of a series (NA-safe); used to flag temporal autocorrelation and to
   # compute the variance-inflation-adjusted effective n when |ACF| is high.
@@ -508,9 +615,22 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     ties <- n >= 4 && (any(duplicated(m[ok])) || any(duplicated(y[ok])))
     # lag-1 ACF of each member of the pair; the larger |ACF| drives n_eff
     ac <- if (n >= 6) max(abs(acf1(m[ok])), abs(acf1(y[ok])), na.rm = TRUE) else NA_real_
+    if (use_site_bdl) {
+      # denominator = dates where BOTH analytes were sampled (finite value or a
+      # below-detection row, so NA-valued non-detects count); numerator = either
+      # member below detection on those dates
+      ba_all <- bdl_col(a)
+      both <- (is.finite(m) | bm_all) & (is.finite(y) | ba_all)
+      if (any(both)) {
+        bm <- bm_all[both]; ba <- ba_all[both]
+        pb <- mean(bm | ba); pbm <- mean(bm); pba <- mean(ba)
+      } else pb <- pbm <- pba <- NA_real_
+    } else {
+      pb <- pct_bdl(a); pbm <- pct_bdl(main); pba <- pct_bdl(a)
+    }
     tibble(code = a, display = analyte_display(a), n = n,
            pearson = pe, spearman = sp, p_pearson = pp, p_spearman = ps, ties = ties,
-           acf1 = ac, pct_below = pct_bdl(a))
+           acf1 = ac, pct_below = pb, pct_below_main = pbm, pct_below_partner = pba)
   })
   out <- bind_rows(rows)
   if (!nrow(out)) return(out)
@@ -535,7 +655,8 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
            reliable = n >= min_n & !heavy_censor,
            flag = dplyr::case_when(
              n < min_n            ~ sprintf("insufficient (n=%d)", n),
-             heavy_censor         ~ sprintf("censored (%.0f%% <DL)", 100 * pct_below),
+             heavy_censor         ~ censor_flag(pct_below, pct_below_main,
+                                                    pct_below_partner, censor_thresh),
              coef >=  0.7         ~ "strong +",
              coef <= -0.7         ~ "strong −",
              abs(coef) >= 0.4     ~ "moderate",
@@ -551,7 +672,11 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
 # If df carries collectDate, rows are time-ordered first so the lag-1 residual
 # autocorrelation is meaningful (it's nonsense on arbitrary row order).
 fit_lm <- function(df) {
-  if (is.null(df) || nrow(df) < 3) return(NULL)
+  if (is.null(df)) return(NULL)
+  # complete cases only: an NA-valued non-detect must not reach lm() (it would
+  # be dropped silently there while n below still counted it)
+  df <- df[is.finite(df$x) & is.finite(df$y), , drop = FALSE]
+  if (nrow(df) < 3) return(NULL)
   if ("collectDate" %in% names(df)) df <- df[order(df$collectDate), , drop = FALSE]
   m  <- stats::lm(y ~ x, df)
   s  <- summary(m)

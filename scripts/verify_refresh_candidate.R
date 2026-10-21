@@ -232,18 +232,25 @@ expected_search_long$implausible <- !helper_env$is_plausible(
   expected_search_long$value, expected_search_long$analyte,
   runtime_ceiling_map, site = expected_search_long$site
 )
+# n and n_below count every gated row, including blank-concentration
+# non-detects (value NA); the location statistics use finite values only. Keep
+# this in lock-step with scripts/build_search_index.R.
+finite_or_na <- function(x, f) {
+  x <- x[is.finite(x)]
+  if (length(x)) f(x) else NA_real_
+}
 expected_search_gated <- expected_search_long |>
-  dplyr::filter(!implausible, is.finite(value))
+  dplyr::filter(!implausible)
 expected_per_site <- expected_search_gated |>
   dplyr::mutate(year = as.integer(format(collectDate, "%Y"))) |>
   dplyr::group_by(analyte, site) |>
   dplyr::summarise(
     .groups = "drop",
     n = dplyr::n(),
-    mean = mean(value, na.rm = TRUE),
-    median = stats::median(value, na.rm = TRUE),
-    min = min(value, na.rm = TRUE),
-    max = max(value, na.rm = TRUE),
+    mean = finite_or_na(value, mean),
+    median = finite_or_na(value, stats::median),
+    min = finite_or_na(value, min),
+    max = finite_or_na(value, max),
     n_below = sum(belowDetection == 1, na.rm = TRUE),
     year_min = suppressWarnings(min(year, na.rm = TRUE)),
     year_max = suppressWarnings(max(year, na.rm = TRUE))
@@ -406,9 +413,16 @@ if (!has_unit_contract) {
          "(candidate %s; base %s)."
        ), candidate_bundle_sha256, baseline_bundle_sha256)
 } else {
-  need(identical(bundle$built$unit_policy, WATER_UNIT_POLICY),
+  need(scalar_character(bundle$built$unit_policy) &&
+         bundle$built$unit_policy %in% WATER_UNIT_ACCEPTED_PRODUCER_POLICIES,
        "Candidate carries an unexpected unit policy: %s.",
        show_set(bundle$built$unit_policy))
+  # v5 producer bundles carry the identity-keyed value-quarantine receipt; a
+  # v4 producer bundle must not (its runtime view applies the quarantine).
+  quarantine_problems <- water_value_quarantine_receipt_problems(bundle$built)
+  need(!length(quarantine_problems),
+       "Candidate value-quarantine receipt is invalid: %s.",
+       show_set(quarantine_problems))
   need(scalar_integer(bundle$built$n_unit_values_changed) &&
          identical(bundle$built$n_unit_values_changed, 0L),
        "Candidate unit value-change count must be the exact integer 0L.")
@@ -559,7 +573,15 @@ runtime_units <- vapply(
   function(i) unique(as.character(runtime_long$units[i])), character(1)
 )
 codebook_lines <- readLines("data/codebook.csv", warn = FALSE)
-expected_codebook_version <- if (has_unit_contract) "1.1.0" else "1.0.0"
+v5_producer <- has_unit_contract &&
+  identical(bundle$built$unit_policy, WATER_UNIT_POLICY)
+expected_codebook_version <- if (v5_producer) {
+  "1.2.0"
+} else if (has_unit_contract) {
+  "1.1.0"
+} else {
+  "1.0.0"
+}
 expected_codebook_header <- c(
   sprintf(
     paste0(
@@ -673,7 +695,14 @@ long_definition <- c(
 long_na_semantics <- c(
   site = "never NA", collectDate = "never NA", analyte = "never NA",
   analyte_label = "never NA",
-  value = "NA only if all replicates were non-numeric",
+  value = if (v5_producer) {
+    paste0(
+      "NA when every replicate was a non-detect reported with a blank ",
+      "concentration"
+    )
+  } else {
+    "NA only if all replicates were non-numeric"
+  },
   units = "never NA after canonicalization", n_reps = "never NA",
   value_sd = "NA when n_reps == 1", below_detection = "never NA",
   implausible_extreme = "never NA", lab_flag = if (has_unit_contract) {
