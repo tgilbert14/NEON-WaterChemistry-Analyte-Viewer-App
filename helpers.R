@@ -475,6 +475,10 @@ plotly_message <- function(msg, mode = "light") {
 
 safe_plotly <- function(expr, mode = "light") {
   tryCatch(force(expr), error = function(e) {
+    # req()/validate()/frozen-input cancellations are Shiny control flow, not
+    # render failures: let them through so the output simply waits, instead of
+    # painting a "snag" over a view that is only mid-update.
+    if (inherits(e, "shiny.silent.error")) stop(e)
     message("plot render error: ", conditionMessage(e))
     plotly_message("This view hit a snag. Nudge a control to reload.", mode)
   })

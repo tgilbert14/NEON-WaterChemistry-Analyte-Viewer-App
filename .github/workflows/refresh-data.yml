@@ -246,6 +246,7 @@ jobs:
           Rscript --vanilla tests/test_save_bundle_recovery.R
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
           Rscript --vanilla tests/test_app_js_handlers.R
+          Rscript --vanilla tests/test_site_change_guard.R
           Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
           if Rscript --vanilla scripts/verify_refresh_candidate.R \
                "$RUNNER_TEMP/water-baseline.rds" --require-current-unit-contarct; then
@@ -257,7 +258,7 @@ jobs:
             echo "Verifier accepted an extra positional argument."
             exit 1
           fi
-          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/water_refresh_review.R"); parse("scripts/verify_water_refresh_replay_candidate.R"); parse("scripts/verify_connect_runtime.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_connect_package_lock.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_water_refresh_review.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R"); parse("tests/test_app_js_handlers.R")'
+          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/water_refresh_review.R"); parse("scripts/verify_water_refresh_replay_candidate.R"); parse("scripts/verify_connect_runtime.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_connect_package_lock.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_water_refresh_review.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R"); parse("tests/test_app_js_handlers.R"); parse("tests/test_site_change_guard.R")'
           bash -n scripts/connect_runtime_smoke.sh scripts/post_deploy_smoke.sh
           git diff --check
 
@@ -368,6 +369,7 @@ jobs:
           Rscript --vanilla tests/test_save_bundle_recovery.R
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
           Rscript --vanilla tests/test_app_js_handlers.R
+          Rscript --vanilla tests/test_site_change_guard.R
           Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
           if Rscript --vanilla scripts/verify_refresh_candidate.R \
                "$RUNNER_TEMP/water-baseline.rds" --require-current-unit-contarct; then
