@@ -877,9 +877,12 @@ MASCOT_CRITTER <- htmltools::HTML(paste0(
 # UI
 #======================================================================
 ui <- page_fillable(
-  title = tagList(bs_icon("droplet-half"), " NEON Water Chemistry · Analyte Viewer"),
+  # title must be a plain string: page_fillable() writes it into <title>, so a
+  # tagList with an icon put raw '<svg ...' in the browser tab (audit item 21).
+  # window_title is not a page_fillable() argument and landed on <body>.
+  title = "NEON Water Chemistry · Analyte Viewer",
+  lang = "en",
   theme = aqua_theme,
-  window_title = "NEON Analyte Viewer",
   # Flow content naturally instead of filling the viewport. A fillable page collapses
   # its card bodies to ~0 height when served in an indefinite-height container (Connect
   # Cloud / iframe), which hid every chart on the deployed host. Natural flow + each
@@ -1241,6 +1244,15 @@ server <- function(input, output, session) {
   # Welcome modal is suppressed for a deep-linked / resumed visitor (they came for
   # the view, not the tour). Read once by the welcome observer below.
   auto_entered <- reactiveVal(FALSE)
+  # The picker map lives on #splash. When the startup resolver auto-enters a
+  # deep-linked or resumed site, #splash is hidden BEFORE output$map's first
+  # value reaches the client, and a leaflet widget whose first render lands in
+  # a display:none container never gets its view or layers (no markers, no
+  # tiles after "Change site"; a resize cannot repair it). So remember that the
+  # first render was hidden and re-render the map once, on the first "Change
+  # site", while the splash is visible again. map_render_nonce is the trigger.
+  map_hidden_render <- reactiveVal(FALSE)
+  map_render_nonce  <- reactiveVal(0L)
 
   ## ---- Onboarding modal (once) ----
   observeEvent(input$welcome_seen, once = TRUE, ignoreNULL = FALSE, {
@@ -1325,11 +1337,13 @@ server <- function(input, output, session) {
 
   ## ---- Site change -> analyte choices + date span ----
   observeEvent(input$site, {
-    # freeze the site-dependent inputs until the update* calls below land, so no
-    # reactive pairs the old site's analytes/dates with the new site for a frame
-    freezeReactiveValue(input, "dates")
-    freezeReactiveValue(input, "analyte_main")
-    freezeReactiveValue(input, "analyte_secondary")
+    # NO freezeReactiveValue here. Freezing analyte_main / analyte_secondary /
+    # dates cancels every reactive that reads them for this flush, and Shiny's
+    # client never resends an input whose value did not change, so when the new
+    # site keeps the same analytes nothing ever thaws them: every plot stayed
+    # blank after any site change (production regression, 2026-10-20). The
+    # stale-pair frame is already guarded: sel_pair req()s both analytes in the
+    # new site's wide frame, and the update* calls below re-run everything.
     p <- site_present(input$site)
     ch <- analyte_choices(p)
     keep_main <- if (main_a() %in% p) main_a() else pick_default_analytes(input$site)[1]
@@ -1465,6 +1479,12 @@ server <- function(input, output, session) {
     loaded(FALSE)                                  # stop persisting / advertising the view
     updateQueryString("?", mode = "replace")       # don't carry a stale deep link onto the splash
     shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
+    # first render happened behind a hidden splash (auto-entered start): render
+    # the map again now that the splash is visible (see map_hidden_render)
+    if (isTRUE(map_hidden_render())) {
+      map_hidden_render(FALSE)
+      map_render_nonce(map_render_nonce() + 1L)
+    }
     session$sendCustomMessage("kickMaps", list())
   })
 
@@ -2248,6 +2268,7 @@ server <- function(input, output, session) {
   # base map drawn ONCE (tiles + view + initial markers, isolated so changes go
   # through the proxy below instead of a full re-render)
   output$map <- leaflet::renderLeaflet({
+    map_render_nonce()   # bumped once by "Change site" after a hidden first render
     validate(need(any(is.finite(D$sites_meta$lat) & is.finite(D$sites_meta$long)),
                   "No site coordinates are available in this bundle."))
     leaflet::leaflet(options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) |>
@@ -2587,6 +2608,7 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "analyte_secondary", selected = target$sec)
     # (dates are not restored — a resumed/shared view lands on the site full span)
     auto_entered(TRUE)              # suppress the first-visit Welcome modal this load
+    map_hidden_render(TRUE)         # the picker map's first render will land hidden
     enter_site(site, tab = land_tab)
   })
 }
