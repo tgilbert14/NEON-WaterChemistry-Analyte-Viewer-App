@@ -16,3 +16,10 @@ data/neon_swc_*.rds
 
 # derived; the data dictionary is downloadable in-app
 data/analyte_coverage.csv
+
+# local secrets (.env.example is the committed template)
+.env
+*.env
+!.env.example
+.Renviron
+.Renviron.*
