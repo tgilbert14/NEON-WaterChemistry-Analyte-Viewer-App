@@ -333,8 +333,12 @@ run_verifier("Fe/Mn oracle: the pre-2017 median is at least 100 times")
 
 # Oracle (b): the committed v4 rows dropped blank-concentration non-detects
 # (Br/Cl 0.33 to 0.65 since 2022), so the same rows labelled v5 fail.
-mutate_bundle(v5_label)
-run_verifier("Halide oracle: Br or F rows fell below 0.85 of Cl rows")
+# Only a v4 fixture still lacks the non-detects; a real v5 fixture restores them
+# (tests/test_replicate_release_replay.R covers the oracle on synthetic rows).
+if (!identical(candidate_original$built$unit_policy, policy_env$WATER_UNIT_POLICY)) {
+  mutate_bundle(v5_label)
+  run_verifier("Halide oracle: Br or F rows fell below 0.85 of Cl rows")
+}
 
 # Release tags must be recounted exactly, and only known tags are accepted.
 mutate_bundle(function(x) {
@@ -342,7 +346,11 @@ mutate_bundle(function(x) {
   x$swc_long$release[[1]] <- "RELEASE-2026"
   x
 })
-run_verifier("Candidate rows carry release tags but the build has no neon_releases")
+# A producer bundle that already records neon_releases fails the recount; an
+# older bundle has no summary at all.
+run_verifier(if ("neon_releases" %in% names(candidate_original$built))
+  "Candidate neon_releases disagrees with a recount" else
+  "Candidate rows carry release tags but the build has no neon_releases")
 mutate_bundle(function(x) {
   x$swc_long$release <- rep(NA_character_, nrow(x$swc_long))
   x$swc_long$release[[1]] <- "NIGHTLY-1"

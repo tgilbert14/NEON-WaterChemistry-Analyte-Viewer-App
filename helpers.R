@@ -299,6 +299,18 @@ in_physical_range <- function(value, analyte) {
   ok[is.na(ok)] <- TRUE
   unname(ok)
 }
+# Site median that keeps blank-concentration non-detects (value NA, flagged
+# below detection) in the count by ranking them below every reported value.
+# NA when the middle of the record falls among them: the median is then below
+# the detection limit and has no number. Search, its verifier and the map share it.
+nd_median <- function(value, below) {
+  v <- ifelse(is.na(value) & below %in% 1, -Inf, value)
+  v <- v[!is.na(v)]
+  if (!length(v)) return(NA_real_)
+  m <- stats::median(v)
+  if (is.finite(m)) m else NA_real_
+}
+
 # One plain-language sentence stating the gate exactly (export headers, report).
 plausibility_rule_text <- function() {
   rng <- vapply(seq_len(nrow(PLAUSIBLE_RANGE)), function(i) {
@@ -404,23 +416,26 @@ analyte_choices <- function(present_codes) {
 }
 
 ## ---- Scientifically grounded preset comparisons (Aquatics) ----------------
+# Preset names are input values (selectInput sends them back), so they stay ASCII:
+# under a C locale (manifest.json declares locale "C") R cannot hold a non-ASCII
+# name as UTF-8, and a browser value like "a \u2194 b" would never match it.
 PRESETS <- list(
-  "Ionic strength ↔ buffering (flagship)" = c("specificConductanceField", "ANC"),
-  "Ionic strength ↔ calcium"               = c("specificConductanceField", "Ca"),
+  "Ionic strength vs buffering (flagship)" = c("specificConductanceField", "ANC"),
+  "Ionic strength vs calcium"               = c("specificConductanceField", "Ca"),
   "Inorganic vs total dissolved N"             = c("TDN", "NO3+NO2 - N"),
   "Total vs bioavailable phosphorus"           = c("TP", "Ortho - P"),
-  "DOM quantity ↔ quality (SUVA)"          = c("DOC", "UV Absorbance (254 nm)"),
-  "Carbonate system (DIC ↔ ANC)"           = c("DIC", "ANC"),
-  "Redox metals (iron ↔ manganese)"        = c("Fe", "Mn")
+  "DOM quantity vs quality (SUVA)"          = c("DOC", "UV Absorbance (254 nm)"),
+  "Carbonate system (DIC vs ANC)"           = c("DIC", "ANC"),
+  "Redox metals (iron vs manganese)"        = c("Fe", "Mn")
 )
 PRESET_REASON <- c(
-  "Ionic strength ↔ buffering (flagship)" = "Specific conductance integrates all dissolved ions; in carbonate terrain it tracks ANC tightly, the README's Sycamore Creek example.",
-  "Ionic strength ↔ calcium"               = "Conductance should rise with the dominant cation; calcium is a primary driver of ionic strength in most streams.",
+  "Ionic strength vs buffering (flagship)" = "Specific conductance integrates all dissolved ions; in carbonate terrain it tracks ANC tightly, the README's Sycamore Creek example.",
+  "Ionic strength vs calcium"               = "Conductance should rise with the dominant cation; calcium is a primary driver of ionic strength in most streams.",
   "Inorganic vs total dissolved N"             = "Nitrate+nitrite is the oxidized fraction within total dissolved N; the relationship shows how much of the N pool is inorganic.",
   "Total vs bioavailable phosphorus"           = "Orthophosphate (SRP) is the bioavailable fraction of total P; the ratio diagnoses dissolved-reactive vs particle-bound P.",
-  "DOM quantity ↔ quality (SUVA)"          = "UV absorbance per unit DOC (SUVA) indexes aromaticity / terrestrial origin of organic matter (Weishaar et al. 2003).",
-  "Carbonate system (DIC ↔ ANC)"           = "Dissolved inorganic carbon and acid neutralizing capacity are tied together by carbonate equilibria; NEON recommends estimating bicarbonate from either one.",
-  "Redox metals (iron ↔ manganese)"        = "Fe and Mn are both mobilized under low-oxygen conditions; they co-vary in groundwater-fed and wetland-influenced streams."
+  "DOM quantity vs quality (SUVA)"          = "UV absorbance per unit DOC (SUVA) indexes aromaticity / terrestrial origin of organic matter (Weishaar et al. 2003).",
+  "Carbonate system (DIC vs ANC)"           = "Dissolved inorganic carbon and acid neutralizing capacity are tied together by carbonate equilibria; NEON recommends estimating bicarbonate from either one.",
+  "Redox metals (iron vs manganese)"        = "Fe and Mn are both mobilized under low-oxygen conditions; they co-vary in groundwater-fed and wetland-influenced streams."
 )
 
 season_of <- function(d) factor(c("Winter","Spring","Summer","Fall")[(lubridate::month(d) %% 12) %/% 3 + 1],

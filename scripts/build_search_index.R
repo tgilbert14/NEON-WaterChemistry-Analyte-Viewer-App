@@ -64,7 +64,7 @@ per_site <- Lg |>
     .groups   = "drop",
     n         = dplyr::n(),
     mean      = finite_or_na(value, mean),
-    median    = finite_or_na(value, stats::median),
+    median    = nd_median(value, belowDetection),
     min       = finite_or_na(value, min),
     max       = finite_or_na(value, max),
     n_below   = sum(belowDetection == 1, na.rm = TRUE),

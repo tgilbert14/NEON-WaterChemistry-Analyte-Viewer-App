@@ -914,7 +914,14 @@ Shiny.addCustomMessageHandler('kickMaps', function(msg){
   wcCloseMapPopup();
   var kick = function(tries){
     var m = document.getElementById('map');
-    if (!m || m.clientWidth > 0) { try { window.dispatchEvent(new Event('resize')); } catch(e){} return; }
+    if (!m || m.clientWidth > 0) {
+      /* the widget's own resize() applies a render the leaflet binding kept as
+         pendingRenderData while the splash was hidden, then re-measures */
+      try { var w = window.HTMLWidgets && HTMLWidgets.find('#map');
+            if (m && w && typeof w.resize === 'function') w.resize(m.offsetWidth, m.offsetHeight); } catch(e){}
+      try { window.dispatchEvent(new Event('resize')); } catch(e){}
+      return;
+    }
     if (tries < 30 && window.requestAnimationFrame) requestAnimationFrame(function(){ kick(tries + 1); });
   };
   if (window.requestAnimationFrame) requestAnimationFrame(function(){ kick(0); });
@@ -1543,14 +1550,12 @@ server <- function(input, output, session) {
   # the view, not the tour). Read once by the welcome observer below.
   auto_entered <- reactiveVal(FALSE)
   # The picker map lives on #splash. When the startup resolver auto-enters a
-  # deep-linked or resumed site, #splash is hidden BEFORE output$map's first
-  # value reaches the client, and a leaflet widget whose first render lands in
-  # a display:none container never gets its view or layers (no markers, no
-  # tiles after "Change site"; a resize cannot repair it). So remember that the
-  # first render was hidden and re-render the map once, on the first "Change
-  # site", while the splash is visible again. map_render_nonce is the trigger.
-  map_hidden_render <- reactiveVal(FALSE)
-  map_render_nonce  <- reactiveVal(0L)
+  # deep-linked or resumed site, #splash is hidden before output$map's first value
+  # reaches the client, so the leaflet binding keeps that render (and every proxy
+  # call after it) as pendingRenderData until the widget's own resize() runs with
+  # a non-zero size. The kickMaps handler calls that resize() once the splash is
+  # visible again. Do not force a server re-render here: a second map instance
+  # races the first one's pending Leaflet events ("_leaflet_pos" page errors).
 
   ## ---- Onboarding modal (once) ----
   observeEvent(input$welcome_seen, once = TRUE, ignoreNULL = FALSE, {
@@ -1627,6 +1632,7 @@ server <- function(input, output, session) {
   observeEvent(input$preset, {
     if (nzchar(input$preset %||% "")) {
       pr <- PRESETS[[input$preset]]; pres <- site_present(input$site)
+      if (length(pr) != 2) return(invisible())   # unknown name: ignore, never error
       if (pr[1] %in% pres) updateSelectizeInput(session, "analyte_main", selected = pr[1])
       if (pr[2] %in% pres) updateSelectizeInput(session, "analyte_secondary", selected = pr[2])
     }
@@ -1786,12 +1792,7 @@ server <- function(input, output, session) {
     # a new history entry for the splash, so browser Back returns to the site
     updateQueryString("?", mode = "push")
     shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
-    # first render happened behind a hidden splash (auto-entered start): render
-    # the map again now that the splash is visible (see map_hidden_render)
-    if (isTRUE(map_hidden_render())) {
-      map_hidden_render(FALSE)
-      map_render_nonce(map_render_nonce() + 1L)
-    }
+    # kickMaps applies a render that landed while the splash was hidden
     session$sendCustomMessage("kickMaps", list())
   })
 
@@ -1970,9 +1971,12 @@ server <- function(input, output, session) {
         v <- if (is.finite(r$value[j])) paste0(signif(r$value[j], 4), if (nzchar(u)) paste0(" ", u) else "")
              else "no value reported"
         nr <- r$n_reps[j]
-        reps <- if (is.finite(nr) && nr > 1) paste0(" · mean of ", nr, " replicates") else ""
+        part <- "partialBelow" %in% names(r) && r$partialBelow[j] %in% 1
+        reps <- if (is.finite(nr) && nr > 1)
+          paste0(" · ", if (part) "mean of the detected replicates, of " else "mean of ", nr,
+                 " replicates") else ""
         st <- if (r$belowDetection[j] %in% 1) " · below detection"
-              else if ("partialBelow" %in% names(r) && r$partialBelow[j] %in% 1) " · partly below detection"
+              else if (part) " · partly below detection"
               else ""
         paste0(v, reps, st)
       }, character(1))
@@ -2659,8 +2663,7 @@ server <- function(input, output, session) {
     D$swc_long |>
       filter(analyte == ana, collectDate >= d[1], collectDate <= d[2], !implausible) |>
       group_by(site) |>
-      summarise(med = { v <- value[is.finite(value)]
-                        if (length(v)) stats::median(v, na.rm = TRUE) else NA_real_ },
+      summarise(med = nd_median(value, belowDetection),
                 nobs = dplyr::n(), n_below = sum(belowDetection == 1, na.rm = TRUE),
                 .groups = "drop") |>
       mutate(share_below = ifelse(nobs > 0, n_below / nobs, NA_real_),
@@ -2758,7 +2761,6 @@ server <- function(input, output, session) {
   # base map drawn ONCE (tiles + view + initial markers, isolated so changes go
   # through the proxy below instead of a full re-render)
   output$map <- leaflet::renderLeaflet({
-    map_render_nonce()   # bumped once by "Change site" after a hidden first render
     validate(need(any(is.finite(D$sites_meta$lat) & is.finite(D$sites_meta$long)),
                   "No site coordinates are available in this bundle."))
     leaflet::leaflet(options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) |>
@@ -2834,10 +2836,6 @@ server <- function(input, output, session) {
       if (!isTRUE(loaded())) return(invisible())
       loaded(FALSE)
       shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
-      if (isTRUE(map_hidden_render())) {        # same re-render rule as "Change site"
-        map_hidden_render(FALSE)
-        map_render_nonce(map_render_nonce() + 1L)
-      }
       session$sendCustomMessage("kickMaps", list())
       return(invisible())
     }
@@ -2960,7 +2958,7 @@ server <- function(input, output, session) {
   # Factored into go_flagship() so the splash "Try the flagship example" button
   # AND the in-app "Reset to flagship example" link (context band) share one path.
   go_flagship <- function() {
-    flag_name <- names(PRESETS)[1]                 # "Ionic strength <-> buffering (flagship)"
+    flag_name <- names(PRESETS)[1]                 # "Ionic strength vs buffering (flagship)"
     updateSelectizeInput(session, "site", selected = DEF_SITE)
     updateSelectInput(session, "preset", selected = flag_name)
     pr <- PRESETS[[flag_name]]
@@ -3171,7 +3169,6 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "analyte_secondary", selected = target$sec)
     # (dates are not restored — a resumed/shared view lands on the site full span)
     auto_entered(TRUE)              # suppress the first-visit Welcome modal this load
-    map_hidden_render(TRUE)         # the picker map's first render will land hidden
     # a deep link already shows this site in the URL: no second history entry
     enter_site(site, tab = land_tab, push = is.null(q$site))
   })
