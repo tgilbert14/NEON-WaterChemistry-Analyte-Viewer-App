@@ -1,85 +1,80 @@
-# Deploy & migration runbook
+# Deploy runbook
 
-The app currently has a stale `rsconnect/shinyapps.io/` record. **shinyapps.io is being
-retired (end of 2026)** — do not invest there. This is the plan to move it, mirroring the
-Big 12 Girth Index migration (hosted app + a GitHub-Pages landing/redirect with an og card
-and a cold-start pre-warm).
-
-## The shape of the move
+The app is live on Posit Connect Cloud:
+<https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/>.
+The landing cover is GitHub Pages, served from `docs/`:
+<https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/>.
 
 ```
-  Posit Connect Cloud (or shinylive)        GitHub Pages  (docs/)
-  └─ runs the six-file runtime allowlist     └─ landing page → "Launch" → app URL
-                                               + og:image social card
-                                               + fetch() pre-warm ping (cold-start fix)
+  Posit Connect Cloud                         GitHub Pages (docs/)
+  └─ runs the six-file runtime allowlist      └─ landing cover, og:image card,
+     from main, republished on every push        one link to the app
 ```
 
-The landing page already exists at [`docs/index.html`](docs/index.html). After you deploy the
-app, set the app URL in **one place** (the `APP_URL` constant near the top of that file) and
-publish Pages.
+## Connect Cloud
 
----
-
-## Option A — Posit Connect Cloud (recommended first move; works today)
-
-Connect Cloud deploys an R app straight from a public GitHub repo using `manifest.json`.
-The explicit runtime contract is exactly `app.R`, `helpers.R`,
-`scripts/water_unit_contract.R`, `data/codebook.csv`, `data/neon_swc.rds`, and
-`data/search_index.rds`—no recovery backups, cache, `legacy/`, or download-only packages.
-
-1. Sign in at <https://connect.posit.cloud> with GitHub.
-2. **New Content → Shiny → from Git**, pick `tgilbert14/NEON-WaterChemistry-Analyte-Viewer-App`,
-   branch `main`, primary doc `app.R`.
-3. It reads `manifest.json`, restores packages, and serves. Auto-republishes on every push.
-4. Copy the published URL → set `APP_URL` in `docs/index.html`.
+Connect Cloud deploys from the public GitHub repo (`main`, primary file `app.R`) using
+`manifest.json`, and republishes on every push to `main`. The runtime contract is exactly
+`app.R`, `helpers.R`, `scripts/water_unit_contract.R`, `data/codebook.csv`,
+`data/neon_swc.rds` and `data/search_index.rds`: no recovery backups, cache, `legacy/`,
+or download-only packages.
 
 Refresh the manifest whenever a runtime file changes:
+
 ```sh
 Rscript --vanilla scripts/write_manifest.R
 ```
 
-Do not hand-write an `appFiles` vector: the script and its regression share the
-single six-file allowlist and enforce pinned package sources/checksums. Ordinary
-runtime/data rebuilds preserve the reviewed 103-package graph in
-`config/connect-manifest-packages-v1.json`; a dependency change requires a
-separately reviewed lock update. Pull requests restore that exact graph on Ubuntu
-22.04/R 4.5.2, cold-source the six files, start Shiny, and require the Water-specific
-HTTP readiness marker. After a main push, `post-deploy.yml` independently rejects
-Posit host error pages and opens/updates a production-health issue if needed.
+Do not hand-write an `appFiles` vector: the script and its regression share the single
+six-file allowlist and enforce pinned package sources and checksums. Ordinary runtime and
+data rebuilds keep the reviewed 103-package graph in
+`config/connect-manifest-packages-v1.json`; a dependency change needs a separately reviewed
+lock update.
 
-**Cold start:** the free tier sleeps. The landing page's pre-warm `fetch(APP_URL)` on load wakes
-it while the visitor reads, so the app is usually warm by the time they click Launch.
+Pull requests restore that exact graph on Ubuntu 22.04 with R 4.5.2, cold-boot the six files,
+require the readiness marker, page title and `lang="en"` over HTTP, and drive the local app
+in Chromium (`scripts/connect_runtime_smoke.sh --browser`, which runs
+`scripts/browser_smoke.mjs`). After a push to `main`, `post-deploy.yml` waits for Connect
+Cloud, rejects Posit host error pages, runs the same browser smoke against the live URL, and
+opens or updates a production-health issue on failure.
 
-## Option B — Shinylive / WebAssembly (best long-term: static, zero server, infinite scale)
+The free tier sleeps between visits, so the first request after a quiet spell takes a few
+seconds; the cover says so under its button.
 
-Because the app has **no live NEON or data-download dependency** (read-only bundled `.rds`), it is
-an ideal shinylive candidate — it could be served entirely from GitHub Pages alongside the
-landing page. **Gate: every package needs a wasm binary.** Check each at
-<https://repo.r-wasm.org/> before committing: `shiny, bslib, bsicons, plotly, DT, ggplot2,
-dplyr, tidyr, readr, lubridate, shinycssloaders`. These are mainstream (r-universe builds wasm
-for ~all CRAN), but **verify per-package — one missing binary kills the static build**. There is
-no `forecast`/`mlr` dependency to block it (STL is base `stats`).
+### Response headers
 
-```r
-# install.packages("shinylive")
-shinylive::export(".", "docs/app")   # emits a static site under docs/app/
-# then APP_URL = "app/"  (relative) and you have ONE GitHub-Pages deploy: landing + app
-```
+Connect Cloud owns the HTTP response headers. The app sets no Content-Security-Policy or
+HSTS header of its own and cannot. If those headers are ever required, the route is a custom
+domain behind a proxy that adds them.
 
-If the wasm check is clean, this is the cheapest, fastest home and removes Connect Cloud's cold
-start entirely. If any package fails the check, stay on Connect Cloud (Option A).
+## Environment variables
 
----
+| Variable | Where it is set | Read by | When unset |
+|----------|-----------------|---------|------------|
+| `CARTO_BASEMAP_KEY` | Connect Cloud content variable (optional) | `app.R`, the map basemap | The map uses the Esri grey canvas basemap; a value that does not look like a CARTO key is treated as unset. |
+| `NEON_TOKEN` | GitHub Actions repository secret; `.Renviron` locally | `scripts/precompute_neon_data.R`, the workflow token probe | In CI the token probe and the fetch stop with a named error. Locally the fetch prints a note; NEON refuses anonymous data downloads. |
+| `SOURCE_SHA` | Provided by the refresh workflow | `scripts/precompute_neon_data.R`, the review validators | Required (a 40-character commit id) whenever `WATER_REFRESH_REVIEW_DIR` is set; the review writer stops without it. |
+| `WATER_REFRESH_REVIEW_DIR` | Provided by the refresh workflow | `scripts/precompute_neon_data.R`, `scripts/water_refresh_review.R` | No replay or unit-review evidence is written; a local refresh still builds the bundle. |
+| `CI` | Provided by GitHub Actions (`true`) | `scripts/precompute_neon_data.R` | Treated as a local run: a missing `NEON_TOKEN` is a note, not an error. |
+| `GITHUB_STEP_SUMMARY` | Provided by GitHub Actions | `scripts/refresh_data.R` | The run summary is printed only to the log. |
 
-## Publish the landing page (GitHub Pages)
+The smoke scripts also read optional tuning variables (`SMOKE_*`, `WATER_CONNECT_SMOKE_PORT`,
+`BROWSER_SMOKE_URL`, `BROWSER_SMOKE_TIMEOUT_MS`); each has a default in the script.
+
+## Data refresh
+
+`refresh-data.yml` proposes a monthly refresh on a fixed review branch,
+`automation/water-chemistry-data-refresh`; no workflow pushes `main`. When a validated
+candidate changes the data, the workflow opens or comments on the issue "Water Chemistry
+refresh ready for review" with the branch, head commit, date range and observation delta. A
+weekly reminder comments when the branch has waited more than 14 days. Merging the PR is the
+deploy; the next post-deploy run closes the issue. A weekly NEON watch compares the product's
+change log and releases with `config/neon-product-watch.json` and opens one issue listing
+anything not yet reviewed.
+
+## Landing cover (GitHub Pages)
 
 1. Repo **Settings → Pages → Source: Deploy from a branch → `main` / `/docs`**.
-2. Page goes live at `https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/`
-   (or wire a custom subdomain like the Girth Index — add a `CNAME` file in `docs/` and a DNS
-   CNAME with the cloud proxy turned off for validation).
-3. Keep the committed `docs/og-image.png` (1200×630) in sync with substantive cover changes.
-
-## Retire the old target
-
-Once Connect Cloud (or shinylive) is live and the landing page points at it, delete the
-`rsconnect/shinyapps.io/` tree (or leave it — it's inert; `deployApp()` is no longer used).
+2. Keep the committed `docs/og-image.png` (1200×630) in sync with substantive cover changes.
+3. `node scripts/check_cover.mjs` (run in CI) checks the cover's copy, title, language and its
+   single link to the NEON Cross-Product Response Atlas.

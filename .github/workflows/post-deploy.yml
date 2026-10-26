@@ -41,6 +41,15 @@ jobs:
             "Connect Cloud app=https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/" \
             "GitHub Pages landing=https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/"
 
+      - name: Install the pinned browser smoke
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Drive a live Shiny session in a browser
+        run: node scripts/browser_smoke.mjs "https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/"
+
       - name: Open or update the production outage issue
         if: failure()
         env:
@@ -68,4 +77,36 @@ jobs:
           if [ -n "$number" ]; then
             run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             gh issue close "$number" --comment "Semantic production health recovered at ${GITHUB_SHA}. Evidence: ${run_url}"
+          fi
+
+      - name: Close the refresh-ready issue once main holds the review branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: automation/water-chemistry-data-refresh
+        run: |
+          # Bookkeeping only: an API failure here is a warning, never a red deploy check.
+          set -uo pipefail
+          title="Water Chemistry refresh ready for review"
+          if ! number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title --limit 50 \
+                | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty'); then
+            echo "::warning title=Refresh-ready issue not checked::Could not list issues."
+            exit 0
+          fi
+          [ -n "$number" ] || exit 0
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          err=$(mktemp)
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BRANCH...$GITHUB_SHA" --jq '.status' 2>"$err"); then
+            if [ "$status" = "identical" ] || [ "$status" = "ahead" ]; then
+              gh issue close "$number" --comment "Main at ${GITHUB_SHA} contains \`$BRANCH\` and passed production health. Evidence: ${run_url}" \
+                || echo "::warning title=Refresh-ready issue not closed::Could not close issue #$number."
+            else
+              echo "Refresh-ready issue #$number stays open: $BRANCH is $status relative to $GITHUB_SHA."
+            fi
+          elif grep -q "Not Found" "$err"; then
+            gh issue close "$number" --comment "The \`$BRANCH\` branch no longer exists, so no refresh is waiting. Main at ${GITHUB_SHA} passed production health. Evidence: ${run_url}" \
+              || echo "::warning title=Refresh-ready issue not closed::Could not close issue #$number."
+          else
+            echo "::warning title=Refresh-ready issue not checked::Could not compare $BRANCH with $GITHUB_SHA: $(head -c 300 "$err")"
           fi

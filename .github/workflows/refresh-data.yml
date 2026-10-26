@@ -146,8 +146,14 @@ jobs:
           install-pandoc: "false"
           install-quarto: "false"
 
-      - name: Cold-boot the exact six-file Connect runtime
-        run: bash scripts/connect_runtime_smoke.sh --require-exact-packages
+      - name: Install the pinned browser smoke
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Cold-boot the exact six-file Connect runtime and drive it in a browser
+        run: bash scripts/connect_runtime_smoke.sh --require-exact-packages --browser
 
   build_candidate:
     needs: gate
@@ -228,7 +234,7 @@ jobs:
           name: water-refresh-review-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/water-refresh-review
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
       - name: Rebuild deterministic derived bytes
         run: |
@@ -239,14 +245,12 @@ jobs:
       - name: Verify the producer candidate
         run: |
           set -euo pipefail
-          Rscript --vanilla tests/test_runtime_manifest_files.R
-          Rscript --vanilla tests/test_connect_package_lock.R
-          Rscript --vanilla tests/test_unit_canonicalization.R
-          Rscript --vanilla tests/test_water_refresh_review.R
-          Rscript --vanilla tests/test_save_bundle_recovery.R
-          Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
-          Rscript --vanilla tests/test_app_js_handlers.R
-          Rscript --vanilla tests/test_site_change_guard.R
+          # Every test and every tracked R file, so a new one is never left out.
+          for t in tests/*.R; do
+            echo "::group::$t"
+            Rscript --vanilla "$t"
+            echo "::endgroup::"
+          done
           Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
           if Rscript --vanilla scripts/verify_refresh_candidate.R \
                "$RUNNER_TEMP/water-baseline.rds" --require-current-unit-contarct; then
@@ -258,7 +262,8 @@ jobs:
             echo "Verifier accepted an extra positional argument."
             exit 1
           fi
-          Rscript --vanilla -e 'parse("app.R"); parse("helpers.R"); parse("scripts/refresh_data.R"); parse("scripts/precompute_neon_data.R"); parse("scripts/build_rds_from_cache.R"); parse("scripts/build_swc_bundle.R"); parse("scripts/build_search_index.R"); parse("scripts/runtime_manifest_files.R"); parse("scripts/water_unit_contract.R"); parse("scripts/water_refresh_review.R"); parse("scripts/verify_water_refresh_replay_candidate.R"); parse("scripts/verify_connect_runtime.R"); parse("scripts/verify_refresh_candidate.R"); parse("tests/test_runtime_manifest_files.R"); parse("tests/test_connect_package_lock.R"); parse("tests/test_save_bundle_recovery.R"); parse("tests/test_unit_canonicalization.R"); parse("tests/test_water_refresh_review.R"); parse("tests/test_refresh_candidate_verifier_adversarial.R"); parse("tests/test_app_js_handlers.R"); parse("tests/test_site_change_guard.R")'
+          # shellcheck disable=SC2016 # the single-quoted program is R, not shell
+          Rscript --vanilla -e 'fs <- system2("git", c("ls-files", "*.R"), stdout = TRUE); stopifnot(length(fs) > 0); for (f in fs) invisible(parse(f)); cat("Parsed", length(fs), "R files.\n")'
           bash -n scripts/connect_runtime_smoke.sh scripts/post_deploy_smoke.sh
           git diff --check
 
@@ -276,7 +281,7 @@ jobs:
           name: water-refresh-producer-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/water-refresh.tgz
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
   validate_candidate:
     needs: [gate, build_candidate]
@@ -362,6 +367,8 @@ jobs:
       - name: Independently verify exact candidate bytes
         run: |
           set -euo pipefail
+          # Pipeline-only tests: this job installs only jsonlite, digest, dplyr,
+          # tidyr and tibble, so tests that source helpers.R run in build_candidate.
           Rscript --vanilla tests/test_runtime_manifest_files.R
           Rscript --vanilla tests/test_connect_package_lock.R
           Rscript --vanilla tests/test_unit_canonicalization.R
@@ -370,6 +377,10 @@ jobs:
           Rscript --vanilla tests/test_refresh_candidate_verifier_adversarial.R
           Rscript --vanilla tests/test_app_js_handlers.R
           Rscript --vanilla tests/test_site_change_guard.R
+          Rscript --vanilla tests/test_value_quarantine.R
+          Rscript --vanilla tests/test_precompute_fetch_contract.R
+          Rscript --vanilla tests/test_replicate_release_replay.R
+          Rscript --vanilla tests/test_neon_product_watch.R
           Rscript --vanilla scripts/verify_refresh_candidate.R "$RUNNER_TEMP/water-baseline.rds"
           if Rscript --vanilla scripts/verify_refresh_candidate.R \
                "$RUNNER_TEMP/water-baseline.rds" --require-current-unit-contarct; then
@@ -400,7 +411,7 @@ jobs:
           name: water-refresh-validated-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/water-refresh-validated.tgz
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
       - name: Require committed PR-derived bytes to equal the validated rebuild
         if: ${{ github.event_name == 'pull_request' }}
@@ -429,6 +440,16 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      review_branch: ${{ steps.publish.outputs.review_branch }}
+      review_head: ${{ steps.publish.outputs.review_head }}
+      data_changed: ${{ steps.publish.outputs.data_changed }}
+      provenance_only: ${{ steps.publish.outputs.provenance_only }}
+      n_obs_before: ${{ steps.publish.outputs.n_obs_before }}
+      n_obs_after: ${{ steps.publish.outputs.n_obs_after }}
+      data_through_before: ${{ steps.publish.outputs.data_through_before }}
+      data_through_after: ${{ steps.publish.outputs.data_through_after }}
     steps:
       - name: Checkout the validated source revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -442,20 +463,43 @@ jobs:
           name: water-refresh-validated-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/validated-candidate
 
+      - name: Set up pinned R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: "4.5.2"
+          use-public-rspm: false
+
       - name: Publish or update the review branch
+        id: publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          branch="automation/water-chemistry-data-refresh"
+          echo "review_branch=$branch" >> "$GITHUB_OUTPUT"
           git fetch --no-tags origin main
           if ! git merge-base --is-ancestor origin/main "$SOURCE_SHA"; then
             echo "Producer revision does not contain current main; refusing stale publication."
             exit 1
           fi
           tar -xzf "$RUNNER_TEMP/validated-candidate/water-refresh-validated.tgz"
+          git show origin/main:data/neon_swc.rds > "$RUNNER_TEMP/main-bundle.rds"
+          # Compare the validated bundle with main's: identical swc_long means the
+          # candidate only moves provenance or derived bytes, not the data.
+          # shellcheck disable=SC2016 # the single-quoted program is R, not shell
+          MAIN_RDS="$RUNNER_TEMP/main-bundle.rds" Rscript --vanilla -e 'a <- readRDS(Sys.getenv("MAIN_RDS")); b <- readRDS("data/neon_swc.rds"); thru <- function(x) { v <- x$built$data_through; if (is.null(v) || is.na(v)) v <- as.character(max(x$swc_long$collectDate)); v }; cat(sprintf("data_changed=%s\nn_obs_before=%d\nn_obs_after=%d\ndata_through_before=%s\ndata_through_after=%s\n", tolower(!identical(a$swc_long, b$swc_long)), nrow(a$swc_long), nrow(b$swc_long), thru(a), thru(b)))' > "$RUNNER_TEMP/bundle-change.txt"
+          tee -a "$GITHUB_OUTPUT" < "$RUNNER_TEMP/bundle-change.txt"
+          data_changed=$(sed -n 's/^data_changed=//p' "$RUNNER_TEMP/bundle-change.txt")
           if git diff --quiet -- data/neon_swc.rds data/search_index.rds data/codebook.csv manifest.json; then
-            echo "No validated data change; no review branch created."
+            echo "No validated data change; no review branch created." | tee -a "$GITHUB_STEP_SUMMARY"
+            { echo "published=false"; echo "provenance_only=false"; } >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          if [[ "$data_changed" == "false" ]]; then
+            echo "provenance_only=true" >> "$GITHUB_OUTPUT"
+            echo "Candidate is provenance only, no data change: swc_long equals main's; other published bytes differ." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "provenance_only=false" >> "$GITHUB_OUTPUT"
           fi
           unexpected=$(git diff --name-only | grep -Ev '^(data/neon_swc[.]rds|data/search_index[.]rds|data/codebook[.]csv|manifest[.]json)$' || true)
           if [ -n "$unexpected" ]; then
@@ -464,8 +508,10 @@ jobs:
             exit 1
           fi
 
-          branch="automation/water-chemistry-data-refresh"
           remote_head=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
+          if [ -n "$remote_head" ]; then
+            echo "::warning title=Review branch candidate replaced::$branch already held $remote_head; this run replaces that waiting candidate."
+          fi
           git switch -C "$branch"
           git config user.name "neon-data-bot"
           git config user.email "neon-data-bot@users.noreply.github.com"
@@ -482,7 +528,7 @@ jobs:
             git push origin "$branch:refs/heads/$branch"
           fi
           pushed_commit=""
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             pushed_commit=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
             [[ "$pushed_commit" == "$published_commit" ]] && break
             sleep 2
@@ -491,6 +537,7 @@ jobs:
             echo "Published branch does not resolve to the validated candidate commit."
             exit 1
           fi
+          { echo "published=true"; echo "review_head=$published_commit"; } >> "$GITHUB_OUTPUT"
 
           pr_count=$(gh pr list --head "$branch" --base main --state open --json url --jq 'length')
           if (( pr_count > 1 )); then
@@ -511,7 +558,7 @@ jobs:
           fi
 
           pr_record=""
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             pr_record=$(gh pr list --head "$branch" --base main --state open --json url,baseRefName,headRefName,headRefOid --jq 'if length == 1 then .[0] | [.url,.baseRefName,.headRefName,.headRefOid] | @tsv else "" end')
             [[ "$pr_record" == *$'\t'"$published_commit" ]] && break
             sleep 2
@@ -523,3 +570,193 @@ jobs:
           fi
           gh pr comment "$pr_url" --body "Updated from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. A repository write user must approve and verify green checks on exact head $published_commit before merge."
           echo "::notice title=Approve exact-head PR checks::Existing PR updated to $published_commit; do not merge until its exact-head checks are green."
+
+  notify_review:
+    needs: publish_candidate
+    if: needs.publish_candidate.outputs.published == 'true' && needs.publish_candidate.outputs.provenance_only != 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the refresh-ready issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ needs.publish_candidate.outputs.review_branch }}
+          HEAD_SHA: ${{ needs.publish_candidate.outputs.review_head }}
+          N_BEFORE: ${{ needs.publish_candidate.outputs.n_obs_before }}
+          N_AFTER: ${{ needs.publish_candidate.outputs.n_obs_after }}
+          THRU_BEFORE: ${{ needs.publish_candidate.outputs.data_through_before }}
+          THRU_AFTER: ${{ needs.publish_candidate.outputs.data_through_after }}
+        run: |
+          # A person reviews and merges the branch; this job only tells them. A
+          # GitHub API hiccup here is a warning, never a failed refresh.
+          set -uo pipefail
+          title="Water Chemistry refresh ready for review"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          compare_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
+          delta=$(( N_AFTER - N_BEFORE ))
+          body=$(printf '%s\n' \
+            "A validated refresh is on the review branch." \
+            "" \
+            "- Branch: \`$BRANCH\`" \
+            "- Head: $HEAD_SHA" \
+            "- Data through: $THRU_BEFORE to $THRU_AFTER" \
+            "- Observations: $N_BEFORE to $N_AFTER ($(printf '%+d' "$delta"))" \
+            "- Compare and open the PR: $compare_url" \
+            "- Run: $run_url" \
+            "" \
+            "Merging the PR into main is the deploy. Do not merge until the PR's exact-head checks are green.")
+          if ! number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title --limit 50 \
+                | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty'); then
+            echo "::warning title=Refresh-ready issue not updated::Could not list issues; the review branch $BRANCH at $HEAD_SHA still needs a reviewer."
+            exit 0
+          fi
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body" || echo "::warning title=Refresh-ready issue not updated::Could not comment on issue #$number."
+          else
+            gh issue create --title "$title" --body "$body" || echo "::warning title=Refresh-ready issue not opened::Could not open the refresh-ready issue."
+          fi
+          echo "Refresh-ready issue: ${number:-new}; $BRANCH at $HEAD_SHA." >> "$GITHUB_STEP_SUMMARY"
+
+  review_reminder:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Remind about a review branch waiting more than 14 days
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: automation/water-chemistry-data-refresh
+          MAX_AGE_DAYS: "14"
+        run: |
+          # Runs on every weekly schedule tick, outside the calendar gate, so a
+          # candidate nobody merged keeps surfacing. Never fails the run.
+          set -uo pipefail
+          title="Water Chemistry refresh ready for review"
+          err=$(mktemp)
+          if ! cmp=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$BRANCH" 2>"$err"); then
+            if grep -q "Not Found" "$err"; then
+              echo "Review reminder: no $BRANCH branch, nothing waiting." | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning title=Review reminder skipped::Could not compare main with $BRANCH: $(head -c 300 "$err")"
+            fi
+            exit 0
+          fi
+          ahead=$(jq -r '.ahead_by' <<< "$cmp")
+          if ! [ "$ahead" -gt 0 ] 2>/dev/null; then
+            echo "Review reminder: $BRANCH is not ahead of main." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          head_sha=$(jq -r '.commits[-1].sha' <<< "$cmp")
+          head_date=$(jq -r '.commits[-1].commit.committer.date' <<< "$cmp")
+          age_days=$(( ($(date -u +%s) - $(date -u -d "$head_date" +%s)) / 86400 ))
+          if (( age_days <= MAX_AGE_DAYS )); then
+            echo "Review reminder: $BRANCH head $head_sha is $age_days days old, within $MAX_AGE_DAYS." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          compare_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
+          body="Reminder: \`$BRANCH\` is $ahead commit(s) ahead of main and its head $head_sha is $age_days days old. Review and merge, or close it: $compare_url"
+          if ! number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title --limit 50 \
+                | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty'); then
+            echo "::warning title=Review reminder not posted::Could not list issues; $BRANCH has waited $age_days days."
+            exit 0
+          fi
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body" || echo "::warning title=Review reminder not posted::Could not comment on issue #$number."
+          else
+            gh issue create --title "$title" --body "$body" || echo "::warning title=Review reminder not posted::Could not open the refresh-ready issue."
+          fi
+          echo "Review reminder posted: $BRANCH waited $age_days days." | tee -a "$GITHUB_STEP_SUMMARY"
+
+  neon_watch:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the reviewed watch list
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Compare NEON's change log and releases with the reviewed list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PRODUCT_URL: https://data.neonscience.org/api/v0/products/DP1.20093.001
+          WATCH: config/neon-product-watch.json
+        run: |
+          # Product metadata is public, so this request carries no token. A network
+          # or API failure is a warning: the watch never fails the run.
+          set -uo pipefail
+          title="NEON change log: Water Chemistry entries to review"
+          body_file=$(mktemp)
+          product=$(mktemp)
+          code=$(curl -sS --retry 3 --retry-all-errors --max-time 60 -o "$product" -w '%{http_code}' "$PRODUCT_URL") || code=000
+          if [ "$code" != "200" ] || ! jq -e '.data.changeLogs and .data.releases' "$product" >/dev/null 2>&1; then
+            echo "::warning title=NEON watch skipped::HTTP $code from $PRODUCT_URL; the change log was not checked this week."
+            echo "NEON watch: HTTP $code from $PRODUCT_URL, not checked." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          new_ids=$(jq -r --slurpfile w "$WATCH" \
+            '($w[0].changelog | map(.id)) as $seen
+             | [.data.changeLogs[] | select((.id | tostring) as $i | $seen | index($i) | not)]
+             | length' "$product")
+          new_releases=$(jq -r --slurpfile w "$WATCH" \
+            '($w[0].releases | map(.release)) as $known
+             | [.data.releases[].release | select(. as $r | $known | index($r) | not)]
+             | join(" ")' "$product")
+          if [ "$new_ids" = "0" ] && [ -z "$new_releases" ]; then
+            echo "NEON watch: every change-log entry and release of DP1.20093.001 is in $WATCH." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "NEON's DP1.20093.001 metadata lists entries that $WATCH has not reviewed."
+            echo
+            if [ "$new_ids" != "0" ]; then
+              echo "### Change-log entries ($new_ids)"
+              jq -r --slurpfile w "$WATCH" \
+                '($w[0].changelog | map(.id)) as $seen
+                 | .data.changeLogs[] | select((.id | tostring) as $i | $seen | index($i) | not)
+                 | "- **\(.id)** · issued \((.issueDate // "") | .[0:10]) · \(.locationAffected // "location not given")\n  \((.issue // "") | gsub("[\r\n]+"; " "))"' "$product"
+              echo
+            fi
+            if [ -n "$new_releases" ]; then
+              echo "### Releases not in the watch list"
+              for r in $new_releases; do echo "- $r"; done
+              echo
+              echo "A new release also needs its DOI in helpers.R NEON_RELEASE_DOI. RELEASE-2027 or later also trips the producer's Fe/Mn value-quarantine stop (scripts/water_unit_contract.R): the next refresh fails closed until the quarantine is reviewed against the corrected NEON values."
+              echo
+            fi
+            echo "Review each entry, then add it to $WATCH with a disposition. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$body_file"
+          cat "$body_file" >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=NEON change log has entries to review::$new_ids change-log id(s) and releases [${new_releases}] are not in $WATCH."
+          # One signature per distinct set of unreviewed entries, so the weekly run
+          # comments again only when the set changes.
+          sig="neon-watch: $(jq -r --slurpfile w "$WATCH" \
+            '($w[0].changelog | map(.id)) as $seen | ($w[0].releases | map(.release)) as $known
+             | ([.data.changeLogs[].id | tostring | select(. as $i | $seen | index($i) | not)]
+                + [.data.releases[].release | select(. as $r | $known | index($r) | not)]) | sort | join(",")' "$product")"
+          echo "<!-- $sig -->" >> "$body_file"
+          if ! number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title --limit 50 \
+                | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty'); then
+            echo "::warning title=NEON watch issue not updated::Could not list issues."
+            exit 0
+          fi
+          if [ -n "$number" ] && gh issue view "$number" --json body,comments --jq '[.body, .comments[].body] | join("\n")' 2>/dev/null | grep -Fq "<!-- $sig -->"; then
+            echo "NEON watch: issue #$number already lists this set." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$number" ]; then
+            gh issue comment "$number" --body-file "$body_file" || echo "::warning title=NEON watch issue not updated::Could not comment on issue #$number."
+          else
+            gh issue create --title "$title" --body-file "$body_file" || echo "::warning title=NEON watch issue not opened::Could not open the issue."
+          fi

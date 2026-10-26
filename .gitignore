@@ -20,6 +20,15 @@ data/analyte_coverage.csv
 # local secrets (.env.example is the committed template)
 .env
 *.env
+.env.*
 !.env.example
 .Renviron
 .Renviron.*
+*.Renviron
+local.settings.json
+
+# producer receipt written next to the bundle during a local precompute
+data/precompute_fetch_receipt.json
+
+# browser smoke dependencies (package-lock.json is committed)
+node_modules/

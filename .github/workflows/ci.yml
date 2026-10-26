@@ -1,0 +1,111 @@
+name: CI
+
+# Fast checks on every PR and main push. The job names `static` and `r-tests`
+# are stable so a branch ruleset can require them.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  RENV_CONFIG_REPOS_OVERRIDE: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  ACTIONLINT_VERSION: "1.7.12"
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+
+jobs:
+  static:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install actionlint from its checksummed release
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"
+          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/actionlint" actionlint
+          echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
+
+      - name: Lint workflows
+        run: actionlint -color
+
+      - name: Lint shell scripts
+        run: shellcheck scripts/*.sh
+
+      - name: Check the landing cover
+        run: node scripts/check_cover.mjs
+
+      - name: Check the browser smoke parses and the Playwright pin holds
+        run: |
+          set -euo pipefail
+          for f in scripts/*.mjs; do node --check "$f"; done
+          test "$(jq -r '.devDependencies.playwright' package.json)" = "1.55.1"
+          test "$(jq -r '.packages["node_modules/playwright"].version' package-lock.json)" = "1.55.1"
+
+  r-tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up pinned R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: "4.5.2"
+          use-public-rspm: false
+
+      - name: Install the test dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          packages: jsonlite, digest, dplyr, tidyr, tibble
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: water-ci-tests-v1
+          install-pandoc: "false"
+          install-quarto: "false"
+
+      - name: Parse every R file
+        run: |
+          set -euo pipefail
+          Rscript --vanilla -e 'fs <- system2("git", c("ls-files", "*.R"), stdout = TRUE); stopifnot(length(fs) > 0); for (f in fs) invisible(parse(f)); cat("Parsed", length(fs), "R files.\n")'
+
+      - name: Run every test
+        run: |
+          set -euo pipefail
+          failed=0
+          for t in tests/*.R; do
+            if Rscript --vanilla "$t"; then
+              echo "PASS $t"
+            else
+              echo "::error file=$t::test failed"
+              failed=1
+            fi
+          done
+          exit "$failed"

@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>NEON Water Chemistry · Desert Data Labs</title>
   <meta name="description"
-    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers, and streams — pick a site, pick an analyte like nitrogen or salt, and watch it change through the seasons. Real NEON data." />
+    content="What's in the water? Nitrogen, salts, carbon and more, measured at NEON's 34 lakes, rivers and streams through the seasons." />
   <meta name="theme-color" content="#071a22" />
   <link rel="canonical" href="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
   <link rel="icon"
@@ -16,7 +16,7 @@
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" />
   <meta property="og:title" content="NEON Water Chemistry · Desert Data Labs" />
   <meta property="og:description"
-    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers, and streams, and watch it change through the seasons. Real NEON data." />
+    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers and streams, and how it changes through the seasons." />
   <meta property="og:image" content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
   <meta property="og:image:secure_url"
     content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
@@ -28,7 +28,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="NEON Water Chemistry · Desert Data Labs" />
   <meta name="twitter:description"
-    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers, and streams. Real NEON data." />
+    content="What's in the water? See what is dissolved at NEON's 34 lakes, rivers and streams." />
   <meta name="twitter:image"
     content="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/og-image.png" />
   <meta name="twitter:image:alt"
@@ -176,7 +176,7 @@
     .paper-foot a { color: #14606a; font-weight: 750; text-underline-offset: 4px }
     .paper-foot a.foot-cta {
       display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 6px;
-      font-weight: 800; text-decoration: none; color: #9c5a1c;
+      font-weight: 800; text-decoration: none; color: #8a4f17;
     }
     .honesty { margin: 18px 0; border-top: 1px solid rgba(22, 38, 44, .18); border-bottom: 1px solid rgba(22, 38, 44, .18) }
     .honesty summary {
@@ -250,7 +250,7 @@
       <b>Desert Data Labs</b>
     </span>
     <a class="suite-jump" href="https://tgilbert14.github.io/NEON-Driver-Cascade/"><span class="jump-pre">Whole
-        suite:</span> <strong>Driver Cascade</strong> <span class="arr" aria-hidden="true">&#8599;</span></a>
+        suite:</span> <strong>NEON Cross-Product Response Atlas</strong> <span class="arr" aria-hidden="true">&#8599;</span></a>
   </header>
 
   <main id="main" tabindex="-1">
@@ -259,8 +259,8 @@
         <div class="poster-copy">
           <p class="kicker">NEON Water Chemistry &middot; unofficial</p>
           <h1 aria-label="What's in the water?"><span>What&rsquo;s in</span> <em>the water?</em></h1>
-          <p class="lead">Pick a site, pick an analyte like nitrogen or salt, and watch it change through the
-            seasons.</p>
+          <p class="lead">Nitrogen, salts, carbon and more, measured at NEON&rsquo;s 34 lakes, rivers and streams
+            through the seasons.</p>
           <a class="button" href="https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/">
             Pick a water body
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
@@ -289,23 +289,21 @@
         Desert Data Labs &rarr;</a>
       <p style="margin:6px 0 0">Explore 34 aquatic sites using public NEON <a
           href="https://data.neonscience.org/data-products/DP1.20093.001" target="_blank" rel="noopener">Surface Water
-          Chemistry data &middot; DP1.20093.001</a> (CC BY 4.0). Built by Desert Data Labs; unofficial and not
-        endorsed by NEON, Battelle, or the NSF.</p>
+          Chemistry data &middot; DP1.20093.001</a> (CC BY 4.0). Built by Desert Data Labs.</p>
 
       <details class="honesty">
-        <summary>How it stays honest</summary>
+        <summary>How the numbers are built</summary>
         <div class="hbody">
-          Everything here is real NEON data, saved ahead of time and bundled with the app. Every number tells you how
+          The data are NEON&rsquo;s, saved ahead of time and bundled with the app. Every number tells you how
           many measurements it is based on, so you can see when a result rests on plenty of data and when it rests on
           only a little. When the app draws a line between two things, it shows how well the line fits and warns when
           readings taken close together in time can make a link look stronger than it is. When it checks whether two
           things move together, it uses a method that holds up even when the numbers are lopsided, treats anything
           based on fewer than 8 measurements as shaky, and reminds you that checking many things at once turns up some
-          matches by luck. The seasonal pattern is pulled straight from the real record, not a smooth curve made up to
+          matches by luck. The seasonal pattern is pulled from the measured record, not a smooth curve made up to
           look nice. Amounts too low for the instruments to measure are marked, not hidden. Each thing in the water
           uses a reviewed unit target; registered legacy unit anomalies are excluded rather than silently converted
-          (and bromide is not bicarbonate, chloride is not chlorine). <strong>This is a tool for learning and
-            exploring. It is not affiliated with NEON, Battelle, or the NSF.</strong>
+          (and bromide is not bicarbonate, chloride is not chlorine).
         </div>
       </details>
 
@@ -317,11 +315,11 @@
 
       <p class="colophon">Built on NEON&rsquo;s Surface Water Chemistry data by <strong>Desert Data Labs</strong>
         &middot; Tucson, AZ. Data comes from the National Ecological Observatory Network (run by Battelle, funded by
-        the NSF). A tool for learning, not affiliated with NEON, Battelle, or the NSF.<br />
+        the NSF).<br />
         NEON data are provided under a <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
           rel="noopener">Creative Commons Attribution 4.0 International (CC BY 4.0)</a> license. This app aggregates
         and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is
-        an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.</p>
+        an independent, unofficial tool, not affiliated with or endorsed by NEON, Battelle, or the NSF.</p>
     </div>
   </footer>
 </body>
