@@ -40,24 +40,42 @@ row_for <- function(site, partner, main = "specificConductanceField") {
   r
 }
 
-# HOPB iron is mostly detected at this site, though Fe is ~35% below DL network-wide
-hopb <- row_for("HOPB", "Fe")
-stopifnot(!hopb$heavy_censor)
+# The shares must come from the site's own matched samples (a date counts when
+# both analytes were sampled, with a value or a below-detection flag; it is
+# censored when either one is below detection), never from the network-wide
+# rate. The facts move with each refresh (a v5 bundle restores the blank
+# non-detects the v4 producer dropped, so HOPB iron is no longer "clean"), so the
+# test recomputes the expected share independently instead of pinning a site.
+site_share <- function(site, partner, main = "specificConductanceField") {
+  rows <- D$swc_long |> filter(!implausible, site == !!site, analyte %in% c(main, partner))
+  sampled <- rows |> filter(is.finite(value) | belowDetection == 1)
+  a <- sampled |> filter(analyte == main) |> group_by(collectDate) |>
+    summarise(ba = max(belowDetection), .groups = "drop")
+  b <- sampled |> filter(analyte == partner) |> group_by(collectDate) |>
+    summarise(bb = max(belowDetection), .groups = "drop")
+  j <- inner_join(a, b, by = "collectDate")
+  if (!nrow(j)) return(NA_real_)
+  mean(j$ba == 1 | j$bb == 1)
+}
+network_share <- function(partner) mean(D$swc_long$belowDetection[D$swc_long$analyte == partner] == 1)
 
-# TOOK nitrate + nitrite sits near its detection limit: the pair is censored
-took <- row_for("TOOK", "NO3+NO2 - N")
-stopifnot(took$heavy_censor, !took$reliable, grepl("^censored", took$flag))
-
-# COMO conductance vs iron: enough clean pairs to be a reliable row
-como <- row_for("COMO", "Fe")
-if (como$n >= 8) stopifnot(como$reliable, !como$heavy_censor)
-
-# CUPE ammonium: censored
-cupe <- row_for("CUPE", "NH4 - N")
-stopifnot(cupe$heavy_censor, grepl("^censored", cupe$flag))
+cases <- list(c("HOPB", "Fe"), c("TOOK", "NO3+NO2 - N"), c("COMO", "Fe"), c("CUPE", "NH4 - N"),
+              c("SYCA", "Ortho - P"), c("PRPO", "Fe"), c("ARIK", "Br"))
+rows <- list(); disagree <- 0L
+for (cs in cases) {
+  r <- row_for(cs[1], cs[2]); expect <- site_share(cs[1], cs[2])
+  stopifnot(is.finite(expect), isTRUE(all.equal(r$pct_below, expect)),
+            identical(isTRUE(r$heavy_censor), expect >= 0.25))
+  if (isTRUE(r$heavy_censor)) stopifnot(!r$reliable, grepl("^censored", r$flag))
+  if ((expect >= 0.25) != (network_share(cs[2]) >= 0.25)) disagree <- disagree + 1L
+  rows[[length(rows) + 1L]] <- r
+}
+# the audit's defect: at least one of these pairs is on the other side of the
+# 25% line from the network rate, and the table follows the site, not the network
+stopifnot(disagree >= 1L)
 
 # every finite interval brackets its rho and is NA below the n floor
-for (r in list(hopb, took, como, cupe)) {
+for (r in rows) {
   if (is.finite(r$rho_lo)) stopifnot(r$rho_lo <= r$spearman, r$spearman <= r$rho_hi,
                                      r$rho_lo >= -1, r$rho_hi <= 1, r$n >= 8)
 }
