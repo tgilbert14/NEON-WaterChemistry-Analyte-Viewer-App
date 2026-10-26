@@ -153,6 +153,13 @@ WATER_UNIT_EXCLUSION_RULES <- data.frame(
   "WALK\t2019-12-02\tNO3+NO2 - N\tmicrogramsPerLiter\t1",
   "WALK\t2019-06-18\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-07-01\tOrtho - P\tmicrogramsPerLiter\t2",
+  # Added for the v5 producer (2026-10-26): a Florida International University
+  # non-detect with a blank concentration ("ND"), the same audited WALK-2019
+  # microgramsPerLiter label defect. The v4 producer dropped blank values, so
+  # this identity first reached the unit review in full-fetch run 40351031862
+  # (12180 mismatch identities, this one the only one needing review). The
+  # EcoCore milligramsPerLiter replicate for the same date (0.036) is kept.
+  "WALK\t2019-07-22\tOrtho - P\tmicrogramsPerLiter\t1",
   "WALK\t2019-08-13\tOrtho - P\tmicrogramsPerLiter\t2",
   "WALK\t2019-09-04\tOrtho - P\tmicrogramsPerLiter\t3",
   "WALK\t2019-09-16\tOrtho - P\tmicrogramsPerLiter\t2",
@@ -373,6 +380,22 @@ WATER_VALUE_QUARANTINE_RECEIPT_COLUMNS <- c(
   "site", "collectDate", "analyte", "unit", "reason", "max_source_rows",
   "n_excluded"
 )
+
+# Identities the v5 producer added to the audited list. A v4 producer bundle's
+# own receipt was written before them, so its receipt is checked against the
+# list without them; the runtime canonicalizer always uses the full list.
+WATER_UNIT_V5_ADDED_IDENTITY_KEYS <- c(
+  "WALK\r2019-07-22\rOrtho - P\rmicrogramsPerLiter"
+)
+water_unit_identities_for_policy <- function(policy) {
+  ids <- WATER_UNIT_EXCLUSION_IDENTITIES
+  if (identical(policy, WATER_UNIT_PRIOR_POLICY)) {
+    keys <- paste(ids$site, ids$collectDate, ids$analyte, ids$from_unit, sep = "\r")
+    ids <- ids[!keys %in% WATER_UNIT_V5_ADDED_IDENTITY_KEYS, , drop = FALSE]
+    rownames(ids) <- NULL
+  }
+  ids
+}
 
 WATER_UNIT_RECEIPT_FIELDS <- c(
   "unit_policy", "n_unit_labels_rewritten", "n_unit_rows_excluded",
@@ -870,7 +893,7 @@ validate_water_unit_policy <- function() {
     ),
     identical(names(identities), c("site", "collectDate", "analyte",
                                     "from_unit", "max_source_rows")),
-    nrow(identities) == 73L,
+    nrow(identities) == 74L,
     !anyDuplicated(water_unit_identity_key(
       identities$site, identities$collectDate, identities$analyte,
       identities$from_unit

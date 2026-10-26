@@ -509,15 +509,14 @@ if (all(producer_receipt_present)) {
     producer_receipt$site, producer_receipt$collectDate,
     producer_receipt$analyte, producer_receipt$from_unit
   )
+  policy_ids <- water_unit_identities_for_policy(legacy$built$unit_policy)
   policy_keys <- water_unit_identity_key(
-    WATER_UNIT_EXCLUSION_IDENTITIES$site,
-    WATER_UNIT_EXCLUSION_IDENTITIES$collectDate,
-    WATER_UNIT_EXCLUSION_IDENTITIES$analyte,
-    WATER_UNIT_EXCLUSION_IDENTITIES$from_unit
+    policy_ids$site, policy_ids$collectDate, policy_ids$analyte,
+    policy_ids$from_unit
   )
   stopifnot(
     legacy$built$unit_policy %in% WATER_UNIT_ACCEPTED_PRODUCER_POLICIES,
-    nrow(producer_receipt) == 73L,
+    nrow(producer_receipt) == nrow(policy_ids),
     identical(sort(producer_keys), sort(policy_keys)),
     is.integer(producer_receipt$n_excluded),
     !anyNA(producer_receipt$n_excluded),

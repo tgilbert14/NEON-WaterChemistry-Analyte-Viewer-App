@@ -647,19 +647,20 @@ if (!has_unit_contract) {
     exclusion_receipt$collectDate
   ), , drop = FALSE]
   rownames(exclusion_receipt) <- NULL
+  policy_identities <- water_unit_identities_for_policy(bundle$built$unit_policy)
   exclusion_rule_index <- match(
-    water_unit_rule_key(WATER_UNIT_EXCLUSION_IDENTITIES$analyte,
-                        WATER_UNIT_EXCLUSION_IDENTITIES$from_unit),
+    water_unit_rule_key(policy_identities$analyte,
+                        policy_identities$from_unit),
     water_unit_rule_key(WATER_UNIT_EXCLUSION_RULES$analyte,
                         WATER_UNIT_EXCLUSION_RULES$from_unit)
   )
   expected_exclusions <- data.frame(
-    site = WATER_UNIT_EXCLUSION_IDENTITIES$site,
-    collectDate = WATER_UNIT_EXCLUSION_IDENTITIES$collectDate,
-    analyte = WATER_UNIT_EXCLUSION_IDENTITIES$analyte,
-    from_unit = WATER_UNIT_EXCLUSION_IDENTITIES$from_unit,
+    site = policy_identities$site,
+    collectDate = policy_identities$collectDate,
+    analyte = policy_identities$analyte,
+    from_unit = policy_identities$from_unit,
     reason = WATER_UNIT_EXCLUSION_RULES$reason[exclusion_rule_index],
-    max_source_rows = WATER_UNIT_EXCLUSION_IDENTITIES$max_source_rows,
+    max_source_rows = policy_identities$max_source_rows,
     stringsAsFactors = FALSE
   )
   expected_exclusions <- expected_exclusions[order(
