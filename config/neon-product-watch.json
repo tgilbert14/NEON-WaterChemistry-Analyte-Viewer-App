@@ -1,0 +1,40 @@
+{
+  "schema": "water-neon-product-watch-v1",
+  "product": "DP1.20093.001",
+  "source": "https://data.neonscience.org/api/v0/products/DP1.20093.001",
+  "reviewed_at": "2026-10-22",
+  "comment": "The refresh workflow's NEON watch compares the live product metadata with this file: a change-log id not listed here, or a release not listed here, is reported for review. helpers.R NEON_RELEASE_DOI must list the same releases, and every NEON_DATA_NOTES change-log id must appear here with a matching *-note disposition (tests/test_neon_product_watch.R).",
+  "releases": [
+    { "release": "RELEASE-2021", "doi": "https://doi.org/10.48443/05k7-e011" },
+    { "release": "RELEASE-2022", "doi": "https://doi.org/10.48443/tx4b-zx50" },
+    { "release": "RELEASE-2023", "doi": "https://doi.org/10.48443/wf2d-h925" },
+    { "release": "RELEASE-2024", "doi": "https://doi.org/10.48443/fdfd-d514" },
+    { "release": "RELEASE-2025", "doi": "https://doi.org/10.48443/a8cf-fj36" },
+    { "release": "RELEASE-2026", "doi": "https://doi.org/10.48443/7b2c-ga32" }
+  ],
+  "changelog": [
+    { "id": "15604", "issue_date": "2020-09-10", "disposition": "no-action", "note": "Table restructure to swc_externalLabDataByAnalyte; the producer reads that table." },
+    { "id": "16402", "issue_date": "2020-10-28", "disposition": "site-note", "note": "Seepage-lake inlet and outlet sampling ended by 2018; pre-2018 dates at the six lakes average 2.93 replicates vs 1.44 after." },
+    { "id": "16403", "issue_date": "2020-10-28", "disposition": "analyte-note", "note": "ANC sampling cut to monthly in 2018." },
+    { "id": "17910", "issue_date": "2021-01-06", "disposition": "network-note", "note": "COVID-19 reduced sampling, March 2020 through 2021." },
+    { "id": "36107", "issue_date": "2021-12-01", "disposition": "no-action", "note": "Field-table sample fields; not ingested." },
+    { "id": "36108", "issue_date": "2021-12-01", "disposition": "handled", "note": "TPC/TPN lab change and EcoCore milligram to microgramsPerLiter conversion; residual milligram identities are quarantined by the unit contract." },
+    { "id": "37504", "issue_date": "2021-12-03", "disposition": "analyte-note", "note": "External lab stopped TSS dry mass and lab specific conductance; bundle values end 2020-03-19." },
+    { "id": "37505", "issue_date": "2021-12-03", "disposition": "handled", "note": "2019-07-01 nutrient method change; the STL and two-site charts mark it." },
+    { "id": "58104", "issue_date": "2022-01-12", "disposition": "not-ingested", "note": "2011 prototype data; the bundle starts 2012-01-31." },
+    { "id": "56504", "issue_date": "2022-06-01", "disposition": "removed-upstream", "note": "Suspect Na and Ca, 2020-05 to 2022-06, removed and re-run by NEON." },
+    { "id": "60906", "issue_date": "2022-07-20", "disposition": "site-note", "note": "SYCA study reach moved upstream on 2022-01-26." },
+    { "id": "63904", "issue_date": "2022-08-18", "disposition": "handled", "note": "Since spring 2022 a non-detect has a blank concentration and ND; the v5 producer keeps those rows." },
+    { "id": "68004", "issue_date": "2022-09-13", "disposition": "site-note", "note": "OKSR and TOOK reduced sampling, 2020-03-23 to 2022-12-31." },
+    { "id": "68005", "issue_date": "2022-09-13", "disposition": "site-note", "note": "BLDE flood closure 2022-06-12 to 2022-10-31; 0 bundle dates in the window." },
+    { "id": "86804", "issue_date": "2024-03-25", "disposition": "verify-on-pull", "note": "Wrong TPC/TPN filters at FLNT, BARC, SUGG, 2023-08 to 2024-12; NEON removed the affected sample class. The 108 remaining in-window rows are single replicates (others average 2.1); brooke confirms with laboratoryName on a tokened pull." },
+    { "id": "87504", "issue_date": "2024-05-08", "disposition": "removed-upstream", "note": "WALK DOC 2018-06-19 to 2021-07-13; 0 bundle rows in the window." },
+    { "id": "87505", "issue_date": "2024-05-08", "disposition": "removed-upstream", "note": "LECO DOC 2019-09-25 to 2021-05-20; 0 bundle rows in the window." },
+    { "id": "88504", "issue_date": "2024-06-10", "disposition": "not-ingested", "note": "HCO3 and CO3 erroneous; not in the bundle (the carbonate preset now uses DIC and ANC)." },
+    { "id": "88505", "issue_date": "2024-06-10", "disposition": "not-ingested", "note": "External-lab pH; not in the bundle." },
+    { "id": "100104", "issue_date": "2024-10-18", "disposition": "removed-upstream", "note": "High TSS 2020-01 to 2020-04; 0 bundle rows in the window." },
+    { "id": "111305", "issue_date": "2026-03-10", "disposition": "verify-on-pull", "note": "Field blanks packaged with site downloads 2023-09 to 2026-01; the producer reports blank-like sample IDs in its fetch receipt." },
+    { "id": "112604", "issue_date": "2026-04-21", "disposition": "quarantined", "note": "USGS_NWQA Fe and Mn in microgramsPerLiter labelled milligramsPerLiter; the v5 value quarantine excludes the 102 identities." },
+    { "id": "116504", "issue_date": "2026-10-08", "disposition": "not-ingested", "note": "REDB ALK and ANC 2024-08-13 to 2026-05-26 erroneous; the bundle's ANC is external-lab and ends 2020-03-19, and ALK is not ingested." }
+  ]
+}

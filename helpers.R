@@ -133,6 +133,16 @@ apply_runtime_water_unit_contract <- function(bundle) {
   }
   result <- canonicalize_runtime_water_units(bundle$swc_long)
   bundle$swc_long <- result$data
+  # Columns the v5 producer adds (2026-10 finish round): partialBelow (some but
+  # not all replicates below detection) and release (the NEON release tag of the
+  # row's site-month, or "PROVISIONAL"). A bundle from an earlier producer lacks
+  # them; NA means "not recorded", never "no".
+  if (!"partialBelow" %in% names(bundle$swc_long)) {
+    bundle$swc_long$partialBelow <- rep(NA_integer_, nrow(bundle$swc_long))
+  }
+  if (!"release" %in% names(bundle$swc_long)) {
+    bundle$swc_long$release <- rep(NA_character_, nrow(bundle$swc_long))
+  }
 
   bundle$swc_wide <- bundle$swc_long |>
     dplyr::select(site, collectDate, analyte, value) |>
@@ -379,6 +389,145 @@ PRESET_REASON <- c(
 
 season_of <- function(d) factor(c("Winter","Spring","Summer","Fall")[(lubridate::month(d) %% 12) %/% 3 + 1],
                                  levels = c("Winter","Spring","Summer","Fall"))
+
+## ---- NEON provenance: release tags, DOIs, data notes ----------------------
+# DP1.20093.001 release DOIs, from GET /api/v0/products/DP1.20093.001
+# (releases[].productDoi.url), read 2026-10-22. config/neon-product-watch.json
+# carries the same list for the refresh workflow's release watch, and a test
+# keeps the two equal. A release tag missing here renders without a DOI, and the
+# watch opens an issue to add it.
+NEON_PRODUCT_NAME <- "Chemical properties of surface water"
+NEON_RELEASE_DOI <- c(
+  "RELEASE-2021" = "https://doi.org/10.48443/05k7-e011",
+  "RELEASE-2022" = "https://doi.org/10.48443/tx4b-zx50",
+  "RELEASE-2023" = "https://doi.org/10.48443/wf2d-h925",
+  "RELEASE-2024" = "https://doi.org/10.48443/fdfd-d514",
+  "RELEASE-2025" = "https://doi.org/10.48443/a8cf-fj36",
+  "RELEASE-2026" = "https://doi.org/10.48443/7b2c-ga32"
+)
+
+# What a bundle records about NEON releases. The v5 producer writes
+# built$neon_releases (columns release, n, first, last; one row per tag,
+# "PROVISIONAL" included) and built$provisional_from (the first collectDate of a
+# provisional row, or NA). Earlier bundles carry neither, so recorded = FALSE.
+neon_release_info <- function(built) {
+  rel <- built$neon_releases
+  recorded <- is.data.frame(rel) && nrow(rel) > 0 && "release" %in% names(rel)
+  tags <- if (recorded) as.character(rel$release) else character(0)
+  released <- sort(unique(tags[!is.na(tags) & grepl("^RELEASE-[0-9]{4}$", tags)]))
+  latest <- if (length(released)) released[length(released)] else NA_character_
+  pf <- built$provisional_from
+  pf <- if (length(pf) == 1 && !is.na(pf) && nzchar(as.character(pf))) as.character(pf) else NA_character_
+  list(
+    recorded = recorded,
+    releases = released,
+    latest = latest,
+    doi = if (!is.na(latest) && latest %in% names(NEON_RELEASE_DOI))
+      unname(NEON_RELEASE_DOI[latest]) else NA_character_,
+    provisional_from = pf,
+    n_provisional = if (recorded && "n" %in% names(rel))
+      as.integer(sum(rel$n[tags %in% "PROVISIONAL"])) else NA_integer_
+  )
+}
+
+# NEON's citation for this bundle, one plain-text sentence group per element.
+neon_citation_lines <- function(built) {
+  info <- neon_release_info(built)
+  accessed <- substr(as.character(built$when %||% ""), 1, 10)
+  page <- "https://data.neonscience.org/data-products/DP1.20093.001"
+  out <- character(0)
+  if (!is.na(info$latest)) {
+    out <- c(out, sprintf(
+      "NEON (National Ecological Observatory Network). %s (DP1.20093.001), %s. %sDataset accessed from %s on %s.",
+      NEON_PRODUCT_NAME, info$latest,
+      if (!is.na(info$doi)) paste0(info$doi, ". ") else "",
+      paste0(page, "/", info$latest), accessed))
+  }
+  if (!is.na(info$provisional_from)) {
+    out <- c(out, sprintf(
+      "NEON (National Ecological Observatory Network). %s (DP1.20093.001), provisional data from %s onward. Dataset accessed from %s on %s. Provisional data have no DOI and can still change.",
+      NEON_PRODUCT_NAME, info$provisional_from, page, accessed))
+  }
+  if (!isTRUE(info$recorded)) {
+    out <- c(out, sprintf(
+      "NEON (National Ecological Observatory Network). %s (DP1.20093.001). Dataset accessed from %s on %s. This bundle does not record release tags, so its most recent months may be provisional.",
+      NEON_PRODUCT_NAME, page, accessed))
+  }
+  out
+}
+
+# Notes a reader of a site's record needs: entries from NEON's DP1.20093.001
+# change log (GET /api/v0/products/DP1.20093.001, changeLogs[]) plus facts
+# measured on the bundle (id "bundle-..."). Every change-log id here is reviewed
+# with a matching disposition in config/neon-product-watch.json, and a test checks
+# it. scope: "site" (the sites listed), "network" (every site) or "analyte" (the
+# analytes listed). Lists are "|"-separated.
+NEON_DATA_NOTES <- tibble::tribble(
+  ~id,              ~scope,    ~sites,                          ~analytes,                                  ~from,        ~to,          ~text,
+  "16402",          "site",    "BARC|SUGG|CRAM|LIRO|PRLA|PRPO", "",                                         "2012-01-01", "2018-01-01", "Until 2018 NEON also sampled this lake's inlet and outlet. Those samples are averaged with the lake samples taken on the same day.",
+  "60906",          "site",    "SYCA",                          "",                                         "2022-01-26", "2022-01-26", "NEON moved this study reach upstream on 2022-01-26, so samples before and after that date come from different stretches of the creek.",
+  "68004",          "site",    "OKSR|TOOK",                     "",                                         "2020-03-23", "2022-12-31", "Quarantine rules at Toolik Field Station cut NEON's field visits from March 2020 through 2022, so this record has fewer samples in those years.",
+  "68005",          "site",    "BLDE",                          "",                                         "2022-06-12", "2022-10-31", "Flooding closed the roads into Yellowstone from 2022-06-12 to 2022-10-31, so no samples were collected here in that window.",
+  "17910",          "network", "",                              "",                                         "2020-03-23", "2021-12-31", "COVID-19 safety rules reduced or cancelled NEON sampling from March 2020 through 2021, so most records thin out in those years.",
+  "16403",          "analyte", "",                              "ANC",                                      "2018-01-01", "2018-01-01", "NEON cut ANC sampling to once a month in 2018.",
+  "bundle-lab-end", "analyte", "",                              "ANC|specificConductance|TSS - Dry Mass",   "2020-03-19", "2020-03-19", "This bundle's values for this analyte end on 2020-03-19.",
+  "37504",          "analyte", "",                              "specificConductance|TSS - Dry Mass",       "2021-03-23", "2021-03-23", "NEON's external lab stopped reporting this analyte in 2021. For conductance, use the field probe's specific conductance, which continues."
+)
+# Rows of NEON_DATA_NOTES that apply to a site and/or a set of analytes; network
+# notes always apply.
+neon_notes_for <- function(site = NULL, analytes = NULL) {
+  n <- NEON_DATA_NOTES
+  in_list <- function(field, keys) vapply(strsplit(field, "|", fixed = TRUE),
+                                          function(x) any(keys %in% x), logical(1))
+  site_hit <- n$scope == "site" & length(site) > 0 & in_list(n$sites, site)
+  an_hit <- n$scope == "analyte" & length(analytes) > 0 & in_list(n$analytes, analytes)
+  n[site_hit | an_hit | n$scope == "network", , drop = FALSE]
+}
+
+# One layout call for every time-axis context mark on a plotly chart, so the
+# marks never overwrite each other (plotly replaces `shapes` wholesale): the
+# dashed 2019-07-01 lab method-change line (when `code` is a method-change
+# analyte and [d1, d2] straddles the date) and a light band over NEON's
+# provisional months (when the bundle records built$provisional_from).
+add_time_context <- function(p, code, d1, d2, built = NULL, color = "#8a949c") {
+  shapes <- list(); notes <- list()
+  if (spans_method_change(code, d1, d2)) {
+    shapes[[length(shapes) + 1]] <- list(
+      type = "line", xref = "x", yref = "paper",
+      x0 = METHOD_CHANGE_DATE, x1 = METHOD_CHANGE_DATE, y0 = 0, y1 = 1,
+      line = list(color = color, width = 1.2, dash = "dash"))
+    notes[[length(notes) + 1]] <- list(
+      x = METHOD_CHANGE_DATE, y = 1, xref = "x", yref = "paper",
+      text = "lab method change", showarrow = FALSE, xanchor = "left",
+      yanchor = "top", xshift = 3, font = list(size = 10, color = color))
+  }
+  pf <- if (!is.null(built)) neon_release_info(built)$provisional_from else NA_character_
+  if (!is.na(pf)) {
+    x0 <- max(as.Date(pf), as.Date(d1)); x1 <- as.Date(d2)
+    if (!is.na(x0) && !is.na(x1) && x1 > x0) {
+      shapes[[length(shapes) + 1]] <- list(
+        type = "rect", xref = "x", yref = "paper", x0 = x0, x1 = x1, y0 = 0, y1 = 1,
+        fillcolor = "rgba(138,148,156,0.12)", line = list(width = 0), layer = "below")
+      notes[[length(notes) + 1]] <- list(
+        x = x0, y = 0, xref = "x", yref = "paper", text = "provisional",
+        showarrow = FALSE, xanchor = "left", yanchor = "bottom", xshift = 3,
+        font = list(size = 10, color = color))
+    }
+  }
+  if (!length(shapes)) return(p)
+  plotly::layout(p, shapes = shapes, annotations = notes)
+}
+
+# HTML for one pinned card (www/pincards.js reads it from a point's customdata).
+# `rows` is a named character vector: label -> value. Every string is escaped.
+pin_card_html <- function(title, rows) {
+  esc <- htmltools::htmlEscape
+  cells <- paste0("<div class='wc-pin-r'><span class='wc-pin-k'>", esc(names(rows)),
+                  "</span> <span class='wc-pin-v'>", esc(unname(rows)), "</span></div>",
+                  collapse = "")
+  paste0("<div class='wc-pin-card'><div class='wc-pin-t'>", esc(title), "</div>",
+         cells, "</div>")
+}
 
 ## ---- In-app sibling links (suite chrome) ---------------------------------
 # The "Explore the NEON series" block surfaced in the About modal. Registry +
