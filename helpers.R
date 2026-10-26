@@ -274,7 +274,43 @@ is_plausible <- function(value, analyte, ceil_map, site = NULL) {
   }
   ok <- !is.finite(value) | is.na(ceil) | (value <= ceil)
   ok[is.na(ok)] <- TRUE
+  unname(ok & in_physical_range(value, a))
+}
+
+# Physical plausibility range for the field-probe analytes (audit 2026-10-18 P2).
+# A data-derived ceiling can never fire on these (a stuck probe or a sign error
+# sits inside the pooled quantiles) and it has no lower bound. A listed analyte
+# is kept only when lo < value <= hi (lo <= value when lo_closed). Ions and lab
+# analytes are not floored: a true zero or a tiny value is chemistry there.
+PLAUSIBLE_RANGE <- tibble::tribble(
+  ~analyte,                   ~lo,  ~hi, ~lo_closed, ~units,
+  "specificConductanceField", 0.5,  Inf, FALSE,      "µS/cm",
+  "specificConductance",      0.5,  Inf, FALSE,      "µS/cm",
+  "dissolvedOxygenField",     0,    25,  TRUE,       "mg/L",
+  "waterTemp",                -1,   40,  FALSE,      "°C"
+)
+# TRUE = inside the physical range (or analyte not listed, or value not finite).
+in_physical_range <- function(value, analyte) {
+  i  <- match(as.character(analyte), PLAUSIBLE_RANGE$analyte)
+  lo <- PLAUSIBLE_RANGE$lo[i]; hi <- PLAUSIBLE_RANGE$hi[i]
+  lc <- PLAUSIBLE_RANGE$lo_closed[i]
+  above_lo <- ifelse(lc %in% TRUE, value >= lo, value > lo)
+  ok <- is.na(i) | !is.finite(value) | (above_lo & value <= hi)
+  ok[is.na(ok)] <- TRUE
   unname(ok)
+}
+# One plain-language sentence stating the gate exactly (export headers, report).
+plausibility_rule_text <- function() {
+  rng <- vapply(seq_len(nrow(PLAUSIBLE_RANGE)), function(i) {
+    r <- PLAUSIBLE_RANGE[i, ]
+    lo <- paste0(if (isTRUE(r$lo_closed)) ">= " else "> ", r$lo)
+    paste0(analyte_display(r$analyte), " ", lo,
+           if (is.finite(r$hi)) paste0(" and <= ", r$hi) else "", " ", r$units)
+  }, character(1))
+  paste0("a value is excluded from fits, trends, maps and search when it is above its analyte ceiling ",
+         "(the larger of the pooled 99.9th percentile and 50x the pooled median; for conductance, TDS, ANC, ",
+         "DIC and the major ions the site's own 99.5th percentile and 30x its median, once the site has 8 values) ",
+         "or outside its physical range (kept only when ", paste(rng, collapse = "; "), ")")
 }
 
 ## ---- Heavy-tail map colour scale (review finding #1, map washout) ---------
@@ -374,7 +410,7 @@ PRESETS <- list(
   "Inorganic vs total dissolved N"             = c("TDN", "NO3+NO2 - N"),
   "Total vs bioavailable phosphorus"           = c("TP", "Ortho - P"),
   "DOM quantity ↔ quality (SUVA)"          = c("DOC", "UV Absorbance (254 nm)"),
-  "Carbonate system (alkalinity ↔ pH)"     = c("HCO3", "pH"),
+  "Carbonate system (DIC ↔ ANC)"           = c("DIC", "ANC"),
   "Redox metals (iron ↔ manganese)"        = c("Fe", "Mn")
 )
 PRESET_REASON <- c(
@@ -383,7 +419,7 @@ PRESET_REASON <- c(
   "Inorganic vs total dissolved N"             = "Nitrate+nitrite is the oxidized fraction within total dissolved N; the relationship shows how much of the N pool is inorganic.",
   "Total vs bioavailable phosphorus"           = "Orthophosphate (SRP) is the bioavailable fraction of total P; the ratio diagnoses dissolved-reactive vs particle-bound P.",
   "DOM quantity ↔ quality (SUVA)"          = "UV absorbance per unit DOC (SUVA) indexes aromaticity / terrestrial origin of organic matter (Weishaar et al. 2003).",
-  "Carbonate system (alkalinity ↔ pH)"     = "Bicarbonate dominance and pH are coupled through carbonate equilibria; together they define the buffering regime.",
+  "Carbonate system (DIC ↔ ANC)"           = "Dissolved inorganic carbon and acid neutralizing capacity are tied together by carbonate equilibria; NEON recommends estimating bicarbonate from either one.",
   "Redox metals (iron ↔ manganese)"        = "Fe and Mn are both mobilized under low-oxygen conditions; they co-vary in groundwater-fed and wetland-influenced streams."
 )
 
@@ -534,28 +570,35 @@ pin_card_html <- function(title, rows) {
 # live URLs mirror docs/index.html so the in-app links and the landing grid can
 # never drift. Each sibling hyperlinks to its live github.io cover.
 SIBLINGS <- tibble::tribble(
-  ~name,                ~url,
-  "Driver Cascade",     "https://tgilbert14.github.io/NEON-Driver-Cascade/",
-  "Small Mammals",      "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/",
-  "Breeding Birds",     "https://tgilbert14.github.io/NEON-Breeding-Birds/",
-  "Ground Beetles",     "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/",
-  "Plant Diversity",    "https://tgilbert14.github.io/NEON-Plant-Diversity/",
-  "Plant Phenology",    "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/",
-  "Veg Structure",      "https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/",
-  "Mosquito Pulse",     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/",
-  "Little Inverts",     "https://tgilbert14.github.io/NEON-My-Little-Inverts/"
+  ~name,                                ~url,                                                                  ~current,
+  "Small Mammal Tracker",               "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/",         FALSE,
+  "Plant Diversity",                    "https://tgilbert14.github.io/NEON-Plant-Diversity/",                  FALSE,
+  "Breeding Birds",                     "https://tgilbert14.github.io/NEON-Breeding-Birds/",                   FALSE,
+  "Plant Phenology",                    "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/",         FALSE,
+  "Vegetation Structure",               "https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/",    FALSE,
+  "Ground Beetle Tracker",              "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/",            FALSE,
+  "Water Chemistry Analyte Viewer",     "https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/", TRUE,
+  "Mosquito Pulse",                     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/",                   FALSE,
+  "My Little Inverts",                  "https://tgilbert14.github.io/NEON-My-Little-Inverts/",                FALSE,
+  "NEON Cross-Product Response Atlas",  "https://tgilbert14.github.io/NEON-Driver-Cascade/",                   FALSE
 )
 sibling_block <- function() {
   htmltools::tagList(
     htmltools::tags$hr(),
     htmltools::tags$p(htmltools::tags$b("Explore the NEON series"),
-      htmltools::tags$span(class = "scope-note",
-        " — sibling explorers built on the same honest-stats playbook, each on a different NEON measurement:")),
+      htmltools::tags$span(class = "scope-note", .noWS = "before",
+        ": other NEON explorers, each on a different measurement:")),
     htmltools::tags$div(
       style = "display:flex; flex-wrap:wrap; gap:.4rem .6rem; margin:.3rem 0 .2rem",
-      lapply(seq_len(nrow(SIBLINGS)), function(i)
-        htmltools::tags$a(href = SIBLINGS$url[i], target = "_blank", rel = "noopener",
-          class = "sibling-chip", SIBLINGS$name[i])))
+      lapply(seq_len(nrow(SIBLINGS)), function(i) {
+        if (isTRUE(SIBLINGS$current[i]))
+          htmltools::tags$span(class = "sibling-chip sibling-current", `aria-current` = "page",
+            SIBLINGS$name[i], htmltools::tags$span(class = "visually-hidden", " (this app)"),
+            htmltools::tags$span(class = "sibling-here", `aria-hidden` = "true", " · you are here"))
+        else
+          htmltools::tags$a(href = SIBLINGS$url[i], target = "_blank", rel = "noopener",
+            class = "sibling-chip", SIBLINGS$name[i])
+      }))
   )
 }
 
@@ -716,6 +759,31 @@ pair_censor_note <- function(pc, A, B, thresh = 0.25) {
   paste0(lead, " below detection in this window, exploratory only")
 }
 
+# Lag-1 autocorrelation of a time-ordered series (NA-safe, signed).
+lag1_acf <- function(z) suppressWarnings(tryCatch({
+  z <- z[is.finite(z)]
+  if (length(z) < 4 || stats::sd(z) == 0) return(NA_real_)
+  stats::acf(z, lag.max = 1, plot = FALSE)$acf[2]
+}, error = function(e) NA_real_))
+# Effective sample size of a correlation between two autocorrelated series:
+# n * (1 - rx*ry) / (1 + rx*ry) when rx*ry > 0, else NA (no adjustment).
+effective_n <- function(n, rx, ry) {
+  k <- rx * ry
+  ifelse(is.finite(k) & k > 0 & n > 3, n * (1 - k) / (1 + k), NA_real_)
+}
+# 95% interval for Spearman rho: Fisher z with the Bonett-Wright (2000) se
+# sqrt((1 + rho^2/2) / (n_use - 3)), n_use = n_eff when finite, else n.
+# NA unless n_use > 3 and n >= min_n. Returns list(lo, hi, n_use).
+spearman_ci <- function(rho, n, n_eff = NA_real_, min_n = 8, level = 0.95) {
+  n_use <- ifelse(is.finite(n_eff), n_eff, n)
+  ok <- is.finite(rho) & is.finite(n_use) & n_use > 3 & n >= min_n
+  se <- sqrt((1 + rho^2 / 2) / pmax(n_use - 3, 1e-9))
+  zq <- stats::qnorm(1 - (1 - level) / 2)
+  z  <- atanh(pmin(pmax(rho, -0.999999), 0.999999))
+  list(lo = ifelse(ok, tanh(z - zq * se), NA_real_),
+       hi = ifelse(ok, tanh(z + zq * se), NA_real_), n_use = n_use)
+}
+
 # Correlation of `main` vs every other numeric column of a per-site wide frame.
 # Reports n (paired), Pearson r, Spearman rho, p-value of the chosen method,
 # and an honesty flag. min_n is the reliability floor (default 8).
@@ -751,12 +819,8 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
   }
   bm_all <- if (use_site_bdl) bdl_col(main) else NULL
   ptest <- function(x, y, mth) suppressWarnings(tryCatch(stats::cor.test(x, y, method = mth)$p.value, error = function(e) NA_real_))
-  # lag-1 ACF of a series (NA-safe); used to flag temporal autocorrelation and to
-  # compute the variance-inflation-adjusted effective n when |ACF| is high.
-  acf1 <- function(z) suppressWarnings(tryCatch({
-    if (length(z) < 4) return(NA_real_)
-    stats::acf(z, lag.max = 1, plot = FALSE, na.action = stats::na.pass)$acf[2]
-  }, error = function(e) NA_real_))
+  # time order for the lag-1 ACFs (pivot_wider does not guarantee date order)
+  ord <- if ("collectDate" %in% names(wide_site)) order(wide_site$collectDate) else seq_along(m)
   rows <- lapply(others, function(a) {
     y <- suppressWarnings(as.numeric(wide_site[[a]]))
     ok <- is.finite(m) & is.finite(y)
@@ -766,8 +830,12 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     pp <- if (n >= 4) ptest(m[ok], y[ok], "pearson")  else NA_real_
     ps <- if (n >= 4) ptest(m[ok], y[ok], "spearman") else NA_real_
     ties <- n >= 4 && (any(duplicated(m[ok])) || any(duplicated(y[ok])))
-    # lag-1 ACF of each member of the pair; the larger |ACF| drives n_eff
-    ac <- if (n >= 6) max(abs(acf1(m[ok])), abs(acf1(y[ok])), na.rm = TRUE) else NA_real_
+    # signed lag-1 ACF of each member of the pair, on the paired dates in time order
+    oo <- ord[ok[ord]]
+    rx <- if (n >= 6) lag1_acf(m[oo]) else NA_real_
+    ry <- if (n >= 6) lag1_acf(y[oo]) else NA_real_
+    ac <- if (n >= 6) suppressWarnings(max(abs(c(rx, ry)), na.rm = TRUE)) else NA_real_
+    if (!is.finite(ac)) ac <- NA_real_
     if (use_site_bdl) {
       # denominator = dates where BOTH analytes were sampled (finite value or a
       # below-detection row, so NA-valued non-detects count); numerator = either
@@ -783,24 +851,27 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     }
     tibble(code = a, display = analyte_display(a), n = n,
            pearson = pe, spearman = sp, p_pearson = pp, p_spearman = ps, ties = ties,
-           acf1 = ac, pct_below = pb, pct_below_main = pbm, pct_below_partner = pba)
+           acf1 = ac, acf_main = rx, acf_partner = ry,
+           pct_below = pb, pct_below_main = pbm, pct_below_partner = pba)
   })
   out <- bind_rows(rows)
   if (!nrow(out)) return(out)
   out$coef <- if (method == "spearman") out$spearman else out$pearson
   out$p    <- if (method == "spearman") out$p_spearman else out$p_pearson
-  # Effective-n-adjusted p when lag-1 autocorrelation is material (|ACF| >= 0.5):
-  # n_eff = n * (1-r)/(1+r) shrinks the df, and the two-sided t-test p is
-  # recomputed on n_eff. Reported alongside the raw p so a repeated-measures
-  # series cannot quietly borrow significance it does not have.
-  out$n_eff <- with(out, ifelse(is.finite(acf1) & abs(acf1) >= 0.5 & n > 3,
-                                pmax(3, n * (1 - abs(acf1)) / (1 + abs(acf1))), NA_real_))
+  # Effective n for two autocorrelated series (audit 2026-10-18 P3):
+  # n_eff = n * (1 - rx*ry) / (1 + rx*ry), rx and ry the signed lag-1 ACFs,
+  # applied whenever rx*ry > 0 (no |ACF| cliff). The two-sided t-test p is
+  # recomputed on n_eff and reported beside the raw p.
+  out$n_eff <- effective_n(out$n, out$acf_main, out$acf_partner)
   out$p_eff <- with(out, {
     ne <- n_eff; r <- coef
     tval <- abs(r) * sqrt((ne - 2) / pmax(1e-9, 1 - r^2))
     p <- 2 * stats::pt(tval, df = pmax(1, ne - 2), lower.tail = FALSE)
     ifelse(is.finite(ne) & is.finite(r) & abs(r) < 1, pmin(1, p), NA_real_)
   })
+  # 95% interval on Spearman rho (Fisher z, Bonett-Wright se) on n_eff when set
+  ci <- spearman_ci(out$spearman, out$n, out$n_eff, min_n = min_n)
+  out$rho_lo <- ci$lo; out$rho_hi <- ci$hi
   out <- out |> filter(n >= 4, is.finite(coef)) |>
     mutate(heavy_censor = is.finite(pct_below) & pct_below >= censor_thresh,
            # reliable drives the grey-out: a row is reliable only if it clears the

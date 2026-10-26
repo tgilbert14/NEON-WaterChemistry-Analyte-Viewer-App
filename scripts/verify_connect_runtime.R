@@ -1,5 +1,5 @@
 # Verify the exact Posit Connect runtime envelope without starting a server.
-# Invoke from the repository root, or pass --app-dir=/path/to/six-file-stage.
+# Invoke from the repository root, or pass --app-dir=/path/to/runtime-stage.
 
 args <- commandArgs(trailingOnly = TRUE)
 known <- grepl("^--app-dir=", args) | args == "--require-exact-packages"
@@ -19,14 +19,22 @@ if (!file.exists(manifest_path)) stop("manifest.json is missing from the runtime
 if (!requireNamespace("jsonlite", quietly = TRUE)) stop("jsonlite is required.", call. = FALSE)
 
 manifest <- jsonlite::fromJSON(manifest_path, simplifyVector = FALSE)
-expected_files <- sort(c(
-  "app.R",
-  "helpers.R",
-  "scripts/water_unit_contract.R",
-  "data/codebook.csv",
-  "data/neon_swc.rds",
-  "data/search_index.rds"
-))
+# The expected envelope is the one allowlist write_manifest.R uses, read from
+# this script's own directory (the runtime stage does not carry the scripts).
+script_arg <- commandArgs(trailingOnly = FALSE)
+script_arg <- sub("^--file=", "", script_arg[grepl("^--file=", script_arg)])
+allowlist_path <- if (length(script_arg)) {
+  file.path(dirname(normalizePath(script_arg[[1]])), "runtime_manifest_files.R")
+} else {
+  file.path("scripts", "runtime_manifest_files.R")
+}
+if (!file.exists(allowlist_path)) {
+  stop("scripts/runtime_manifest_files.R is required to verify the runtime envelope.",
+       call. = FALSE)
+}
+allowlist_env <- new.env(parent = baseenv())
+sys.source(allowlist_path, envir = allowlist_env)
+expected_files <- sort(allowlist_env$WATER_RUNTIME_FILES)
 actual_files <- sort(names(manifest$files))
 if (!identical(actual_files, expected_files)) {
   stop(sprintf("Runtime allowlist differs: %s", paste(actual_files, collapse = ", ")),
@@ -112,6 +120,6 @@ if (!inherits(result$value, "shiny.appobj")) {
   stop("app.R did not return a shiny.appobj.", call. = FALSE)
 }
 cat(sprintf(
-  "Connect six-file cold source passed (%d packages; exact_versions=%s).\n",
-  length(manifest$packages), require_exact
+  "Connect %d-file cold source passed (%d packages; exact_versions=%s).\n",
+  length(expected_files), length(manifest$packages), require_exact
 ))

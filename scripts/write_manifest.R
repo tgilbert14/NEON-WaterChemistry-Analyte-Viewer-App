@@ -107,8 +107,8 @@ jsonlite::write_json(
   generated, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null"
 )
 cat(sprintf(
-  "Refreshed six runtime checksums and preserved %d reviewed Connect package records.\n",
-  length(locked_names)
+  "Refreshed %d runtime checksums and preserved %d reviewed Connect package records.\n",
+  length(app_files), length(locked_names)
 ))
 
 # ---- HARD GATE: a leaked heavy package must never commit silently ----------

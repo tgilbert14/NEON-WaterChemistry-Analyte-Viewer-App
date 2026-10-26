@@ -1,4 +1,4 @@
-# NEON Surface Water Chemistry codebook | version 1.1.0 | product DP1.20093.001 | built 2026-08-04
+# NEON Surface Water Chemistry codebook | version 1.2.0 | product DP1.20093.001 | built 2026-08-04
 # section=tidy_long_export documents the in-app Tidy CSV columns (the keep-vector); section=analyte_dictionary documents every emitted analyte
 # units 'NA' = not applicable for schema rows; emitted analyte rows carry explicit reviewed targets
 "name","type","units","allowed","definition","na_semantics","section"
@@ -11,10 +11,12 @@
 "n_reps","integer","count",">= 1","Number of lab/field replicates collapsed into value","never NA","tidy_long_export"
 "value_sd","numeric","same as value",">= 0","Standard deviation across replicates before collapse","NA when n_reps == 1","tidy_long_export"
 "below_detection","logical","NA","TRUE/FALSE","Any replicate reported below the analytical detection limit (value kept, never substituted)","never NA","tidy_long_export"
+"partial_below","logical","NA","TRUE/FALSE","Some but not all replicates reported below the detection limit; value then uses the detected replicates only","not recorded: this bundle predates the v5 producer","tidy_long_export"
 "implausible_extreme","logical","NA","TRUE/FALSE","Flagged above the plausibility ceiling; kept in this raw export, excluded from fits/maps/STL/glm","never NA","tidy_long_export"
 "lab_flag","character","NA","sorted distinct NEON externalLabDataQF codes joined by ' | '","All distinct external-lab quality flags across the collapsed replicates","NA when every replicate is unflagged","tidy_long_export"
 "source","character","NA","External Lab | Field Probe","Measurement origin","never NA","tidy_long_export"
 "product","character","NA","DP1.20093.001","NEON data product code","never NA","tidy_long_export"
+"release","character","NA","RELEASE-YYYY | PROVISIONAL","NEON release tag of the site-month the row came from","not recorded: this bundle predates the v5 producer","tidy_long_export"
 "waterTemp","numeric","celsius",">= 0 typical","Analyte 'waterTemp': 7253 obs across 34 sites; canonical unit shown","0% below detection (kept, not substituted)","analyte_dictionary"
 "specificConductanceField","numeric","microsiemensPerCentimeter",">= 0 typical","Analyte 'specificConductanceField': 7239 obs across 34 sites; canonical unit shown","0% below detection (kept, not substituted)","analyte_dictionary"
 "dissolvedOxygenField","numeric","milligramsPerLiter",">= 0 typical","Analyte 'dissolvedOxygenField': 6963 obs across 34 sites; canonical unit shown","0% below detection (kept, not substituted)","analyte_dictionary"

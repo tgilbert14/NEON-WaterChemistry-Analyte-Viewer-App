@@ -69,11 +69,40 @@ shinyOptions(cache = cachem::cache_disk(file.path(tempdir(), "neon-cache"), max_
 
 WATER_RUNTIME_FILES <- sort(c(
   "app.R", "helpers.R", "scripts/water_unit_contract.R",
-  "data/codebook.csv", "data/neon_swc.rds", "data/search_index.rds"
+  "data/codebook.csv", "data/neon_swc.rds", "data/search_index.rds",
+  "www/pincards.js", "www/vendor/html-to-image-1.11.11.js"
 ))
 WATER_RUNTIME_RECEIPT <- paste(
   unname(tools::md5sum(WATER_RUNTIME_FILES)), collapse = "."
 )
+
+## ---- Pin cards + PNG export (www/pincards.js) ---------------------------
+# A .wc-pinnable box holds one plotly chart; pins and leader lines live inside
+# it, so html-to-image captures them. The toolbar sits OUTSIDE the box: a node
+# the capture filter drops collapses its space, which would shift the chart up
+# under the absolutely positioned pins in the PNG.
+wc_pin_box <- function(facet, chart) {
+  div(class = "wc-pin-wrap",
+    div(class = "wc-pin-toolbar", role = "toolbar", `aria-label` = "Pinned cards",
+      tags$button(type = "button", class = "btn btn-sm btn-outline-secondary",
+                  `data-wc-action` = "clear",
+                  title = "Remove every pinned card",
+                  bs_icon("x-circle"), " Clear pins"),
+      tags$button(type = "button", class = "btn btn-sm btn-outline-primary",
+                  `data-wc-action` = "save-chart",
+                  bs_icon("camera"), " Save chart with pins (PNG)"),
+      tags$span(class = "scope-note wc-pin-hint", "Tap a point to pin its values.")),
+    div(class = "wc-pinnable", `data-wc-facet` = facet, chart))
+}
+# versioned so a redeploy never serves a stale cached copy of the script
+wc_asset <- function(path) {
+  paste0(path, "?v=", substr(unname(tools::md5sum(file.path("www", path))), 1, 10))
+}
+# suite QC alias: the excluded (plausibility-gated) rows for one site. Reads
+# EXCLUDED_EXTREMES, which the data-load block below defines.
+chem_qc <- function(site) {
+  EXCLUDED_EXTREMES[EXCLUDED_EXTREMES$site %in% site, , drop = FALSE]
+}
 
 ## ---- Data (loaded once, shared across sessions) --------------------------
 D <- readRDS("data/neon_swc.rds")
@@ -123,15 +152,20 @@ EXCLUDED_EXTREMES <- D$swc_long |>
   dplyr::transmute(site, collectDate, analyte,
                    display = analyte_display(analyte), value,
                    units = unname(CANON_MAP[analyte]) %|na|% units,
-                   ceiling = .ceil_for(analyte, site)) |>
+                   ceiling = .ceil_for(analyte, site),
+                   # every gated row, with why: the data-derived ceiling, or the
+                   # physical range of a field-probe analyte (PLAUSIBLE_RANGE)
+                   reason = ifelse(!in_physical_range(value, analyte),
+                                   "outside the physical range", "above the analyte ceiling")) |>
   dplyr::arrange(dplyr::desc(value))
 # Surface (not hide) any high-variance-analyte rows the gate trimmed, so a
 # legitimately extreme site is auditable. With the site-aware gate, PRPO's
 # saline conductance now stays IN; this records what (if anything) was trimmed.
 PRPO_TRIMMED <- EXCLUDED_EXTREMES |>
   dplyr::filter(site == "PRPO", analyte %in% c("specificConductanceField","specificConductance","TDS","Na","Cl","SO4"))
-message(sprintf("[plausibility] %d implausible rows excluded total; %d are PRPO high-variance grabs (site-aware gate keeps genuine saline values).",
-                nrow(EXCLUDED_EXTREMES), nrow(PRPO_TRIMMED)))
+message(sprintf("[plausibility] %d implausible rows excluded total (%d above the analyte ceiling, %d outside the physical range); %d are PRPO high-variance grabs (site-aware gate keeps genuine saline values).",
+                nrow(EXCLUDED_EXTREMES), sum(EXCLUDED_EXTREMES$reason == "above the analyte ceiling"),
+                sum(EXCLUDED_EXTREMES$reason == "outside the physical range"), nrow(PRPO_TRIMMED)))
 # (2) rebuild the wide matrix from the PLAUSIBLE long rows only — this is the
 #     single chokepoint every stats tab + the map mean pivot through, so one
 #     edit here gates fit_lm / stl / glm / the choropleth colorbar at once.
@@ -224,9 +258,69 @@ aqua_theme <- bs_theme(
     .vb-door:hover { transform: translateY(-2px); }
     .value-box .value-box-title { font-size:.8rem; opacity:.9; }
     .value-box .value-box-value { white-space: nowrap; }
-    .info-link { color: var(--bs-secondary); opacity:.65; text-decoration:none; font-size:1rem;
+    /* full opacity + a darker grey: >= 4.5:1 on the light page and the cards */
+    .info-link { color: #3d5564; opacity:1; text-decoration:none; font-size:1rem;
                  display:inline-flex; align-items:center; padding:.15rem .3rem; line-height:1; }
-    .info-link:hover { opacity:1; }
+    .info-link:hover { color: #0a5f78; }
+    [data-bs-theme='dark'] .info-link { color: #b9d3e2; }
+    [data-bs-theme='dark'] .info-link:hover { color: #6ee6f0; }
+    /* 'Use full record' is a text link, keep it underlined so it reads as one */
+    #full_range { text-decoration: underline; text-underline-offset: 2px; }
+    @media (pointer:coarse) {
+      .info-link { min-width:44px; min-height:44px; justify-content:center; }
+      .leaflet-touch .leaflet-bar a { width:44px; height:44px; line-height:44px; }
+    }
+    /* visible keyboard focus everywhere a pointer user gets a hover state */
+    #shiny-modal .btn:focus-visible { outline:3px solid #0E7C9B; outline-offset:2px; }
+    .home-btn:focus-visible, .flagship-btn:focus-visible, .vb-door:focus-visible,
+    .qc-pill:focus-visible, .cb-change:focus-visible, .cb-report:focus-visible,
+    a:focus-visible, .info-link:focus-visible { outline:3px solid #0E7C9B; outline-offset:2px; }
+    [data-bs-theme='dark'] #shiny-modal .btn:focus-visible,
+    [data-bs-theme='dark'] .home-btn:focus-visible, [data-bs-theme='dark'] .flagship-btn:focus-visible,
+    [data-bs-theme='dark'] .vb-door:focus-visible, [data-bs-theme='dark'] a:focus-visible,
+    [data-bs-theme='dark'] .info-link:focus-visible { outline-color:#6ee6f0; }
+    /* skip link: hidden until focused (Bootstrap's .visually-hidden-focusable) */
+    .skip-link:focus { position:fixed !important; top:8px; left:8px; z-index:7000; background:#0a5f78;
+                       color:#fff !important; padding:.5rem .9rem; border-radius:.4rem; font-weight:700; }
+    /* top-bar suite link */
+    .tb-suite { color:#0a5f78; font-weight:700; font-size:.86rem; text-decoration:none;
+                min-height:44px; display:inline-flex; align-items:center; gap:.3rem; }
+    .tb-suite:hover { text-decoration:underline; color:#0a5f78; }
+    [data-bs-theme='dark'] .tb-suite { color:#6ee6f0; }
+    /* partial-bundle banner (amber, persistent) */
+    .partial-banner { background:#fff4d6; border:1px solid #d6a31c; color:#5c4300; border-radius:.5rem;
+                      padding:.5rem .8rem; margin:0 0 .7rem; font-size:.88rem; font-weight:600; }
+    [data-bs-theme='dark'] .partial-banner { background:#3a2c05; color:#ffe7a8; border-color:#c79a1c; }
+    .data-through { text-align:center; color:var(--muted); font-size:12.5px; margin:-4px 0 12px; }
+    [data-bs-theme='dark'] .data-through { color:#9fc2d6; }
+    .context-band .cb-through { font-weight:500; opacity:1; font-size:.8rem; }
+    .cb-note { display:inline-flex; align-items:center; gap:.25rem; font-size:.76rem; font-weight:700;
+               background:rgba(14,124,155,.12); color:#0a5f78; border:1px solid rgba(14,124,155,.35);
+               border-radius:1rem; padding:.05rem .55rem; text-decoration:none; position:relative; }
+    .cb-note::before { content:''; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
+    .cb-note:hover { background:rgba(14,124,155,.22); color:#0a5f78; text-decoration:none; }
+    [data-bs-theme='dark'] .cb-note { color:#6ee6f0; border-color:rgba(110,230,240,.4); background:rgba(52,198,216,.14); }
+    /* page footer */
+    .app-footer { max-width:1040px; margin:28px auto 12px; padding:14px 6px 4px; border-top:1px solid var(--line);
+                  color:var(--muted); font-size:12.5px; line-height:1.55; }
+    .app-footer p { margin:0 0 .35rem; }
+    .app-footer a { color:#0a5f78; }
+    [data-bs-theme='dark'] .app-footer { color:#9fc2d6; }
+    [data-bs-theme='dark'] .app-footer a { color:#6ee6f0; }
+    .app-footer .cite { font-size:11.5px; }
+    .sibling-current { font-weight:700; border-style:dashed; }
+    .sibling-current .sibling-here { font-weight:400; }
+    /* phone: compact summary value boxes (two per row) */
+    @media (max-width:560px) {
+      #summary_strip .bslib-value-box { min-height:0 !important; height:auto !important; }
+      #summary_strip .bslib-value-box .value-box-area { padding:.45rem .6rem !important; }
+      #summary_strip .bslib-value-box .value-box-title { font-size:.7rem; margin-bottom:.1rem; }
+      #summary_strip .bslib-value-box .value-box-value { font-size:1.15rem !important; white-space:normal;
+                                                         overflow-wrap:anywhere; margin-bottom:.1rem; }
+      #summary_strip .bslib-value-box p { font-size:.7rem; margin-bottom:0; }
+      #summary_strip .bslib-value-box .value-box-showcase { max-height:34px; overflow:hidden; }
+      #summary_strip .bslib-grid { gap:.5rem !important; }
+    }
     .help-q { opacity:.55; cursor:pointer; font-size:.82em; vertical-align:middle; }
     .help-q:hover { opacity:1; }
     .value-box .help-q { color: currentColor; }
@@ -249,7 +343,7 @@ aqua_theme <- bs_theme(
     @keyframes wcspin { to { transform:rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { #wcOverlay .wc-spin { animation:none; } }
     /* =====================================================================
-       v2 FLOW chrome — the sidebar is gone. A slim TOP BAR (theme + How-it-
+       v2 FLOW chrome: the sidebar is gone. A slim TOP BAR (theme + How-it-
        works) sits above the summary strip; a sticky CONTEXT BAND below it
        carries the current site, a Change-site link (back to the picker map)
        and a Report download; and a SELECT PANEL on the Explore tab holds the
@@ -292,7 +386,7 @@ aqua_theme <- bs_theme(
     .context-band .cb-actions { margin-left:auto; display:inline-flex; align-items:center; gap:.2rem; flex:none; }
     .cb-change, .cb-report { font-size:.86rem; font-weight:700; text-decoration:none;
                              color:#0E7C9B; padding:.3rem .55rem; border-radius:.4rem;
-                             min-height:38px; display:inline-flex; align-items:center; gap:.25rem; }
+                             min-height:44px; display:inline-flex; align-items:center; gap:.25rem; }
     .cb-change:hover, .cb-report:hover { background:rgba(14,124,155,.12); color:#0a5f78; text-decoration:none; }
     .cb-report { border-left:1px solid rgba(14,124,155,.22); border-radius:0 .4rem .4rem 0; }
     [data-bs-theme='dark'] .context-band { background:#0c3350; border-color:rgba(52,198,216,.30); color:#6ee6f0; }
@@ -302,7 +396,8 @@ aqua_theme <- bs_theme(
                             background:rgba(52,198,216,.16); color:#bdf2f7; }
     @media (max-width:560px) {
       .context-band .cb-armed { flex-basis:100%; order:3; }
-      .context-band .cb-actions { margin-left:0; }
+      .context-band .cb-actions { margin-left:0; flex:1 1 100%; flex-wrap:wrap; row-gap:.3rem; }
+      .card-header .btn-group { flex-wrap:wrap; }
     }
 
     /* ---- relocated site-select panel (was the sidebar) ---- */
@@ -311,7 +406,7 @@ aqua_theme <- bs_theme(
                     border-left:4px solid var(--pine2); border-radius:14px;
                     padding:16px 18px; box-shadow:0 4px 16px var(--shadow); }
     [data-bs-theme='dark'] .select-panel { background:linear-gradient(180deg,#0c3350 0%,var(--paper) 100%); }
-    .select-panel .sp-head { font-weight:700; color:var(--pine2); font-size:13.5px;
+    .select-panel .sp-head { font-weight:700; color:#0a5f78; font-size:13.5px;
                              display:flex; align-items:center; gap:7px; margin-bottom:12px; }
     [data-bs-theme='dark'] .select-panel .sp-head { color:var(--pine); }
     .select-panel .sp-row { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; margin-bottom:4px; }
@@ -323,12 +418,14 @@ aqua_theme <- bs_theme(
     .select-panel label, .select-panel .control-label { color:var(--ink); font-weight:600; font-size:13px; }
     .select-panel .sp-field .form-control,
     .select-panel .sp-field .form-select,
-    .select-panel .sp-field .selectize-input { min-height:44px; }
+    .select-panel .sp-field .selectize-input,
+    .tune-details .sp-field .selectize-input,
+    .selectize-control .selectize-input { min-height:44px; }
     .select-panel .input-daterange { display:flex; gap:6px; }
     .select-panel .input-daterange .form-control { min-height:44px; }
     .select-panel .sp-date-sub { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .7rem; margin-top:.3rem; }
     .select-panel .sp-swap { flex:0 0 auto; padding-bottom:.35rem; }
-    .select-panel .sp-swap .btn { min-height:44px; }
+    .select-panel .sp-swap .btn, .tune-details .sp-swap .btn { min-height:44px; }
     .select-panel .sp-row-preset { align-items:flex-end; }
     .select-panel .sp-preset-note { flex:1 1 220px; padding-bottom:.55rem; }
     .select-panel .sp-armed { margin-top:.6rem; display:flex; align-items:center; flex-wrap:wrap; gap:.35rem; }
@@ -340,12 +437,15 @@ aqua_theme <- bs_theme(
       .select-panel .sp-swap .btn { width:100%; }
     }
 
-    /* small clickable QC pill: a flagged extreme was excluded — click to audit */
+    /* small clickable QC pill: a flagged extreme was excluded, click to audit */
     .qc-pill { margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:.3rem;
                background:rgba(214,163,28,.16); color:#9a7314; border:1px solid rgba(214,163,28,.4);
                border-radius:1rem; padding:.05rem .55rem; font-size:.76rem; font-weight:600;
                cursor:pointer; text-decoration:none; line-height:1.5; }
     .qc-pill:hover { background:rgba(214,163,28,.28); color:#7a5a10; }
+    /* the pill looks 22px tall; a transparent ::before gives it a 44px hit area */
+    .qc-pill { position:relative; }
+    .qc-pill::before { content:''; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
     .qc-pill .bi { color:#b8860b !important; }
     [data-bs-theme='dark'] .qc-pill { background:rgba(110,230,196,.14); color:#6ee6c4;
                border-color:rgba(110,230,196,.4); }
@@ -356,8 +456,8 @@ aqua_theme <- bs_theme(
 
     /* =====================================================================
        DESERT-NIGHT design tokens. The app DEFAULTS to light (:root = desert-
-       day), but the prominent INFO BOXES — the command-band navbar + the
-       value boxes — wear the dark desert-night scheme in BOTH modes (the
+       day), but the prominent INFO BOXES (the command-band navbar + the
+       value boxes) wear the dark desert-night scheme in BOTH modes (the
        'light page, dark hero' cascade look). Toggling dark swaps the tokens.
        ===================================================================== */
     :root {
@@ -389,7 +489,7 @@ aqua_theme <- bs_theme(
     }
 
     /* ====================================================================== *
-     *  PREMIUM DESERT-NIGHT — the navbar becomes a dark COMMAND BAND with a   *
+     *  PREMIUM DESERT-NIGHT: the navbar becomes a dark COMMAND BAND with a   *
      *  drifting starfield + teal/coral/gold nebula, in BOTH modes. Every      *
      *  animation is prefers-reduced-motion gated at the bottom.               *
      * ====================================================================== */
@@ -469,7 +569,7 @@ aqua_theme <- bs_theme(
       .value-box:hover, .vb-door:hover { transform: none; }
     }
 
-    /* ============ in-app mascot — loader · splash guide · celebration ============ */
+    /* ============ in-app mascot: loader · splash guide · celebration ============ */
     .mascot { display:block; width:100%; height:auto; overflow:visible; }
     .mascot-ear-l, .mascot-ear-r { transform-box:fill-box; transform-origin:50% 88%; }
     .mascot-eyes { transform-box:fill-box; transform-origin:center; }
@@ -490,9 +590,10 @@ aqua_theme <- bs_theme(
     .splash-guide .sg-mascot .mascot-ear-l { animation: mascotEarL 2.6s ease-in-out infinite; }
     .splash-guide .sg-mascot .mascot-ear-r { animation: mascotEarR 2.6s ease-in-out infinite; }
     .splash-guide .sg-mascot .mascot-eyes { animation: mascotBlink 4.2s ease-in-out infinite; }
-    .splash-guide .sg-bubble { margin-bottom:34px; background:var(--paper); border:1px solid var(--line); color:var(--pine);
+    .splash-guide .sg-bubble { margin-bottom:34px; background:var(--paper); border:1px solid var(--line); color:#0a5f78;
       font-size:12.5px; font-weight:700; padding:6px 11px; border-radius:12px 12px 2px 12px;
       box-shadow:0 8px 20px -8px var(--shadow); white-space:nowrap; }
+    [data-bs-theme='dark'] .splash-guide .sg-bubble { color:#6ee6f0; }
     .splash-guide.wave .sg-mascot { transform-box:fill-box; transform-origin:50% 90%; animation: mascotWave 1s ease 3; }
     @keyframes mascotWave { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
     /* celebration: the droplet hops up + fades on a notable find */
@@ -514,7 +615,7 @@ aqua_theme <- bs_theme(
     }
 
     /* ====================================================================== *
-     *  'Browse all sites' — a CLOSED-by-default collapsible site list          *
+     *  'Browse all sites': a CLOSED-by-default collapsible site list          *
      *  under the Explore map. Matches the canonical sibling pattern (Small    *
      *  Mammal .picker-list / Birds .site-browse) but wears THIS app's aqua    *
      *  accent (--pine2 #0E7C9B / --pine #1a9fb0 from the desert-night tokens).*
@@ -545,7 +646,7 @@ aqua_theme <- bs_theme(
       background: var(--paper);
     }
     .site-browse-link {
-      display: block; padding: 6px 9px; border-radius: 8px; min-height: 38px;
+      display: block; padding: 6px 9px; border-radius: 8px; min-height: 44px;
       color: var(--ink); font-size: 13px; text-decoration: none; }
     .site-browse-link:hover { background: var(--bg); color: var(--pine2); }
     .site-browse-link b { color: var(--pine2); }
@@ -632,7 +733,7 @@ aqua_theme <- bs_theme(
       margin: 0 auto 12px; max-width: 760px; }
     .splash-orient b { color: var(--pine2); }
     [data-bs-theme='dark'] .splash-orient b { color: var(--pine); }
-    /* the flagship 'best 3 seconds' button — the visual primary above the map */
+    /* the flagship 'best 3 seconds' button, the visual primary above the map */
     .flagship-wrap { max-width: 760px; margin: 0 auto 14px; }
     .flagship-btn { width: 100%; min-height: 56px; background: #0E7C9B !important; border-color: #0E7C9B !important;
       color: #fff !important; font-weight: 700; font-size: 16px; border-radius: 12px;
@@ -643,7 +744,7 @@ aqua_theme <- bs_theme(
     .flagship-btn .bi { color: #fff !important; }
     .flagship-btn .fb-text { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; }
     .flagship-btn .fb-main { font-weight: 700; font-size: 16px; }
-    .flagship-btn .fb-sub { font-weight: 500; font-size: 12.5px; opacity: .93; margin-top: 1px; }
+    .flagship-btn .fb-sub { font-weight: 500; font-size: 12.5px; opacity: 1; margin-top: 1px; }
     .splash-colour-by { max-width: 760px; margin: 0 auto 6px; text-align: left; }
     .splash-colour-by label, .splash-colour-by .control-label { color: var(--ink); font-weight: 600; font-size: 13.5px; }
     .splash-map-wrap { margin: 0 auto 8px; }
@@ -685,11 +786,14 @@ aqua_theme <- bs_theme(
 INFO <- list(
   compare = list("How the time series works", HTML(
     "Both analytes are matched on collection date and drawn on a shared time axis. <b>Normalized</b>
-     mode standardizes each series to mean 0, SD 1 so you compare <i>shape</i> honestly even when the
-     units differ. <b>Dual axis (raw)</b> shows the original values on two independent scales, which is useful,
-     but the proximity of two lines on independent axes does <i>not</i> by itself imply correlation
-     (use the Relationship tab to test that). Open markers are below the analytical detection limit.
-     Source: NEON SWC DP1.20093.001 (external lab + field probe).")),
+     mode standardizes each series to mean 0, SD 1 so you compare <i>shape</i> even when the
+     units differ. <b>Dual axis (raw)</b> shows the original values on two independent scales,
+     but two lines close together on independent axes do <i>not</i> by themselves imply correlation
+     (use the Relationship tab to test that). Open markers are samples below the detection limit that
+     carry a reported value. Ticks along the bottom are below-detection samples NEON reported without a
+     value; they count in every n and are never drawn as a value. A dashed line marks the July 2019 lab
+     method change for the nutrients it affected.
+     Source: NEON DP1.20093.001 (external lab and field probe).")),
   relationship = list("How the regression works", HTML(
     "An ordinary least-squares line fit to date-paired samples. <b>R²</b> is the share of variance in the
      secondary analyte explained by the main one; the <b>p-value</b> tests whether the slope differs from
@@ -703,9 +807,13 @@ INFO <- list(
      are often monotonic-but-nonlinear; Pearson r (linear) is shown alongside. This screens ~34 analytes
      at once, so some low p-values will appear by chance (multiple comparisons); treat results as
      hypothesis-generating, never confirmatory. Rows with fewer than 8 paired samples are flagged
-     unreliable and greyed.")),
+     unreliable and greyed. The bracket after ρ is a 95% interval (Fisher z, Bonett-Wright standard
+     error). When both series are autocorrelated in the same direction, it uses the effective sample
+     size n × (1 − r<sub>x</sub>r<sub>y</sub>) / (1 + r<sub>x</sub>r<sub>y</sub>), with r<sub>x</sub>
+     and r<sub>y</sub> the lag-1 autocorrelations. The field and lab measurement of the same quantity
+     (specific conductance, dissolved oxygen) is left out of the screen.")),
   seasonal = list("How the seasonal view works", HTML(
-    "The main analyte is aggregated to monthly means of the <i>real</i> measured series, then split by STL
+    "The main analyte is aggregated to monthly means of the measured series, then split by STL
      (Seasonal-Trend decomposition using Loess) into a smooth <b>trend</b>, a repeating <b>seasonal</b>
      cycle, and a <b>remainder</b>. Requires ≥ 24 months across ≥ 2 years. NEON grab samples are roughly
      monthly with gaps, so <b>interior months with no sample are linearly interpolated before decomposing</b>
@@ -725,8 +833,13 @@ INFO <- list(
      date. Use the buttons to download exactly the current site and range."))
 )
 
-info_link <- function(id) actionLink(id, bs_icon("info-circle"), class = "info-link",
-                                      title = "How is this computed?")
+# the info dot names what it explains (INFO[[key]][[1]], e.g. "How the time
+# series works") so a screen reader hears more than "link"
+info_link <- function(id) {
+  k <- sub("^info_", "", id)
+  lab <- if (!is.null(INFO[[k]])) INFO[[k]][[1]] else "How this is computed"
+  actionLink(id, bs_icon("info-circle"), class = "info-link", title = lab, `aria-label` = lab)
+}
 
 ## ---- Plain-language glossary + a (?) popover helper for jargon ------------
 GLOSSARY <- list(
@@ -747,16 +860,26 @@ GLOSSARY <- list(
     to simply guessing the average: <b>+50%</b> means the model's error is half that naive baseline (and a
     negative skill means it's worse than guessing the average)."),
   stl      = HTML("<b>STL</b> splits the monthly series into a slow <b>trend</b>, a repeating <b>seasonal</b>
-    cycle, and leftover noise, computed from the real measured data."),
-  censor   = HTML("<b>Below detection (BDL)</b> means the lab couldn't measure the analyte above its
-    detection limit. We keep the reported number (drawn as an <b>open marker</b>) and never substitute a
-    zero. But when a large share of an analyte's samples are below detection, a correlation is dominated by
-    detection-limit <b>ties</b>, not real chemistry, so we <b>grey out</b> any pair whose matched samples here
-    are 25% or more below detection and treat it as <b>exploratory only</b> (Helsel 2012).")
+    cycle, and leftover noise, computed from the measured monthly data."),
+  censor   = HTML("<b>Below detection (BDL)</b> means the lab could not measure the analyte above its
+    detection limit. Where NEON reports a number we keep it (drawn as an <b>open marker</b>) and never
+    substitute a zero. Since spring 2022 NEON reports many non-detects with a blank concentration (change
+    log 63904); those count in every n, show as ticks along the bottom of the time charts, and enter no fit.
+    <b>Partly below detection</b> means some replicates of a sample were below the limit; the value is the
+    mean of the detected replicates. In July 2019 NEON's lab changed methods for several nutrients and
+    lowered their detection limits (change log 37505), so a long record can mix two detection regimes; a
+    dashed line marks the change. When a large share of samples are below detection, a correlation is
+    dominated by detection-limit <b>ties</b>, not chemistry, so we <b>grey out</b> any pair whose matched
+    samples here are 25% or more below detection and treat it as <b>exploratory only</b> (Helsel 2012,
+    <i>Statistics for Censored Environmental Data</i>).")
 )
 # small (?) icon that pops a plain-language explanation on click/hover
+# (the trigger is a focusable span named after what it explains)
 help_pop <- function(key, ttl = NULL)
-  popover(bs_icon("question-circle", class = "help-q"), GLOSSARY[[key]], title = ttl, placement = "top")
+  popover(tags$span(role = "button", tabindex = "0",
+                    `aria-label` = paste0("Explain: ", ttl %||% key),
+                    bs_icon("question-circle", class = "help-q")),
+          GLOSSARY[[key]], title = ttl, placement = "top")
 
 ## ---- JS: onboarding localStorage + phone width ---------------------------
 APP_JS <- HTML("
@@ -781,19 +904,22 @@ Shiny.addCustomMessageHandler('wc_save_state', function(msg){ try{ localStorage.
    across several frames. A 'resize' makes every Leaflet map invalidateSize and
    re-fit the settled width instead of painting half-width / grey tiles. Mirrors
    the flagship Small Mammal kickMaps handler. */
+/* close any open marker popup first (autoPan on a hidden map can loop), and
+   only dispatch the resize once #map has a width: a resize while it is still
+   0px wide measures nothing, so retry on the next frames instead. */
+function wcCloseMapPopup(){
+  try { var w = HTMLWidgets.find('#map'); if (w && w.getMap) w.getMap().closePopup(); } catch(e){}
+}
 Shiny.addCustomMessageHandler('kickMaps', function(msg){
-  var kick = function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} };
-  if (window.requestAnimationFrame) requestAnimationFrame(kick);
-  [80, 250, 500, 900].forEach(function(t){ setTimeout(kick, t); });
+  wcCloseMapPopup();
+  var kick = function(tries){
+    var m = document.getElementById('map');
+    if (!m || m.clientWidth > 0) { try { window.dispatchEvent(new Event('resize')); } catch(e){} return; }
+    if (tries < 30 && window.requestAnimationFrame) requestAnimationFrame(function(){ kick(tries + 1); });
+  };
+  if (window.requestAnimationFrame) requestAnimationFrame(function(){ kick(0); });
+  [80, 250, 500, 900].forEach(function(t){ setTimeout(function(){ kick(25); }, t); });
 });
-window.addEventListener('resize', function(){ clearTimeout(window.__rt);
-  window.__rt=setTimeout(function(){ Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'}); },250); });
-
-/* Any tab becoming visible: nudge a resize so a DataTable or Plotly that
-   initialised in a hidden (0-width) tab recomputes its width (e.g. the Search
-   results table, which renders before its tab is ever shown). */
-document.addEventListener('shown.bs.tab', function(){
-  setTimeout(function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} }, 60); });
 
 /* ---- client-side 'working' veil ----------------------------------------
    A site/analyte/date/map change kicks off recompute on the worker; the
@@ -809,10 +935,7 @@ function wcVeilOff(){ var o=document.getElementById('wcOverlay'); if(o) o.style.
    the page, it never re-binds data, so raising the working veil on it was a false
    load. The veil now fires only on genuinely data-bound changes. */
 var WC_HEAVY=['site','analyte_secondary','dates','preset','cor_method','ts_mode','site_b','swap','full_range'];
-$(document).on('shiny:inputchanged', function(e){ if(WC_HEAVY.indexOf(e.name)>=0) wcVeilOn(); });
-/* a map-dot tap now opens a lightweight Explore|About choice card (no recompute),
-   so the veil is raised by the actual load instead (input$site is in WC_HEAVY). */
-$(document).on('shiny:idle', function(){ wcVeilOff(); });
+/* (the shiny:inputchanged / shiny:idle veil listeners live in APP_LISTENERS_JS) */
 
 /* ---- mascot celebration: the droplet hops up + fades on a notable find ----
    This app has no confetti yet, so mascotCheer() is wired but unused; it clones
@@ -830,8 +953,31 @@ function mascotCheer(big){
   } catch (e) {}
 }
 
-/* ---- first-visit: the splash mascot waves hello once (localStorage-gated) ---- */
-document.addEventListener('DOMContentLoaded', function(){
+")
+
+## ---- JS: delegated listeners, each registration isolated ------------------
+# Its own <script> tag, and every registration in its own try{}, so one bad line
+# (or a missing global) cannot stop the rest from binding.
+APP_LISTENERS_JS <- HTML("
+/* phone width -> input$client_w (debounced) */
+try { window.addEventListener('resize', function(){ clearTimeout(window.__rt);
+  window.__rt=setTimeout(function(){ Shiny.setInputValue('client_w', window.innerWidth, {priority:'event'}); },250); });
+} catch(e){}
+
+/* Any tab becoming visible: nudge a resize so a DataTable or Plotly that
+   initialised in a hidden (0-width) tab recomputes its width (e.g. the Search
+   results table, which renders before its tab is ever shown). */
+try { document.addEventListener('shown.bs.tab', function(){
+  setTimeout(function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} }, 60); });
+} catch(e){}
+
+/* working veil: raise on a heavy input change, clear when Shiny goes idle */
+try { $(document).on('shiny:inputchanged', function(e){
+  if (window.WC_HEAVY && WC_HEAVY.indexOf(e.name)>=0 && window.wcVeilOn) wcVeilOn(); }); } catch(e){}
+try { $(document).on('shiny:idle', function(){ if (window.wcVeilOff) wcVeilOff(); }); } catch(e){}
+
+/* first visit: the splash mascot waves hello once (localStorage-gated) */
+try { document.addEventListener('DOMContentLoaded', function(){
   try {
     if (localStorage.getItem('smtMascotSeen') === '1') return;
     var g = document.querySelector('.splash-guide');
@@ -841,25 +987,57 @@ document.addEventListener('DOMContentLoaded', function(){
       setTimeout(function(){ g.classList.remove('wave'); }, 3300);
     }
   } catch (e) {}
-});
-/* dismiss the corner nudge once the user actually engages a site (so it isn't permanent) */
-$(document).on('shiny:inputchanged', function(e){
+}); } catch(e){}
+
+/* dismiss the corner nudge once the user engages a site */
+try { $(document).on('shiny:inputchanged', function(e){
   if (e.name === 'site' || e.name === 'preset') {
     var g = document.getElementById('splashGuide'); if (g) g.style.display = 'none';
   }
-});
-$(document).on('mousedown', '#map', function(){
+}); } catch(e){}
+try { $(document).on('mousedown', '#map', function(){
   var g = document.getElementById('splashGuide'); if (g) g.style.display = 'none';
-});
-/* ---- Search-the-network: a 'Go to site' button or the site-code link loads
-   that site from the bundle and lands on the Explore map. Delegated so it works
-   for every DT redraw. Raise the working veil on the gesture (real load). ---- */
-$(document).on('click', '.search-go, .search-go-link', function(e){
+}); } catch(e){}
+
+/* Search-the-network: a 'Go to site' button or the site-code link loads that
+   site. Delegated so it works for every DT redraw. */
+try { $(document).on('click', '.search-go, .search-go-link', function(e){
   e.preventDefault();
   var s = this.getAttribute('data-site'); if (!s) return;
   if (window.wcVeilOn) wcVeilOn();
   Shiny.setInputValue('searchGo', s, {priority:'event'});
-});
+}); } catch(e){}
+
+/* browser Back / Forward: hand the server the URL it now shows (Shiny's own
+   clientData url_search goes stale after pushState, see the server note) */
+try { window.addEventListener('popstate', function(){
+  try { Shiny.setInputValue('wc_nav', window.location.search || '', {priority:'event'}); } catch(err){}
+}); } catch(e){}
+
+/* name every Shiny modal after its title (aria-labelledby) */
+try { document.addEventListener('shown.bs.modal', function(e){
+  try {
+    var m = e.target; if (!m || m.id !== 'shiny-modal') return;
+    var t = m.querySelector('.modal-title'); if (!t) return;
+    if (!t.id) t.id = 'shiny-modal-title';
+    m.setAttribute('aria-labelledby', t.id);
+  } catch(err){}
+}); } catch(e){}
+
+/* keyboard activation for non-button controls: Enter or Space on an element
+   marked [data-kbd-activate] (or a .vb-door) clicks it. Native buttons are
+   skipped, a link only takes Space (Enter already follows it), and a key
+   already handled by an inline handler is left alone. */
+try { document.addEventListener('keydown', function(e){
+  if (e.defaultPrevented) return;
+  var k = e.key; if (k !== 'Enter' && k !== ' ' && k !== 'Spacebar') return;
+  var t = e.target; if (!t || !t.matches || !t.matches('[data-kbd-activate], .vb-door')) return;
+  var tag = (t.tagName || '').toLowerCase();
+  if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  if (tag === 'a' && k === 'Enter') return;
+  e.preventDefault();
+  t.click();
+}); } catch(e){}
 ")
 
 # The app mascot — a flat (no-gradient, no-id so it's safely reusable) cute water
@@ -873,6 +1051,34 @@ MASCOT_CRITTER <- htmltools::HTML(paste0(
   '<circle cx="48" cy="61.5" r="2.4" fill="#ffffff"/><circle cx="68" cy="61.5" r="2.4" fill="#ffffff"/></g>',
   '</svg>'))
 
+## ---- Shell provenance lines (splash, context band, footer, About) --------
+# One source for "Data through ..." so the splash, the context band, the footer
+# and the About modal can never disagree about the bundle they describe.
+DATA_THROUGH <- as.character(D$built$data_through %||% NA_character_)
+data_through_txt <- function() {
+  if (is.na(DATA_THROUGH) || !nzchar(DATA_THROUGH)) return("Data through: not recorded")
+  pf <- neon_release_info(D$built)$provisional_from
+  paste0("Data through ", DATA_THROUGH,
+         if (!is.na(pf)) paste0(" · includes provisional data from ", pf) else "")
+}
+# a persistent amber banner when the bundle was built from a partial pull
+partial_banner <- function() {
+  if (!isTRUE(D$built$partial)) return(NULL)
+  div(class = "partial-banner", role = "status", bs_icon("exclamation-triangle-fill"),
+      " Partial dataset: this bundle was built from the sites cached so far, so counts cover the available data, not the full product.")
+}
+app_footer <- function() {
+  tags$footer(class = "app-footer",
+    tags$p(HTML("Built by <b>Desert Data Labs</b> · Tucson, AZ · ",
+                "<a href='mailto:desertdatalabs@gmail.com'>desertdatalabs@gmail.com</a>")),
+    tags$p("Not affiliated with NEON, Battelle, or the NSF."),
+    tags$p(HTML("Data from the National Ecological Observatory Network (NEON), a program of the U.S. National Science Foundation operated by Battelle, used under ",
+                "<a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='noopener'>CC BY 4.0</a>. ",
+                "Summary metrics are derived here; the underlying measurements are unaltered.")),
+    tags$p(data_through_txt()),
+    lapply(neon_citation_lines(D$built), function(l) tags$p(class = "cite", l)))
+}
+
 #======================================================================
 # UI
 #======================================================================
@@ -883,12 +1089,10 @@ ui <- page_fillable(
   title = "NEON Water Chemistry · Analyte Viewer",
   lang = "en",
   theme = aqua_theme,
-  # Flow content naturally instead of filling the viewport. A fillable page collapses
-  # its card bodies to ~0 height when served in an indefinite-height container (Connect
-  # Cloud / iframe), which hid every chart on the deployed host. Natural flow + each
-  # chart's explicit height = charts always render and the page just scrolls.
-  fillable = FALSE,
-  tags$head(tags$script(APP_JS),
+  # page_fillable() has no `fillable` argument (it landed on <body> as an
+  # attribute). The page scrolls because of the "PAGE MUST SCROLL" CSS above, and
+  # every chart carries an explicit height, so nothing here depends on fill.
+  tags$head(tags$script(APP_JS), tags$script(APP_LISTENERS_JS),
             tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
             tags$meta(name = "ddl-app-ready", content = "water-chemistry-v1"),
             tags$meta(name = "ddl-runtime-receipt", content = WATER_RUNTIME_RECEIPT),
@@ -899,6 +1103,8 @@ ui <- page_fillable(
             tags$link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = NA),
             tags$link(rel = "stylesheet",
                       href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700;800&display=swap")),
+  # first focusable element in the body: jump past the top bar to the content
+  tags$a(href = "#main", class = "visually-hidden-focusable skip-link", "Skip to main content"),
   useShinyjs(),   # show/hide("splash") <-> show/hide("mainTabsWrap") gates the map-first flow
 
   # client-side 'working' overlay (shown on heavy interactions, hidden on idle)
@@ -919,6 +1125,9 @@ ui <- page_fillable(
       tags$span(class = "tb-mark", bs_icon("droplet-half")),
       tags$span(class = "tb-title", "Water Chemistry · Analyte Viewer")),
     div(class = "top-bar-actions",
+      tags$a(class = "tb-suite", href = "https://tgilbert14.github.io/NEON-Driver-Cascade/",
+             target = "_blank", rel = "noopener",
+             bs_icon("diagram-3"), "Whole suite: Response Atlas"),
       actionButton("about", tagList(bs_icon("question-circle"), " How it works"),
                    class = "btn-outline-secondary btn-sm tb-help"),
       div(class = "tb-theme",
@@ -933,14 +1142,16 @@ ui <- page_fillable(
   # preset, armed, qc_chip) plus the relocated leafletOutput("map") — so the
   # server's selection / load / preset / map logic is untouched, only moved.
   # =====================================================================
+  tags$main(id = "main", tabindex = "-1",
   div(id = "splash",
+    partial_banner(),
     div(class = "app-hero app-hero-splash",
       h1(class = "app-title", "NEON Water Chemistry · Analyte Viewer",
          span(class = "title-tag", "unofficial")),
       p(class = "app-subtitle",
-        "NEON's labs measure the chemistry of streams, rivers, and lakes across the country — ",
-        "hundreds of samples per site, not a handful. This app reads one aquatic site at a time and ",
-        "compares any two analytes over its full record. Built on the Surface Water Chemistry product (DP1.20093.001).")),
+        "NEON's labs measure the chemistry of streams, rivers and lakes across the country. ",
+        "This app reads one aquatic site at a time and compares any two analytes over its full record.")),
+    p(class = "data-through", data_through_txt()),
     p(class = "splash-orient",
       tags$b("Tap a site on the map"), " (coloured by the analyte you choose) to explore it, or pick one by name below. ",
       tags$b(paste0(nrow(site_tbl), " aquatic sites")), ", from desert streams to arctic lakes."),
@@ -963,8 +1174,8 @@ ui <- page_fillable(
                      selected = DEF_A[1], width = "100%")),
     div(class = "splash-map-wrap",
       withSpinner(leafletOutput("map", height = 540), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
-    div(class = "splash-map-hint", bs_icon("hand-index-thumb"),
-        " Drag to pan · scroll to zoom · darker = higher · grey = not measured here."),
+    div(class = "splash-map-hint", bs_icon("palette"),
+        " Darker = higher · grey = not measured here."),
 
     # BY-NAME PANEL (the by-name path) — site + date window + an Explore button.
     div(class = "select-panel",
@@ -1041,8 +1252,17 @@ ui <- page_fillable(
   # =====================================================================
   hidden(div(id = "mainTabsWrap",
 
-  # Summary strip
-  uiOutput("summary_strip"),
+  partial_banner(),
+
+  # Summary strip, wrapped as a self-describing card (caption + Save card PNG)
+  div(id = "wcCardNode", class = "wc-card-node",
+    uiOutput("summary_strip"),
+    div(class = "wc-card-foot",
+      uiOutput("wc_card_caption", class = "wc-card-caption"),
+      div(class = "wc-card-actions",
+        tags$button(type = "button", class = "btn btn-sm btn-outline-primary",
+                    `data-wc-action` = "save-card",
+                    bs_icon("camera"), " Save card (PNG)")))),
 
   # server-rendered context band: current site + analytes, with a "Change site"
   # control (re-shows the picker splash) and a "Report" download. This carries
@@ -1061,12 +1281,12 @@ ui <- page_fillable(
         actionButton("goSearch", tagList(bs_icon("search"), div("Search the network"), tags$small("find sites by threshold")), class = "home-btn"),
         actionButton("goTwoSites", tagList(bs_icon("signpost-split"), div("Two sites"), tags$small("the same analyte, two places")), class = "home-btn")),
       card(full_screen = TRUE,
-        card_header("This is dense, honest water-chemistry data"),
+        card_header("About this site's record"),
         div(class = "p-2",
           uiOutput("overview_scope"),
           tags$p(class = "scope-note", style = "margin-bottom:0",
             bs_icon("shield-check"),
-            HTML(" <b>How the stats stay honest:</b> every statistic shows its sample size; correlations default to Spearman with an n ≥ 8 reliability flag; the seasonal view is a real STL decomposition of the monthly record, not a forecast; below-detection values are flagged, never hidden; and one per-analyte plausibility gate keeps a single artifact from driving any fit, the trend, the predictor, or the map's colour scale."))))
+            HTML(" <b>How the numbers are handled:</b> every statistic shows its sample size. Correlations default to Spearman, with a 95% interval and a reliability flag under 8 paired samples. The seasonal view is an STL decomposition of the monthly record, not a forecast. Below-detection samples are counted and marked, including those NEON reports without a value. A value is left out of fits, trends, the predictor, the map and search when it is above its analyte ceiling (the larger of the network 99.9th percentile and 50 times the network median; for conductance, TDS, ANC, DIC and the major ions, the larger of the site's own 99.5th percentile and 30 times its median once the site has 8 values) or outside a physical range: specific conductance at or below 0.5 µS/cm, field dissolved oxygen below 0 or above 25 mg/L, water temperature at or below −1 or above 40 °C. Every excluded value stays in the tidy CSV, flagged implausible_extreme."))))
     ),
     nav_panel(
       "Compare", icon = bs_icon("graph-up"),
@@ -1079,7 +1299,8 @@ ui <- page_fillable(
                               selected = "norm"), info_link("info_compare")))),
         uiOutput("preset_reason"),
         uiOutput("ts_note"),
-        withSpinner(plotlyOutput("ts", height = 440), type = 8, color = "#0E7C9B", hide.ui = TRUE),
+        wc_pin_box("compare",
+          withSpinner(plotlyOutput("ts", height = 440), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
         card_footer(class = "scope-note",
           span(textOutput("ts_footer", inline = TRUE)), " · ",
           actionLink("goto_seasonal", "see its seasonal pattern →", class = "info-link")))
@@ -1090,7 +1311,8 @@ ui <- page_fillable(
         card(full_screen = TRUE,
           card_header(div(class = "d-flex justify-content-between align-items-center gap-3",
                           span("Regression"), info_link("info_relationship"))),
-          withSpinner(plotlyOutput("reg", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE)),
+          wc_pin_box("relationship",
+            withSpinner(plotlyOutput("reg", height = 420), type = 8, color = "#0E7C9B", hide.ui = TRUE))),
         card(card_header("Fit statistics"),
           uiOutput("reg_stats"),
           card_footer(class = "scope-note",
@@ -1169,9 +1391,8 @@ ui <- page_fillable(
             selected = "threshold"))),
         tags$p(class = "scope-note", style = "margin:.2rem 0 .8rem",
           "Find sites by their water chemistry across the whole network, then jump to one. ",
-          "Values are each site's average over its full bundled record, computed the same way as the map ",
-          "(implausible extremes excluded). This ranks sites by a within-site index, it is not an absolute ranking, ",
-          "and below-detection samples are kept in the count and flagged, not dropped."),
+          "Values are each site's median over its bundled record, with implausible extremes excluded. ",
+          "Below-detection samples count at their reported detection-limit value, and their share is shown."),
 
         # ---- the query controls -------------------------------------------
         div(class = "select-panel",
@@ -1183,7 +1404,7 @@ ui <- page_fillable(
                              options = list(placeholder = "Type to search analytes…"))),
             conditionalPanel("input.search_mode == 'threshold'",
               class = "sp-field",
-              selectInput("search_op", label = tagList(bs_icon("funnel"), " Where the site average is"),
+              selectInput("search_op", label = tagList(bs_icon("funnel"), " Where the site median is"),
                           choices = c("greater than ( > )" = "gt", "less than ( < )" = "lt",
                                       "between" = "between"),
                           selected = "gt", width = "100%")),
@@ -1205,7 +1426,8 @@ ui <- page_fillable(
             DTOutput("search_table", width = "100%")),
         card_footer(class = "scope-note",
           "Click a site code, or its ", tags$b("Go to site"), " button, to load it from the bundle and open it on the map. ",
-          "n = plausibility-gated samples at that site; below-DL = share reported below the analytical detection limit."))
+          "n = plausibility-gated samples at that site; below-DL = share reported below the analytical detection limit. ",
+          "Rows 25% or more below detection are greyed; over half, the median is not shown."))
     ),
     nav_panel(
       "Data", icon = bs_icon("table"),
@@ -1218,11 +1440,73 @@ ui <- page_fillable(
               downloadButton("dl_wide", "Wide CSV", class = "btn-sm btn-outline-secondary"),
               downloadButton("dl_dict", "Dictionary", class = "btn-sm btn-outline-secondary"),
               downloadButton("dl_codebook", "Codebook", class = "btn-sm btn-outline-secondary"),
+              downloadButton("dl_qc_report", "QC report (CSV)", class = "btn-sm btn-outline-secondary"),
               info_link("info_data")))),
         withSpinner(DTOutput("data_table"), type = 8, color = "#0E7C9B", hide.ui = TRUE))
     )
   )
-  ))   # close div(id="mainTabsWrap") + hidden()
+  )),  # close div(id="mainTabsWrap") + hidden()
+  ),   # close tags$main(id="main")
+
+  # page footer: who built it, the licence, and NEON's citation for this bundle
+  app_footer(),
+
+  # ---- pin cards, card PNG and QC flags (W5; keep these the LAST arguments) ----
+  tags$style(HTML("
+    .wc-pinnable { position:relative; }
+    .wc-pin-toolbar { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.35rem; margin:.25rem 0 .35rem; }
+    .wc-pin-toolbar .btn { font-size:.78rem; padding:.15rem .5rem; }
+    svg.wc-pin-lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; z-index:20; }
+    .wc-pin-line { stroke:#d6a31c; }
+    .wc-pin-dot { fill:#d6a31c; stroke:#0b2a3a; }
+    .wc-pin { position:absolute; z-index:25; max-width:min(260px, 80vw); background:#0b2a3a; color:#eef7fb;
+      border:1px solid #d6a31c; border-radius:8px; padding:.45rem .6rem .5rem; font-size:.8rem; line-height:1.3;
+      box-shadow:0 6px 18px rgba(11,42,58,.28); transform-origin:top left; cursor:grab; touch-action:none; user-select:none; }
+    .wc-pin:focus-visible { outline:3px solid #6ee6f0; outline-offset:2px; }
+    .wc-pin.wc-pulse { animation:wcPulse .6s ease; }
+    @keyframes wcPulse { 0%,100% { box-shadow:0 6px 18px rgba(11,42,58,.28); } 50% { box-shadow:0 0 0 4px rgba(214,163,28,.55); } }
+    @media (prefers-reduced-motion: reduce) { .wc-pin.wc-pulse { animation:none; outline:2px solid #d6a31c; } }
+    .wc-pin-close { position:absolute; top:2px; right:4px; border:0; background:transparent; color:#eef7fb;
+      font-size:1.1rem; line-height:1; padding:.1rem .3rem; border-radius:4px; cursor:pointer; }
+    .wc-pin-close:hover, .wc-pin-close:focus-visible { background:rgba(255,255,255,.15); outline:2px solid #6ee6f0; }
+    .wc-pin-resize { position:absolute; right:1px; bottom:1px; width:12px; height:12px; cursor:nwse-resize; opacity:.6;
+      background:linear-gradient(135deg, transparent 50%, #d6a31c 50%); border-bottom-right-radius:6px; }
+    .wc-pin-t { font-weight:700; margin:0 1.2rem .2rem 0; color:#ffd98a; }
+    .wc-pin-r { display:flex; gap:.4rem; justify-content:space-between; }
+    .wc-pin-k { color:#b9d3e2; }
+    .wc-pin-v { font-variant-numeric:tabular-nums; text-align:right; }
+    [data-bs-theme='dark'] .wc-pin { background:#eef7fb; color:#0b2a3a; box-shadow:0 6px 18px rgba(0,0,0,.45); }
+    [data-bs-theme='dark'] .wc-pin-close { color:#0b2a3a; }
+    [data-bs-theme='dark'] .wc-pin-close:hover, [data-bs-theme='dark'] .wc-pin-close:focus-visible { background:rgba(11,42,58,.1); }
+    [data-bs-theme='dark'] .wc-pin-t { color:#7a5a10; }
+    [data-bs-theme='dark'] .wc-pin-k { color:#3d5a6c; }
+    [data-bs-theme='dark'] .wc-pin-dot { stroke:#eef7fb; }
+    .wc-card-node { position:relative; }
+    .wc-card-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.4rem; margin:.15rem 0 .5rem; }
+    .wc-card-caption { font-size:.78rem; color:#4a6072; }
+    [data-bs-theme='dark'] .wc-card-caption { color:#b9d3e2; }
+    .wc-card-actions .btn { font-size:.78rem; padding:.15rem .5rem; }
+    .wc-toast { position:fixed; right:1rem; bottom:1rem; z-index:4000; max-width:min(360px, 90vw); padding:.5rem .8rem;
+      border-radius:8px; background:#0b2a3a; color:#eef7fb; font-size:.85rem; box-shadow:0 6px 18px rgba(0,0,0,.25);
+      opacity:0; visibility:hidden; transition:opacity .15s; }
+    .wc-toast.wc-toast-show { opacity:1; visibility:visible; }
+    .wc-toast.wc-toast-err { background:#8a1c1c; }
+    .qc-flag-high { background:rgba(178,34,34,.14) !important; color:#8a1c1c !important; }
+    .qc-flag-warn { background:rgba(214,163,28,.18) !important; color:#7a5a10 !important; }
+    .qc-flag-info { background:rgba(14,124,155,.10) !important; color:#0b5a70 !important; cursor:default; }
+    .qc-flag-info .bi { color:#0e7c9b !important; }
+    [data-bs-theme='dark'] .qc-flag-high { background:rgba(255,120,120,.16) !important; color:#ffb3b3 !important; }
+    [data-bs-theme='dark'] .qc-flag-warn { background:rgba(255,210,74,.16) !important; color:#ffd98a !important; }
+    [data-bs-theme='dark'] .qc-flag-warn .bi { color:#ffd24a !important; }
+    [data-bs-theme='dark'] .qc-flag-info { background:rgba(110,230,240,.10) !important; color:#b9e9f0 !important; }
+    [data-bs-theme='dark'] .qc-flag-info .bi { color:#6ee6f0 !important; }
+    @media (max-width: 575.98px) { .wc-pin-toolbar { justify-content:flex-start; } .wc-pin { font-size:.76rem; } }
+  ")),
+  # vendored capture library; the CDN copy loads only if the vendored file fails
+  tags$script(src = "vendor/html-to-image-1.11.11.js",
+              `data-cdn` = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js",
+              onerror = "var s=document.createElement('script');s.src=this.getAttribute('data-cdn');document.head.appendChild(s);"),
+  tags$script(src = wc_asset("pincards.js"))
 )
 
 #======================================================================
@@ -1231,7 +1515,21 @@ ui <- page_fillable(
 server <- function(input, output, session) {
   mode    <- reactive(input$color_mode %||% "light")
   narrow  <- reactive(isTRUE((input$client_w %||% 1200) < 700))   # phone -> bigger chart text
-  dates_d <- reactive(input$dates)        # dateRangeInput fires on calendar close; no debounce needed
+  # dates_d() is the EFFECTIVE date window. input$dates belongs to the site that
+  # was selected when it last changed (dates_owner). Right after a site switch the
+  # old site's window is still in input$dates until observeEvent(input$site)'s
+  # updateDateRangeInput round-trips, so for that frame dates_d() returns the new
+  # site's full span (exactly what that observer is about to send) instead of
+  # computing the new site's numbers under the old window. No input is frozen:
+  # if the update turns out to be a no-op, the owner simply stays stale and
+  # dates_d() keeps returning the same span, which equals input$dates anyway.
+  # (dateRangeInput fires on calendar close; no debounce needed.)
+  dates_owner <- reactiveVal(NULL)
+  observeEvent(input$dates, dates_owner(isolate(input$site)), ignoreNULL = FALSE)
+  dates_d <- reactive({
+    s <- input$site; d <- input$dates
+    if (!is.null(s) && s %in% D$sites_meta$site && !identical(dates_owner(), s)) site_span(s) else d
+  })
   main_a  <- reactive(input$analyte_main)
   sec_a   <- reactive(input$analyte_secondary)
 
@@ -1277,18 +1575,14 @@ server <- function(input, output, session) {
         !deep_linked && !resuming) {
       showModal(modalDialog(
         title = "Welcome to the NEON Analyte Viewer", easyClose = TRUE,
-        tags$p("Compare two water-chemistry analytes at any NEON aquatic field site, then explore how they relate over time."),
-        tags$ol(
-          tags$li(HTML("<b>Tap a site on the map</b> (coloured by the analyte), or pick one by name in the panel below it, to begin.")),
-          tags$li(HTML("Choose a <b>main analyte</b> and one to <b>compare</b> it against, or start from a preset.")),
-          tags$li(HTML("Explore the tabs: time series, seasonal pattern, a predictor, relationships, correlations, and two-site comparisons. Use <b>Change site</b> in the band up top to return to the map at any time."))),
-        tags$p(HTML("Loaded with <b>real NEON Surface Water Chemistry data</b> (product DP1.20093.001), bundled with the app so it is ready to use.")),
-        checkboxInput("dont_show", "Don't show this again", FALSE),
+        tags$p("Pick one NEON aquatic site, then compare any two of its analytes through time, against each other and across seasons."),
+        tags$p("NEON Surface Water Chemistry data (DP1.20093.001), saved with the app."),
         footer = actionButton("start", "Start", class = "btn-primary")))
     }
   })
+  # Start always counts as "seen": the welcome shows once per device
   observeEvent(input$start, {
-    if (isTRUE(input$dont_show)) session$sendCustomMessage("neon_set_seen", TRUE)
+    session$sendCustomMessage("neon_set_seen", TRUE)
     removeModal()
   })
 
@@ -1308,22 +1602,25 @@ server <- function(input, output, session) {
          Chemistry</a> product across aquatic field sites. Pick a site, a date range, and two analytes;
          then explore the time series, their relationship, a correlation screen, seasonality, and a
          glm-based predictor.</p>
-         <p><b>Data:</b> %s observations · %s sites · %s analytes, pulled directly from the NEON API and
-         bundled as a read-only dataset (built %s, data through %s). The app reads this bundled data rather than downloading from NEON at runtime.</p>
+         <p><b>Data:</b> %s observations · %s sites · %s analytes, pulled from the NEON API and
+         saved with the app as a read-only dataset (built %s). %s. The app reads this saved data rather than downloading from NEON at runtime.</p>
          %s
-         <p class='scope-note'>Honesty notes: every statistic shows its sample size; correlations default to
-         Spearman with an n ≥ 8 reliability flag; the seasonal view is a real STL decomposition of the
-         monthly record (not a fabricated forecast); below-detection values are flagged, not hidden.</p>",
+         <h6 class='mt-3 mb-1'>How the statistics are reported</h6>
+         <p class='scope-note'>Every statistic shows its sample size; correlations default to
+         Spearman with an n ≥ 8 reliability flag; the seasonal view is an STL decomposition of the
+         monthly record, not a forecast; below-detection values are flagged, not hidden.</p>",
         format(D$built$n_obs %||% 0, big.mark = ","), D$built$n_sites, D$built$n_analytes,
-        substr(D$built$when %||% "", 1, 10), D$built$data_through %||% "—",
-        if (isTRUE(D$built$partial)) "<p class='scope-note' style='color:#C98A1E'><b>⚠ Partial dataset:</b> built from cached sites only while the full 34-site pull was in progress; counts reflect available data, not the complete product.</p>" else "")),
+        substr(D$built$when %||% "", 1, 10), htmltools::htmlEscape(data_through_txt()),
+        if (isTRUE(D$built$partial)) "<p class='scope-note' style='color:#8a5a00'><b>Partial dataset:</b> built from the sites cached so far while the full pull was in progress; counts cover the available data, not the complete product.</p>" else "")),
+      tags$h6(class = "mt-3 mb-1", "Cite the data"),
+      lapply(neon_citation_lines(D$built), function(l) tags$p(class = "scope-note", style = "font-size:.8rem", l)),
       sibling_block(),
       tags$hr(),
       tags$p(class = "scope-note", style = "margin-bottom:.2rem",
-        HTML("Built by <b>Desert Data Labs</b> · Tucson, Arizona · ",
+        HTML("Built by <b>Desert Data Labs</b> · Tucson, AZ · ",
              "<a href='mailto:desertdatalabs@gmail.com'>desertdatalabs@gmail.com</a>")),
-      tags$p(class = "scope-note", style = "font-size:.78rem; opacity:.85",
-        HTML("Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle. NEON data are provided under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (<a href='https://creativecommons.org/licenses/by/4.0/' target='_blank'>creativecommons.org/licenses/by/4.0</a>). This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF."))))
+      tags$p(class = "scope-note", style = "font-size:.8rem",
+        HTML("Data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle, used under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (<a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='noopener'>creativecommons.org/licenses/by/4.0</a>). This app derives summary metrics from the NEON data; the underlying measurements are unaltered. Not affiliated with NEON, Battelle, or the NSF."))))
   })
 
   ## ---- Preset -> analytes (only members the site actually has) ----
@@ -1344,6 +1641,8 @@ server <- function(input, output, session) {
     # blank after any site change (production regression, 2026-10-20). The
     # stale-pair frame is already guarded: sel_pair req()s both analytes in the
     # new site's wide frame, and the update* calls below re-run everything.
+    # A cleared selectize ("") is not a site: keep the current analytes + window.
+    req(input$site %in% D$sites_meta$site)
     p <- site_present(input$site)
     ch <- analyte_choices(p)
     keep_main <- if (main_a() %in% p) main_a() else pick_default_analytes(input$site)[1]
@@ -1444,6 +1743,12 @@ server <- function(input, output, session) {
         tags$span(class = "cb-site-name", sm$siteName %||% input$site),
         tags$span(class = "cb-site-code", paste0(" (", input$site, ")"))),
       div(class = "cb-armed", bs_icon("crosshair"), " ", textOutput("armed_top", inline = TRUE)),
+      tags$span(class = "cb-through", data_through_txt()),
+      # a NEON change-log note covers this site: one chip, opening the site card
+      if (any(neon_notes_for(input$site)$scope == "site"))
+        actionLink("cb_note", tagList(bs_icon("journal-text"), "NEON note"), class = "cb-note",
+                   title = "NEON logged a change that affects this site's record",
+                   `aria-label` = "NEON note about this site's record"),
       div(class = "cb-actions",
         actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " Change site"),
                    class = "cb-change"),
@@ -1451,9 +1756,10 @@ server <- function(input, output, session) {
                    class = "cb-change", title = "Jump back to the Sycamore Creek showcase"),
         downloadLink("report_band", tagList(bs_icon("file-earmark-arrow-down"), " Report"),
                      class = "cb-report")),
-      # clickable QC marker — only when this site/analyte owns an excluded extreme
+      # clickable QC marker, only when this site/analyte owns an excluded extreme
       uiOutput("qc_chip_band", inline = TRUE))
   })
+  observeEvent(input$cb_note, showModal(site_info_modal(input$site)))
 
   # Overview scope line: THIS site's record (from sites_meta), then the network
   # total, so the per-site and network counts are never conflated.
@@ -1477,7 +1783,8 @@ server <- function(input, output, session) {
   # half-width / grey tiles (the flagship kickMaps multi-frame resize fix).
   observeEvent(input$changeSite, {
     loaded(FALSE)                                  # stop persisting / advertising the view
-    updateQueryString("?", mode = "replace")       # don't carry a stale deep link onto the splash
+    # a new history entry for the splash, so browser Back returns to the site
+    updateQueryString("?", mode = "push")
     shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
     # first render happened behind a hidden splash (auto-entered start): render
     # the map again now that the splash is visible (see map_hidden_render)
@@ -1497,13 +1804,41 @@ server <- function(input, output, session) {
       dplyr::filter(site == input$site | analyte %in% c(main_a(), sec_a()))
   })
   qc_pill_ui <- function(link_id) {
-    rel <- qc_relevant(); if (!nrow(rel)) return(NULL)
+    rel <- qc_relevant()
+    if (!nrow(rel)) {
+      return(tags$span(class = "qc-pill qc-flag-info",
+        title = "No value at this site or for these analytes was excluded by the plausibility gate",
+        tagList(bs_icon("check-circle"), "No excluded values in this record")))
+    }
     n <- nrow(rel)
-    actionLink(link_id, class = "qc-pill",
+    actionLink(link_id, class = "qc-pill qc-flag-warn",
+      role = "button", tabindex = "0", `data-kbd-activate` = NA,
       title = "An implausible extreme was excluded from the fits, the seasonal trend, the predictor and the map. Click to audit",
       tagList(bs_icon("exclamation-triangle-fill"),
               sprintf("%d extreme value%s excluded", n, if (n > 1) "s" else "")))
   }
+  qc_csv_header <- function(scope) {
+    sprintf("# NEON Surface Water Chemistry %s | %s | built %s | data through %s | values above a per-analyte plausibility ceiling or outside the physical range, excluded from fits, the seasonal trend, the predictor and the map; the reported value is kept here",
+            D$built$product %||% "DP1.20093.001", scope,
+            substr(D$built$when %||% "", 1, 10), D$built$data_through %||% "unknown")
+  }
+  qc_csv_rows <- function(rel) {
+    rel |> dplyr::mutate(collectDate = format(collectDate, "%Y-%m-%d"))
+  }
+  output$dl_qc_flag <- downloadHandler(
+    filename = function() paste0("neon-water-", input$site, "-qc-excluded.csv"),
+    content = function(file) {
+      writeLines(qc_csv_header(sprintf("excluded values relevant to site %s or analytes %s, %s",
+                                       input$site, main_a(), sec_a())), file)
+      readr::write_excel_csv(qc_csv_rows(qc_relevant()), file, append = TRUE, col_names = TRUE)
+    })
+  output$dl_qc_report <- downloadHandler(
+    filename = function() "neon-water-qc-report.csv",
+    content = function(file) {
+      writeLines(qc_csv_header(sprintf("every excluded value across the network (%d rows)",
+                                       nrow(EXCLUDED_EXTREMES))), file)
+      readr::write_excel_csv(qc_csv_rows(EXCLUDED_EXTREMES), file, append = TRUE, col_names = TRUE)
+    })
   output$qc_chip      <- renderUI(qc_pill_ui("qc_audit"))
   output$qc_chip_band <- renderUI(qc_pill_ui("qc_audit_band"))
   qc_audit_modal <- function() {
@@ -1512,15 +1847,19 @@ server <- function(input, output, session) {
       dplyr::transmute(Site = site, Date = format(collectDate, "%Y-%m-%d"),
                        Analyte = display,
                        Value = paste0(signif(value, 4), ifelse(nzchar(pretty_unit(units, analyte)), paste0(" ", pretty_unit(units, analyte)), "")),
-                       `Plausible ceiling` = signif(ceiling, 4))
+                       Why = reason,
+                       Ceiling = ifelse(reason == "above the analyte ceiling",
+                                        format(signif(ceiling, 4)), "n/a"))
     showModal(modalDialog(
       title = tagList(bs_icon("shield-check"), " Excluded extreme values"),
-      easyClose = TRUE, size = "l", footer = modalButton("Close"),
-      tags$p(HTML(
-        "These values exceed a per-analyte plausibility ceiling (above the 99.9th percentile <i>and</i>
-         50× the analyte median), almost certainly unit or decimal artifacts, not real chemistry.
-         They are <b>excluded from every fit, the seasonal decomposition, the predictor, and the map's
-         colour scale</b>, but kept here for audit. The reported number is preserved in the raw record.")),
+      easyClose = TRUE, size = "l",
+      footer = tagList(
+        downloadButton("dl_qc_flag", "Download these rows (CSV)", class = "btn-sm btn-outline-primary"),
+        modalButton("Close")),
+      tags$p(paste0("Rule: ", plausibility_rule_text(), ".")),
+      tags$p("These rows are left out of every fit, the seasonal decomposition, the predictor, the map
+              colours and search. They stay in this list and in the tidy CSV, flagged
+              implausible_extreme, with the value NEON reported."),
       DT::datatable(tbl, rownames = FALSE,
                     options = list(dom = "t", pageLength = 25, ordering = FALSE)),
       if (all_n > nrow(rel)) tags$p(class = "scope-note",
@@ -1529,6 +1868,21 @@ server <- function(input, output, session) {
   }
   observeEvent(input$qc_audit,      qc_audit_modal())
   observeEvent(input$qc_audit_band, qc_audit_modal())
+
+  # caption under the summary strip: the exported card PNG names its own scope.
+  # data-wc-site is what pincards.js reads for the neon-water-<SITE>-<facet>.png name.
+  output$wc_card_caption <- renderUI({
+    req(input$site)
+    sm <- D$sites_meta[D$sites_meta$site == input$site, ]
+    nm <- if (nrow(sm) && !is.na(sm$siteName[1])) sm$siteName[1] else input$site
+    d <- suppressWarnings(as.Date(dates_d()))
+    win <- if (length(d) == 2 && !anyNA(d)) paste(format(d[1], "%Y-%m-%d"), "to", format(d[2], "%Y-%m-%d")) else "full record"
+    an <- paste(analyte_display(main_a() %||% ""), "and", analyte_display(sec_a() %||% ""))
+    tags$span(`data-wc-site` = input$site,
+      paste0(nm, " (", input$site, ") · ", an, " · ", win,
+             " · Data through ", D$built$data_through %||% "unknown",
+             " · NEON DP1.20093.001"))
+  })
 
   output$preset_reason <- renderUI({
     pm <- preset_match(); if (is.na(pm)) return(NULL)
@@ -1550,18 +1904,33 @@ server <- function(input, output, session) {
     ma <- sl |> filter(analyte == A) |> arrange(collectDate)
     sb <- sl |> filter(analyte == B) |> arrange(collectDate)
     unitA <- pretty_unit(ma$units[1] %||% NA, A); unitB <- pretty_unit(sb$units[1] %||% NA, B)
-    latestA <- if (nrow(ma)) paste0(signif(tail(ma$value, 1), 4), if (nzchar(unitA)) paste0(" ", unitA) else "") else "—"
-    latestB <- if (nrow(sb)) paste0(signif(tail(sb$value, 1), 4), if (nzchar(unitB)) paste0(" ", unitB) else "") else "—"
+    # latest reported value (a below-detection sample with no value is counted, not shown)
+    latest <- function(d, u) {
+      v <- d$value[is.finite(d$value)]
+      if (!length(v)) return("n/a")
+      paste0(signif(tail(v, 1), 4), if (nzchar(u)) paste0(" ", u) else "")
+    }
+    n_txt <- function(d) {
+      k <- sum(d$belowDetection %in% 1)
+      paste0("latest of ", nrow(d), " samples", if (k > 0) paste0(" (", k, " below DL)") else "")
+    }
+    latestA <- latest(ma, unitA); latestB <- latest(sb, unitB)
     r <- if (n >= 8) suppressWarnings(stats::cor(p$x, p$y, method = "spearman")) else NA_real_
+    # 95% interval on rho, on the lag-1 effective n (same rule as the correlation screen)
+    po <- p[order(p$collectDate), , drop = FALSE]
+    ci <- spearman_ci(r, n, effective_n(n, lag1_acf(po$x), lag1_acf(po$y)), min_n = 8)
     sm <- D$sites_meta[D$sites_meta$site == input$site, ]
     r_theme <- if (is.na(r)) "secondary" else if (abs(r) >= 0.7) "success" else if (abs(r) >= 0.4) "warning" else "secondary"
     layout_columns(
-      col_widths = breakpoints(sm = 6, lg = 3), fill = FALSE,
-      value_box(analyte_display(A), latestA, paste0("latest of ", nrow(ma), " samples"),
-                showcase = spark(ma$collectDate, ma$value, "#6ee6f0"),
+      col_widths = breakpoints(xs = 6, lg = 3), fill = FALSE,
+      # bslib collapses every grid to one column under 576px (!important);
+      # keep the 12-column track so xs = 6 really sits two boxes per row on phones
+      style = "grid-template-columns: repeat(12, minmax(0, 1fr)) !important;",
+      value_box(analyte_display(A), latestA, n_txt(ma),
+                showcase = spark(ma$collectDate[is.finite(ma$value)], ma$value[is.finite(ma$value)], "#6ee6f0"),
                 showcase_layout = "bottom", theme = "primary"),
-      value_box(analyte_display(B), latestB, paste0("latest of ", nrow(sb), " samples"),
-                showcase = spark(sb$collectDate, sb$value, "#f0c08a"),
+      value_box(analyte_display(B), latestB, n_txt(sb),
+                showcase = spark(sb$collectDate[is.finite(sb$value)], sb$value[is.finite(sb$value)], "#f0c08a"),
                 showcase_layout = "bottom", theme = "secondary"),
       div(class = "vb-door", role = "button", tabindex = "0",
           `aria-label` = "Open the Relationship tab for this analyte pair",
@@ -1569,9 +1938,10 @@ server <- function(input, output, session) {
           onkeydown = "if(event.key==='Enter'||event.key===' '){event.preventDefault();Shiny.setInputValue('goto_rel', Math.random(), {priority:'event'})}",
           value_box(tagList("Correlation · Spearman ρ ",
                             tags$span(onclick = "event.stopPropagation()", help_pop("spearman", "Spearman ρ"))),
-                    ifelse(is.na(r), "—", sprintf("%.2f", r)),
+                    ifelse(is.na(r), "n/a", sprintf("%.2f", r)),
                     tagList(
-                      if (n > 0) paste0("n = ", n, " paired") else "select two analytes",
+                      if (n > 0) paste0(if (is.finite(ci$lo)) sprintf("95%% CI %.2f to %.2f · ", ci$lo, ci$hi) else "",
+                                        "n = ", n, " paired") else "select two analytes",
                       { pc <- pair_censor()
                         if (!is.na(r) && is.finite(pc$share) && pc$share >= 0.25)
                           tags$div(class = "small",
@@ -1585,27 +1955,84 @@ server <- function(input, output, session) {
   observeEvent(input$goto_rel, nav_select("main_tabs", "Relationship"))
   observeEvent(input$goto_seasonal, nav_select("main_tabs", "Seasonal pattern"))
 
+  ## ---- Pin-card payloads (www/pincards.js reads a point's customdata) ----
+  # One escaped card per collection date: title "SITE · Mon DD, YYYY", one row
+  # per plotted analyte (value + unit, replicates, below-detection state), and
+  # the NEON release when the bundle records it. Returns a vector aligned to `dates`.
+  pin_cards_by_date <- function(site, rows, dates) {
+    if (!length(dates)) return(character(0))
+    rows <- rows[!is.na(rows$collectDate), , drop = FALSE]
+    ud <- sort(unique(as.Date(dates)))
+    cards <- vapply(seq_along(ud), function(i) {
+      r <- rows[rows$collectDate == ud[i], , drop = FALSE]
+      vals <- vapply(seq_len(nrow(r)), function(j) {
+        u <- pretty_unit(r$units[j], r$analyte[j])
+        v <- if (is.finite(r$value[j])) paste0(signif(r$value[j], 4), if (nzchar(u)) paste0(" ", u) else "")
+             else "no value reported"
+        nr <- r$n_reps[j]
+        reps <- if (is.finite(nr) && nr > 1) paste0(" · mean of ", nr, " replicates") else ""
+        st <- if (r$belowDetection[j] %in% 1) " · below detection"
+              else if ("partialBelow" %in% names(r) && r$partialBelow[j] %in% 1) " · partly below detection"
+              else ""
+        paste0(v, reps, st)
+      }, character(1))
+      out <- setNames(vals, analyte_display(r$analyte))
+      rel <- if ("release" %in% names(r)) unique(stats::na.omit(r$release)) else character(0)
+      if (length(rel)) out <- c(out, `NEON release` = paste(rel, collapse = ", "))
+      pin_card_html(paste0(site, " · ", format(ud[i], "%b %d, %Y")), out)
+    }, character(1))
+    unname(cards[match(as.Date(dates), ud)])
+  }
+  # Bottom-of-panel ticks for below-detection samples NEON reported with no
+  # value (post-2022 blank-concentration non-detects): counted, never a value.
+  nd_rug <- function(p, nd, y_at, yaxis = "y", showlegend = TRUE, who = NULL) {
+    if (is.null(nd) || !nrow(nd)) return(p)
+    who <- who %||% analyte_display(nd$analyte)
+    add_trace(p, data = nd, x = ~collectDate, y = rep(y_at, nrow(nd)), yaxis = yaxis,
+              inherit = FALSE, type = "scatter", mode = "markers",
+              name = "below detection, no value reported",
+              legendgroup = "nd_rug", showlegend = showlegend,
+              marker = list(symbol = "line-ns-open", size = 11, color = "#8a949c", line = list(width = 1.6)),
+              text = paste0(who, ": below detection, no value reported"),
+              hovertemplate = "%{x|%b %d, %Y}<br>%{text}<extra></extra>")
+  }
+  # y position just under the lowest plotted value
+  rug_y <- function(v) {
+    v <- v[is.finite(v)]; if (!length(v)) return(0)
+    lo <- min(v); span <- diff(range(v)); if (!is.finite(span) || span == 0) span <- max(abs(lo), 1)
+    lo - 0.06 * span
+  }
+  bdl_note <- function(k) if (k > 0) paste0(" (", k, " below DL)") else ""
+
   ## ---- Compare: time series ----
   output$ts <- renderPlotly({ safe_plotly({
     df <- sel_long()
     if (!nrow(df)) return(plotly_message("No matched samples in this window. Try 'Use full record' on the Explore tab.", mode()))
     A <- main_a(); B <- sec_a()
     unitA <- df$units[df$analyte == A][1]; unitB <- df$units[df$analyte == B][1]
+    # one card per date (both analytes on it); NA-valued non-detects become the rug
+    df$card <- pin_cards_by_date(input$site, df, df$collectDate)
+    nd <- df |> filter(!is.finite(value), belowDetection %in% 1)
 
     if (identical(input$ts_mode, "dual")) {
-      dA <- df |> filter(analyte == A) |> arrange(collectDate)
-      dB <- df |> filter(analyte == B) |> arrange(collectDate)
+      dA <- df |> filter(analyte == A, is.finite(value)) |> arrange(collectDate)
+      dB <- df |> filter(analyte == B, is.finite(value)) |> arrange(collectDate)
+      sym <- function(d) ifelse(d$belowDetection %in% 1, "circle-open", "circle")
       p <- plot_ly() |>
         add_trace(data = dA, x = ~collectDate, y = ~value, type = "scatter", mode = "markers+lines",
                   name = analyte_display(A), line = list(color = COL$main, width = 2),
-                  marker = list(color = COL$main, size = 7),
+                  marker = list(color = COL$main, size = 7, symbol = sym(dA)), customdata = ~card,
                   hovertemplate = paste0("<b>", analyte_display(A), "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ",
                                          pretty_unit(unitA, A), "<extra></extra>")) |>
         add_trace(data = dB, x = ~collectDate, y = ~value, yaxis = "y2", type = "scatter", mode = "markers+lines",
                   name = analyte_display(B), line = list(color = COL$secondary, width = 2),
-                  marker = list(color = COL$secondary, size = 7),
+                  marker = list(color = COL$secondary, size = 7, symbol = sym(dB)), customdata = ~card,
                   hovertemplate = paste0("<b>", analyte_display(B), "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ",
-                                         pretty_unit(unitB, B), "<extra></extra>")) |>
+                                         pretty_unit(unitB, B), "<extra></extra>"))
+      p <- nd_rug(p, nd |> filter(analyte == A), rug_y(dA$value))
+      p <- nd_rug(p, nd |> filter(analyte == B), rug_y(dB$value), yaxis = "y2",
+                  showlegend = !any(nd$analyte == A))
+      p <- p |>
         layout(
           hovermode = "x unified",
           xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
@@ -1624,36 +2051,41 @@ server <- function(input, output, session) {
       pal <- c(Main = COL$main, Secondary = COL$secondary)
       p <- plot_ly()
       for (rl in c("Main", "Secondary")) {
-        dd <- df2 |> filter(role == rl)
+        dd <- df2 |> filter(role == rl, is.finite(value))
         if (!nrow(dd)) next
         p <- add_trace(p, data = dd, x = ~collectDate, y = ~z, type = "scatter", mode = "markers+lines",
                        name = dd$disp[1], legendgroup = rl,
                        line = list(color = pal[[rl]], width = 2),
                        marker = list(color = pal[[rl]], size = 7, line = list(color = "rgba(255,255,255,.8)", width = 1)),
-                       text = ~paste0("<b>", disp, "</b><br>%{x}"),
+                       customdata = ~card,
                        hovertemplate = ~paste0("<b>", disp, "</b><br>%{x|%b %d, %Y}<br>value: ",
                                                signif(value, 4), " ", pretty_unit(units, analyte),
                                                ifelse(n_reps > 1, paste0(" (", n_reps, "-rep mean)"), ""),
                                                "<br>z: %{y:.2f}<extra></extra>"))
       }
-      bd <- df2 |> filter(below)
+      bd <- df2 |> filter(below, is.finite(value), is.finite(z))
       if (nrow(bd)) p <- add_trace(p, data = bd, x = ~collectDate, y = ~z, type = "scatter", mode = "markers",
         name = "below detection", marker = list(symbol = "circle-open", size = 10, color = "#444", line = list(width = 1.5)),
-        hovertemplate = "below detection limit<extra></extra>")
+        customdata = ~card, hovertemplate = "below detection limit<extra></extra>")
+      p <- nd_rug(p, nd, rug_y(df2$z))
       p <- p |> layout(
         hovermode = "x unified",
         yaxis = list(title = "Standardized value (z-score)", zeroline = TRUE),
         xaxis = list(title = "", type = "date"),
         legend = list(orientation = "h", x = 0, y = 1.1), margin = list(t = 34, b = 40))
     }
+    # 2019 method-change line (for whichever plotted analyte it affects) + provisional band
+    mc_code <- if (A %in% METHOD_CHANGE_2019) A else B
+    p <- add_time_context(p, mc_code, min(df$collectDate), max(df$collectDate), D$built)
     p |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_", A, "_vs_", B, "_timeseries"))
   }, mode()) })
 
   output$ts_footer <- renderText({
     df <- sel_long(); sp <- dates_d()
     sm <- D$sites_meta[D$sites_meta$site == input$site, ]
-    paste0(sm$siteName %||% input$site, " · ", nrow(df), " samples · ",
-           format(sp[1], "%b %Y"), "–", format(sp[2], "%b %Y"), " · source: NEON SWC DP1.20093.001")
+    paste0(sm$siteName %||% input$site, " · ", nrow(df), " samples",
+           bdl_note(sum(df$belowDetection %in% 1)), " · ",
+           format(sp[1], "%b %Y"), "–", format(sp[2], "%b %Y"), " · source: NEON DP1.20093.001")
   })
 
   ## ---- Relationship ----
@@ -1662,6 +2094,7 @@ server <- function(input, output, session) {
     if (nrow(df) < 3) return(plotly_message(
       sprintf("Not enough shared dates to fit a line (n = %d; need ≥ 3).", nrow(df)), mode()))
     df <- df |> mutate(season = season_of(collectDate), year = year(collectDate))
+    df$card <- pin_cards_by_date(input$site, sel_long(), df$collectDate)
     A <- main_a(); B <- sec_a()
     w <- wide_site(); unitA <- D$analyte_meta$units[D$analyte_meta$analyte == A][1]
     unitB <- D$analyte_meta$units[D$analyte_meta$analyte == B][1]
@@ -1671,7 +2104,7 @@ server <- function(input, output, session) {
     pp <- ggplot(df, aes(x, y)) +
       geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = COL$main, fill = COL$main,
                   alpha = .15, linewidth = .9) +
-      geom_point(aes(fill = season,
+      geom_point(aes(fill = season, customdata = card,
                      text = paste0(format(collectDate, "%b %d, %Y"), "<br>",
                                    analyte_display(A), ": ", signif(x, 4), "<br>",
                                    analyte_display(B), ": ", signif(y, 4), "<br>", season, " ", year)),
@@ -1690,7 +2123,7 @@ server <- function(input, output, session) {
       sprintf("This pair has %d matched samples; the relationship view needs at least 3.", nrow(df))))
     f <- fit_lm(df)
     ac <- f$lag1_acf
-    ac_flag <- if (is.na(ac)) "—" else if (abs(ac) >= 0.5) "high" else if (abs(ac) >= 0.25) "moderate" else "low"
+    ac_flag <- if (is.na(ac)) "n/a" else if (abs(ac) >= 0.5) "high" else if (abs(ac) >= 0.25) "moderate" else "low"
     r2_theme <- if (f$r2 >= 0.7) "success" else if (f$r2 >= 0.4) "warning" else "secondary"
     tagList(
       layout_columns(col_widths = 6, fill = FALSE,
@@ -1702,7 +2135,7 @@ server <- function(input, output, session) {
         tags$p(HTML(sprintf("<b>p-value (slope):</b> %s ",
                             ifelse(f$p < .001, "&lt; 0.001", signif(f$p, 3)))), help_pop("pval", "p-value")),
         tags$p(HTML(sprintf("<b>Temporal autocorrelation (lag-1):</b> %s (%s). %s",
-                            ifelse(is.na(ac), "—", sprintf("%.2f", ac)), ac_flag,
+                            ifelse(is.na(ac), "n/a", sprintf("%.2f", ac)), ac_flag,
                             "High values mean the p-value above is optimistic.")))),
       # clickable censoring badge — only when THIS pair, on its own matched samples
       # at this site/window, is >= 25% below detection (either member); one short
@@ -1716,7 +2149,11 @@ server <- function(input, output, session) {
 
   ## ---- Correlations ----
   cor_tbl <- reactive({
-    correlation_table(wide_site() |> select(-dplyr::any_of("site")),
+    # the field/lab twin of the main analyte is the same quantity by another
+    # method, not a relationship: leave it out of the screen (and its BH set).
+    # TWIN is defined with the Predictor below; reactives run after the server body.
+    twin <- unname(TWIN[main_a()]) %|na|% ""
+    correlation_table(wide_site() |> select(-dplyr::any_of(c("site", twin))),
                       main_a(), method = input$cor_method, min_n = 8, censor_map = CENSOR_MAP,
                       bdl_site = bdl_site())
   }) |> bindCache(input$site, main_a(), input$cor_method, dates_d())
@@ -1746,25 +2183,27 @@ server <- function(input, output, session) {
     if (is.null(ct) || !nrow(ct))
       return(datatable(data.frame(Note = "No co-sampled analytes in this window. Widen the date range."),
                        rownames = FALSE, options = list(dom = "t")))
-    fmtp <- function(p) ifelse(is.na(p), "—", ifelse(p < 1e-4, "<0.0001", formatC(p, format = "g", digits = 2)))
-    fmtbdl <- function(x) ifelse(is.na(x) | x < 0.005, "—", sprintf("%.0f%%", 100 * x))
+    fmtp <- function(p) ifelse(is.na(p), "n/a", ifelse(p < 1e-4, "<0.0001", formatC(p, format = "g", digits = 2)))
+    fmtbdl <- function(x) ifelse(is.na(x) | x < 0.005, "n/a", sprintf("%.0f%%", 100 * x))
+    fmtrho <- function(r, lo, hi) ifelse(is.finite(lo) & is.finite(hi),
+                                         sprintf("%.2f [%.2f, %.2f]", r, lo, hi), sprintf("%.2f", r))
     show <- ct |> transmute(Analyte = display, n,
-                            `Spearman ρ` = round(spearman, 3), `p (ρ)` = fmtp(p_spearman),
+                            `Spearman ρ [95% CI]` = fmtrho(spearman, rho_lo, rho_hi), `p (ρ)` = fmtp(p_spearman),
                             `Pearson r` = round(pearson, 3),  `p (r)` = fmtp(p_pearson),
                             BDL = fmtbdl(pct_below),
                             Reading = ifelse(ties, paste0(flag, " †"), flag))
     # Optional multiple-comparison + autocorrelation columns (review finding #6):
     # BH false-discovery q on the active method's p, and an effective-n-adjusted p
-    # for the rows whose lag-1 |ACF| >= 0.5 (a dash where no adjustment applies).
+    # where both series' lag-1 ACFs share a sign (a dash where no adjustment applies).
     cap_extra <- ""
     if (isTRUE(input$cor_bh)) {
       show$`BH q` <- fmtp(ct$q_bh)
-      show$`p (n_eff)` <- ifelse(is.na(ct$p_eff), "—", fmtp(ct$p_eff))
-      cap_extra <- " <b>BH q</b> = Benjamini-Hochberg false-discovery-adjusted p across these analytes. <b>p (n_eff)</b> = p re-tested on the autocorrelation-deflated effective n (shown only where lag-1 |ACF| ≥ 0.5)."
+      show$`p (n_eff)` <- ifelse(is.na(ct$p_eff), "n/a", fmtp(ct$p_eff))
+      cap_extra <- " <b>BH q</b> = Benjamini-Hochberg false-discovery-adjusted p across these analytes. <b>p (n_eff)</b> = p re-tested on the effective n, n × (1 − r<sub>x</sub>r<sub>y</sub>) / (1 + r<sub>x</sub>r<sub>y</sub>) from the two lag-1 autocorrelations (shown where they share a sign)."
     }
     datatable(show, rownames = FALSE, options = list(pageLength = 8, dom = "tip"),
               caption = htmltools::tags$caption(style = "caption-side:top",
-                htmltools::HTML(paste0("Each p-value pairs with the coefficient in the same colour group. † = tied ranks, Spearman p is approximate. <b>BDL</b> = % below detection; rows over 25% are exploratory only.", cap_extra)))) |>
+                htmltools::HTML(paste0("Each p-value pairs with the coefficient in the same colour group. † = tied ranks, Spearman p is approximate. Brackets = 95% interval on ρ (Fisher z, on the effective n where the series are autocorrelated). <b>BDL</b> = % below detection; rows 25% or more are exploratory only. The field/lab twin of the main analyte is left out.", cap_extra)))) |>
       formatStyle("Reading", target = "cell",
                   backgroundColor = styleEqual(
                     c("strong +", "strong −", "moderate", "strong + †", "strong − †", "moderate †"),
@@ -1823,7 +2262,7 @@ server <- function(input, output, session) {
     gap_runs <- rle(is.na(v)); max_gap <- if (any(gap_runs$values)) max(gap_runs$lengths[gap_runs$values]) else 0
     if (n_real / n_tot < 0.45 || max_gap > 12)
       return(plotly_message(sprintf(
-        "Too sparse for an honest decomposition\n(%d of %d months sampled; longest gap %d months).\nWiden the range or pick a better-sampled analyte.",
+        "Too sparse for a seasonal decomposition\n(%d of %d months sampled; longest gap %d months).\nWiden the range or pick a better-sampled analyte.",
         n_real, n_tot, max_gap), mode()))
     # linear-interpolate interior gaps; carry ends
     idx <- which(!is.na(v))
@@ -1860,7 +2299,7 @@ server <- function(input, output, session) {
                              if (mixes_dl) " · trend partly tracks the detection limit" else "",
                              "</span>"),
                x = 0, xanchor = "left", y = 0.99, yanchor = "top"))
-    if (show_mc) p1 <- add_method_change_marker(p1)
+    if (nrow(df)) p1 <- add_time_context(p1, main_a(), min(df$collectDate), max(df$collectDate), D$built)
     p1 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(input$site, "_STL"))
   }, mode()) })
 
@@ -1925,7 +2364,7 @@ server <- function(input, output, session) {
 
   output$pred_out <- renderUI({
     b <- pred_base()
-    if (b$status == "none") return(div(class = "text-muted p-2", "—"))
+    if (b$status == "none") return(div(class = "text-muted p-2", "n/a"))
     if (b$status == "few")  return(div(class = "text-muted p-2",
       "Too few complete records to fit the model here. Widen the date range."))
     if (b$status == "fit")  return(div(class = "text-danger p-2", "Model could not be fit for this selection."))
@@ -1933,13 +2372,13 @@ server <- function(input, output, session) {
     skill <- if (is.na(b$cv$rmse) || is.na(b$cv$null_rmse) || b$cv$null_rmse == 0) NA else 1 - b$cv$rmse / b$cv$null_rmse
     tagList(
       value_box(paste0("Predicted ", analyte_display(main_a())),
-                ifelse(is.na(yhat), "—", paste0(signif(yhat, 4), " ", b$unit)),
+                ifelse(is.na(yhat), "n/a", paste0(signif(yhat, 4), " ", b$unit)),
                 "from the slider values", theme = "primary"),
       div(class = "px-2 pt-2 scope-note",
           HTML(sprintf("Cross-validated RMSE ≈ %s %s vs %s %s for a mean-only baseline (skill %s) on %d records. ",
-                  ifelse(is.na(b$cv$rmse), "—", signif(b$cv$rmse, 3)), b$unit,
-                  ifelse(is.na(b$cv$null_rmse), "—", signif(b$cv$null_rmse, 3)), b$unit,
-                  ifelse(is.na(skill), "—", sprintf("%+.0f%%", 100 * skill)), b$cv$n)),
+                  ifelse(is.na(b$cv$rmse), "n/a", signif(b$cv$rmse, 3)), b$unit,
+                  ifelse(is.na(b$cv$null_rmse), "n/a", signif(b$cv$null_rmse, 3)), b$unit,
+                  ifelse(is.na(skill), "n/a", sprintf("%+.0f%%", 100 * skill)), b$cv$n)),
           help_pop("rmse", "RMSE & skill")))
   })
 
@@ -1966,10 +2405,13 @@ server <- function(input, output, session) {
     d <- dates_d()
     D$swc_long |>
       filter(site == input$site, collectDate >= d[1], collectDate <= d[2]) |>
+      # column order = scripts/build_swc_bundle.R LONG_EXPORT_KEEP (the codebook)
       transmute(site, collectDate, analyte, analyte_label = analyte_display(analyte),
                 value, units, n_reps, value_sd, below_detection = belowDetection == 1,
+                partial_below = partialBelow == 1,   # NA when the bundle does not record it
                 implausible_extreme = implausible,   # kept in raw export, excluded from fits/maps
-                lab_flag = labFlag, source, product = D$built$product) |>
+                lab_flag = labFlag, source, product = D$built$product,
+                release = as.character(release)) |>
       arrange(collectDate, analyte)
   })
 
@@ -1994,8 +2436,10 @@ server <- function(input, output, session) {
     if (!nrow(s)) return(0)
     mean(grepl("formatChange|legacyData", s$labFlag), na.rm = TRUE)
   }
-  provenance <- function() sprintf("# NEON Surface Water Chemistry %s | site %s | built %s | data through %s | values are replicate means (n_reps); below_detection = reported below the analytical detection limit; non-detects reported with a blank concentration carry value NA and below_detection TRUE | implausible extremes (> per-analyte p99.9 & 50x median) excluded from fits/maps | %.0f%% of rows carry a legacy/formatChange method-standardization flag",
-                                   D$built$product, input$site, substr(D$built$when, 1, 10), D$built$data_through, 100 * pct_legacy_slice())
+  provenance <- function() sprintf("# NEON Surface Water Chemistry %s | site %s | built %s | data through %s | values are replicate means (n_reps); below_detection = every replicate below the detection limit; partial_below = some replicates below, value is the mean of the detected ones; non-detects reported with a blank concentration carry value NA and below_detection TRUE | implausible_extreme: %s | %.0f%% of rows carry a legacy/formatChange method-standardization flag | %s",
+                                   D$built$product, input$site, substr(D$built$when, 1, 10), D$built$data_through,
+                                   plausibility_rule_text(), 100 * pct_legacy_slice(),
+                                   paste(neon_citation_lines(D$built), collapse = " | "))
 
   output$dl_long <- downloadHandler(
     filename = function() paste0(fn_base(), "-long.csv"),
@@ -2027,7 +2471,8 @@ server <- function(input, output, session) {
         "# NEON Surface Water Chemistry data dictionary (DP1.20093.001)",
         "# Source: NEON DP1.20093.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
         "# units = explicit reviewed target per analyte; registered legacy mismatches are excluded and numeric values are never silently rescaled",
-        "# n_below / pct_below = count / fraction of below-detection samples; plausibility_ceiling = per-analyte max(p99.9, 50x median) above which a value is excluded as an artifact"),
+        "# n_below / pct_below = count / fraction of below-detection samples; plausibility_ceiling = the pooled analyte ceiling, the larger of p99.9 and 50x the median (the exclusion rule below adds site ceilings and physical ranges)",
+        paste0("# exclusion rule: ", plausibility_rule_text())),
         file)
       # write_csv (no BOM) for the appended block: write_excel_csv would emit a
       # second UTF-8 BOM mid-file, right before the header row, breaking strict CSV readers
@@ -2058,6 +2503,9 @@ server <- function(input, output, session) {
                      y = suppressWarnings(as.numeric(wide[[B]]))) |> filter(is.finite(x), is.finite(y))
       f <- if (nrow(pair) >= 3) fit_lm(pair) else NULL
       rho <- if (nrow(pair) >= 8) suppressWarnings(stats::cor(pair$x, pair$y, method = "spearman")) else NA
+      # same interval rule as the summary strip and the correlation screen
+      po <- pair[order(pair$collectDate), , drop = FALSE]
+      rho_ci <- spearman_ci(rho, nrow(pair), effective_n(nrow(pair), lag1_acf(po$x), lag1_acf(po$y)), min_n = 8)
 
       grDevices::pdf(file, width = 8.5, height = 11); on.exit(grDevices::dev.off())
       # PDF-safe theme (base pdf() device can't use the web "Inter" font)
@@ -2073,7 +2521,9 @@ server <- function(input, output, session) {
         sprintf("Window: %s to %s", d[1], d[2]),
         sprintf("Analytes: %s  vs  %s", analyte_display(A), analyte_display(B)),
         sprintf("Paired samples: %d", nrow(pair)),
-        if (!is.na(rho)) sprintf("Spearman rho: %.2f", rho) else "Spearman rho: insufficient data (n < 8)",
+        if (!is.na(rho)) paste0(sprintf("Spearman rho: %.2f", rho),
+                                if (is.finite(rho_ci$lo)) sprintf("   (95%% CI %.2f to %.2f)", rho_ci$lo, rho_ci$hi) else "")
+        else "Spearman rho: insufficient data (n < 8)",
         if (!is.null(f)) sprintf("OLS R-squared: %.3f   ·   p %s", f$r2, ifelse(f$p < .001, "< 0.001", paste0("= ", signif(f$p, 2)))) else "OLS: insufficient data",
         sprintf("Source: NEON Surface Water Chemistry %s · data through %s", D$built$product, D$built$data_through))
       cover <- ggplot() + xlim(0, 1) + ylim(0, 1) + theme_void() +
@@ -2082,12 +2532,20 @@ server <- function(input, output, session) {
         annotate("text", x = 0.04, y = 0.85, hjust = 0, size = 6, label = "Site report") +
         annotate("text", x = 0.04, y = seq(0.72, 0.72 - 0.06 * (length(lines) - 1), by = -0.06),
                  hjust = 0, size = 4.2, label = lines) +
-        annotate("text", x = 0.04, y = 0.06, hjust = 0, size = 3, color = "grey50",
+        # how to cite, and the exclusion rule, wrapped to the page
+        annotate("text", x = 0.04, y = 0.27, hjust = 0, vjust = 1, size = 2.9, color = "grey30",
+                 lineheight = 1.05,
+                 label = paste(c(strwrap(paste("Cite:", paste(neon_citation_lines(D$built), collapse = " ")), 105),
+                                 "",
+                                 strwrap(paste0("Excluded values: ", plausibility_rule_text(), "."), 105)),
+                               collapse = "\n")) +
+        annotate("text", x = 0.04, y = 0.04, hjust = 0, size = 3, color = "grey50",
                  label = paste0("Generated ", substr(D$built$when, 1, 10), " from a precomputed read-only dataset (no live API)."))
       print(cover)
 
       # Page 2 — time series (both analytes, faceted, real units); drop implausible extremes
-      sl <- D$swc_long |> filter(site == st, analyte %in% c(A, B), collectDate >= d[1], collectDate <= d[2], !implausible) |>
+      sl <- D$swc_long |> filter(site == st, analyte %in% c(A, B), collectDate >= d[1], collectDate <= d[2], !implausible,
+                                 is.finite(value)) |>
         mutate(lab = factor(ifelse(analyte == A, axis_title(A, uA), axis_title(B, uB)),
                             levels = c(axis_title(A, uA), axis_title(B, uB))))
       if (nrow(sl)) print(
@@ -2110,7 +2568,8 @@ server <- function(input, output, session) {
       }
 
       # Page 4 — seasonal climatology of the main analyte; drop implausible extremes
-      cl <- D$swc_long |> filter(site == st, analyte == A, collectDate >= d[1], collectDate <= d[2], !implausible) |>
+      cl <- D$swc_long |> filter(site == st, analyte == A, collectDate >= d[1], collectDate <= d[2], !implausible,
+                                 is.finite(value)) |>
         mutate(month = lubridate::month(collectDate, label = TRUE))
       if (nrow(cl) >= 6) print(
         ggplot(cl, aes(month, value)) +
@@ -2136,30 +2595,46 @@ server <- function(input, output, session) {
   })
   output$two_sites <- renderPlotly({ safe_plotly({
     d <- dates_d(); A <- main_a(); s1 <- input$site; s2 <- input$site_b %||% DEF_SITE_B
-    df <- D$swc_long |> filter(analyte == A, site %in% c(s1, s2),
-                               collectDate >= d[1], collectDate <= d[2], !implausible,
-                               is.finite(value)) |> arrange(collectDate)   # blank-value non-detects not plotted
+    dall <- D$swc_long |> filter(analyte == A, site %in% c(s1, s2),
+                                 collectDate >= d[1], collectDate <= d[2], !implausible) |>
+      arrange(collectDate)
+    # blank-value non-detects are never a value: counted, and drawn as the rug
+    df <- dall |> filter(is.finite(value))
+    nd <- dall |> filter(!is.finite(value), belowDetection %in% 1)
     if (!nrow(df)) return(plotly_message("No data for this analyte at these sites in this window.", mode()))
     unit <- df$units[1]
     lab <- function(s) paste0(s, " · ", D$sites_meta$siteName[match(s, D$sites_meta$site)])
+    n_lab <- function(s) { x <- dall[dall$site == s, ]
+      paste0(s, " n = ", nrow(x), bdl_note(sum(x$belowDetection %in% 1))) }
     df <- df |> mutate(siteLab = ifelse(site == s1, lab(s1), lab(s2)),
                        bdl = belowDetection %in% 1)
+    df$card <- NA_character_
+    for (s in unique(df$site)) {
+      ix <- which(df$site == s)
+      df$card[ix] <- pin_cards_by_date(s, dall[dall$site == s, ], df$collectDate[ix])
+    }
     pal <- setNames(c(COL$main, COL$secondary), c(lab(s1), lab(s2)))
     p2 <- plot_ly(df, x = ~collectDate, y = ~value, color = ~siteLab, colors = pal,
             type = "scatter", mode = "markers+lines", line = list(width = 2),
             # hollow markers = reported below the detection limit
             marker = list(size = 6, symbol = ~ifelse(bdl, "circle-open", "circle")),
+            customdata = ~card,
             hovertemplate = ~paste0("<b>", siteLab, "</b><br>%{x|%b %d, %Y}<br>%{y:.4g} ", pretty_unit(unit, A),
-                                    ifelse(bdl, " (below DL)", ""), "<extra></extra>")) |>
+                                    ifelse(bdl, " (below DL)", ""), "<extra></extra>"))
+    p2 <- nd_rug(p2, nd, rug_y(df$value), who = nd$site)
+    p2 <- p2 |>
       layout(hovermode = "x unified",
              yaxis = list(title = axis_title(A, unit)),
              xaxis = list(title = "", type = "date", showspikes = TRUE, spikemode = "across",
                           spikethickness = 1, spikecolor = "#9aa7b0", spikedash = "dot"),
-             legend = list(orientation = "h", y = -0.22, x = 0), margin = list(t = 48, b = 74),
-             title = list(text = paste0(analyte_display(A), " · two sites"), font = list(size = 14),
+             legend = list(orientation = "h", y = -0.22, x = 0), margin = list(t = 64, b = 74),
+             title = list(text = paste0(analyte_display(A), " · two sites",
+                                        "<br><span style='font-size:11.5px;color:#9aa4ad'>",
+                                        htmltools::htmlEscape(n_lab(s1)), " · ",
+                                        htmltools::htmlEscape(n_lab(s2)), "</span>"),
+                          font = list(size = 14),
                           x = 0, xanchor = "left", y = 0.98, yanchor = "top"))
-    if (spans_method_change(A, min(df$collectDate), max(df$collectDate)))
-      p2 <- add_method_change_marker(p2)
+    p2 <- add_time_context(p2, A, min(dall$collectDate), max(dall$collectDate), D$built)
     p2 |> plotly_theme(mode(), narrow()) |> plotly_clean(paste0(s1, "_vs_", s2, "_", A))
   }, mode()) })
 
@@ -2173,31 +2648,42 @@ server <- function(input, output, session) {
   # re-colouring on analyte / window / selected-site change is a leafletProxy swap
   # so the user's pan & zoom are preserved.
 
-  # one row per site with its mean for the active analyte/window. Implausible
-  # singletons (ANC 927, Fe 931) are excluded so one artifact can't blow out the
-  # continent-wide YlGnBu scale and floor every other site.
+  # one row per site with its MEDIAN for the active analyte/window (a median, so
+  # one storm sample cannot set a site's colour). Implausible singletons (ANC
+  # 927, Fe 931) are excluded so one artifact can't blow out the continent-wide
+  # YlGnBu scale and floor every other site.
+  #   nobs        every sample (incl. blank-value non-detects)
+  #   n_below     below-detection count; share_below = n_below / nobs
+  #   mostly_bdl  more than half below detection: drawn grey, no number shown
   map_site_avg <- function(ana, d) {
     D$swc_long |>
       filter(analyte == ana, collectDate >= d[1], collectDate <= d[2], !implausible) |>
-      # nobs = every sample (incl. blank-value non-detects); an all-NA site is
-      # NA, not NaN; n_below = below-detection count
       group_by(site) |>
-      summarise(avg = { mv <- mean(value, na.rm = TRUE); if (is.nan(mv)) NA_real_ else mv },
+      summarise(med = { v <- value[is.finite(value)]
+                        if (length(v)) stats::median(v, na.rm = TRUE) else NA_real_ },
                 nobs = dplyr::n(), n_below = sum(belowDetection == 1, na.rm = TRUE),
-                .groups = "drop")
+                .groups = "drop") |>
+      mutate(share_below = ifelse(nobs > 0, n_below / nobs, NA_real_),
+             mostly_bdl = is.finite(share_below) & share_below > 0.5)
   }
 
   # the choice card bound to each marker: site facts + the two buttons. They fire
   # the SAME inputs the server already handles (mapExplore loads + jumps to
-  # Compare; mapInfo opens the About modal) — so no new server wiring is needed.
-  map_popup_html <- function(code, ana, avg, nobs, unit, n_below = 0L) {
+  # Compare; mapInfo opens the About modal), so no new server wiring is needed.
+  # The Explore button closes its own popup first: the splash hides right after,
+  # and an open popup's autoPan on a hidden map can loop.
+  map_popup_html <- function(code, ana, med, nobs, unit, n_below = 0L, mostly_bdl = FALSE) {
     sm <- D$sites_meta[D$sites_meta$site == code, ]
     where <- paste(stats::na.omit(c(as.character(sm$state[1]),
       if (!is.na(sm$domain[1])) paste("NEON", sm$domain[1]) else NA)), collapse = " &middot; ")
-    val <- if (is.finite(avg))
-      sprintf("<div class='wc-pop-v'><b>%s</b>: %s %s <span class='wc-pop-sub'>(avg, n=%s%s)</span></div>",
-              analyte_display(ana), signif(avg, 3), unit, format(nobs, big.mark = ","),
-              if (isTRUE(n_below > 0)) sprintf(", %s below DL", format(n_below, big.mark = ",")) else "") else
+    nb <- as.integer(n_below %||% 0L); nb[is.na(nb)] <- 0L
+    val <- if (isTRUE(mostly_bdl))
+      sprintf("<div class='wc-pop-v wc-pop-na'><b>%s</b>: most samples below the detection limit (%s of %s)</div>",
+              analyte_display(ana), format(nb, big.mark = ","), format(nobs, big.mark = ",")) else
+      if (is.finite(med))
+      sprintf("<div class='wc-pop-v'><b>%s</b>: %s %s <span class='wc-pop-sub'>(median, n=%s%s)</span></div>",
+              analyte_display(ana), signif(med, 3), unit, format(nobs, big.mark = ","),
+              if (nb > 0) sprintf(", %s below DL", format(nb, big.mark = ",")) else "") else
       sprintf("<div class='wc-pop-v wc-pop-na'>no %s in this window</div>", analyte_display(ana))
     cov <- sprintf("<div class='wc-pop-n'><b>%s</b> obs &middot; <b>%s</b> analytes</div>",
                    format(ifelse(is.na(sm$n_obs[1]), 0L, sm$n_obs[1]), big.mark = ","),
@@ -2208,7 +2694,7 @@ server <- function(input, output, session) {
          <div class='wc-pop-s'>%s</div>
          %s%s
          <div class='wc-pop-actions'>
-           <button type='button' class='wc-pop-btn wc-pop-go' onclick=\"if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('mapExplore','%s',{priority:'event'});\">Explore this site &rarr;</button>
+           <button type='button' class='wc-pop-btn wc-pop-go' onclick=\"try{var w=HTMLWidgets.find('#map');if(w&&w.getMap)w.getMap().closePopup();}catch(e){};if(window.wcVeilOn)wcVeilOn();Shiny.setInputValue('mapExplore','%s',{priority:'event'});\">Explore this site &rarr;</button>
            <button type='button' class='wc-pop-btn wc-pop-info' onclick=\"Shiny.setInputValue('mapInfo','%s',{priority:'event'});\">About this site</button>
          </div>
        </div>",
@@ -2223,10 +2709,14 @@ server <- function(input, output, session) {
     unit <- pretty_unit(D$analyte_meta$units[D$analyte_meta$analyte == ana][1], ana)
     map <- map |> leaflet::clearGroup("sites") |> leaflet::clearControls()
     if (!nrow(m)) return(map)
-    has_v <- m |> filter(is.finite(avg)); no_v <- m |> filter(!is.finite(avg))
-    # heavy-tail-safe colour channel: log10(site avg) for skewed analytes, clamped
+    # a site whose samples are mostly below detection is drawn grey like "not
+    # measured": its median would be a detection-limit artifact, not chemistry
+    m <- m |> mutate(mostly_bdl = dplyr::coalesce(mostly_bdl, FALSE),
+                     colour_ok = is.finite(med) & !mostly_bdl)
+    has_v <- m |> filter(colour_ok); no_v <- m |> filter(!colour_ok)
+    # heavy-tail-safe colour channel: log10(site median) for skewed analytes, clamped
     # to p5/p95, legend ticking in TRUE units (so PRPO can't wash the rest out)
-    csc <- if (nrow(has_v)) map_colour_scale(has_v$avg, ana) else NULL
+    csc <- if (nrow(has_v)) map_colour_scale(has_v$med, ana) else NULL
     pal <- NULL
     if (!is.null(csc)) {
       dom <- c(csc$cmin, csc$cmax); if (dom[1] == dom[2]) dom[2] <- dom[1] + 1e-9
@@ -2238,8 +2728,8 @@ server <- function(input, output, session) {
       autoPanPadding = c(12, 40), keepInView = FALSE, closeButton = TRUE,
       closeOnClick = FALSE, className = "wc-pop-card")
     pops <- function(df) vapply(seq_len(nrow(df)),
-      function(i) as.character(map_popup_html(df$site[i], ana, df$avg[i], df$nobs[i], unit,
-                                              df$n_below[i] %||% 0L)), character(1))
+      function(i) as.character(map_popup_html(df$site[i], ana, df$med[i], df$nobs[i], unit,
+                                              df$n_below[i] %||% 0L, df$mostly_bdl[i])), character(1))
 
     if (nrow(no_v))
       map <- leaflet::addCircleMarkers(map, data = no_v, lng = ~long, lat = ~lat, group = "sites",
@@ -2253,7 +2743,7 @@ server <- function(input, output, session) {
         radius = if (is_narrow) ifelse(has_v$is_sel, 14, 11) else ifelse(has_v$is_sel, 12, 8), stroke = TRUE, weight = ifelse(has_v$is_sel, 2.6, 1),
         color = ifelse(has_v$is_sel, COL$secondary, "#ffffff"), fillColor = pal(csc$z), fillOpacity = .9,
         label = lapply(seq_len(nrow(has_v)), function(i) htmltools::HTML(sprintf(
-          "<b>%s</b> &middot; %s %s", has_v$site[i], signif(has_v$avg[i], 3), unit))),
+          "<b>%s</b> &middot; median %s %s", has_v$site[i], signif(has_v$med[i], 3), unit))),
         popup = pops(has_v), popupOptions = pop_opts,
         options = leaflet::markerOptions(riseOnHover = TRUE))
     if (!is.null(csc)) {
@@ -2288,9 +2778,9 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   output$map_footer <- renderUI({
-    HTML(sprintf("Markers coloured by the average <b>%s</b> at each site over the selected window (darker = higher);
-                  grey = not measured there. The selected site is ringed. <b>Tap any marker</b> to choose it and
-                  jump to the comparison.", analyte_display(main_a())))
+    HTML(sprintf("Markers coloured by the median <b>%s</b> at each site over the selected window (darker = higher);
+                  grey = not measured there, or mostly below the detection limit. The selected site is ringed.",
+                 analyte_display(main_a())))
   })
 
   # ---- Map site-picker: tap a marker -> its choice popup (Explore | About) ----
@@ -2309,17 +2799,56 @@ server <- function(input, output, session) {
   # downstream reactive keeps working; the flow is gated VISUALLY, not by a null
   # input), then hide the splash and reveal the main tabs, and dismiss the corner
   # nudge. `tab` is the nav_panel to land on (default Overview).
-  enter_site <- function(site, tab = "Overview") {
+  # `push`: add ONE browser-history entry for this site entry (the persist
+  # observer below then keeps that entry current with mode = "replace"). FALSE
+  # when the URL already says this site (a deep link, or browser Back/Forward).
+  # The open marker popup is closed client-side (the popup's Explore onclick and
+  # kickMaps): leaflet's clearPopups() only clears addPopups() popups.
+  enter_site <- function(site, tab = "Overview", push = TRUE) {
     if (is.null(site) || length(site) != 1 || !(site %in% D$sites_meta$site)) return(invisible())
+    same_view <- isTRUE(isolate(loaded())) && identical(isolate(input$site), site)
     updateSelectizeInput(session, "site", selected = site)
-    # close any open marker popup so autoPan never loops on the soon-hidden map
-    tryCatch(leaflet::leafletProxy("map") |> leaflet::clearPopups(), error = function(e) NULL)
+    if (isTRUE(push) && !same_view)
+      updateQueryString(paste0("?site=", utils::URLencode(site, reserved = TRUE)), mode = "push")
     shinyjs::hide("splash"); shinyjs::show("mainTabsWrap")
     shinyjs::hide("splashGuide")
     nav_select("main_tabs", tab)
     loaded(TRUE)   # arm the state-persist + deep-link observer (delighters 1 & 2)
+    # phone: the summary strip + band push the tabs below the fold; land on them
+    if (isTRUE(isolate(narrow())))
+      shinyjs::runjs("setTimeout(function(){var e=document.getElementById('main_tabs');if(e)e.closest('.card').scrollIntoView({behavior:'auto',block:'start'});},150)")
     invisible(TRUE)
   }
+
+  # ---- browser Back / Forward ------------------------------------------------
+  # Shiny only refreshes clientData$url_search on popstate when the value
+  # differs from the last one it sent, and our pushState/replaceState writes
+  # never update it, so it goes stale (Back to "?" after a push from "?" is
+  # never reported). APP_LISTENERS_JS sends location.search on every popstate as
+  # input$wc_nav (priority event) instead. No site in the URL -> the splash; a
+  # site that is not the one on screen -> enter it without pushing again (the
+  # loaded() flag + push = FALSE keep this from looping).
+  observeEvent(input$wc_nav, {
+    q <- tryCatch(parseQueryString(input$wc_nav %||% ""), error = function(e) list())
+    if (is.null(q$site) || !(q$site %in% D$sites_meta$site)) {
+      if (!isTRUE(loaded())) return(invisible())
+      loaded(FALSE)
+      shinyjs::show("splash"); shinyjs::hide("mainTabsWrap")
+      if (isTRUE(map_hidden_render())) {        # same re-render rule as "Change site"
+        map_hidden_render(FALSE)
+        map_render_nonce(map_render_nonce() + 1L)
+      }
+      session$sendCustomMessage("kickMaps", list())
+      return(invisible())
+    }
+    if (isTRUE(loaded()) && identical(q$site, input$site)) return(invisible())
+    pres <- site_present(q$site)
+    if (length(q$main) == 1 && q$main %in% pres)
+      updateSelectizeInput(session, "analyte_main", selected = q$main)
+    if (length(q$sec) == 1 && q$sec %in% pres)
+      updateSelectizeInput(session, "analyte_secondary", selected = q$sec)
+    enter_site(q$site, push = FALSE)
+  })
 
   # the shared load path used by the map popup, the About modal footer, and the
   # browse list: enter the loaded view (lands on Overview).
@@ -2350,8 +2879,19 @@ server <- function(input, output, session) {
     sm <- D$sites_meta[D$sites_meta$site == code, ]
     if (!nrow(sm)) return(modalDialog(title = "Site info", easyClose = TRUE,
       footer = modalButton("Close"), p("No details are available for this site.")))
-    dash <- function(x) if (length(x) == 0 || is.na(x) || !nzchar(as.character(x))) "—" else as.character(x)
-    coords <- if (!is.na(sm$lat[1]) && !is.na(sm$long[1])) sprintf("%.3f, %.3f", sm$lat[1], sm$long[1]) else "—"
+    dash <- function(x) if (length(x) == 0 || is.na(x) || !nzchar(as.character(x))) "not recorded" else as.character(x)
+    coords <- if (!is.na(sm$lat[1]) && !is.na(sm$long[1])) sprintf("%.3f, %.3f", sm$lat[1], sm$long[1]) else "not recorded"
+    # NEON change-log notes that cover this site (site scope only; the network
+    # and analyte notes belong to the charts they affect)
+    notes <- neon_notes_for(code)
+    notes <- notes[notes$scope == "site", , drop = FALSE]
+    notes_ui <- if (nrow(notes)) tagList(
+      tags$h6(class = "mt-3 mb-1", bs_icon("journal-text"), " NEON notes for this site"),
+      tags$ul(class = "mb-0 small",
+        lapply(seq_len(nrow(notes)), function(i) tags$li(
+          notes$text[i],
+          if (grepl("^[0-9]+$", notes$id[i]))
+            tags$span(class = "scope-note", paste0(" (NEON change log ", notes$id[i], ")"))))))
     modalDialog(
       title = tagList(bs_icon("geo-alt-fill"), " ", sm$siteName[1] %||% code,
                       span(class = "scope-note", paste0(" (", code, ")"))),
@@ -2374,8 +2914,9 @@ server <- function(input, output, session) {
           ifelse(is.na(sm$n_analytes[1]), 0L, sm$n_analytes[1]))),
         tags$dt(class = "col-5", "Coverage"),
         tags$dd(class = "col-7", sprintf("%s to %s",
-          if (!is.na(sm$first[1])) format(sm$first[1], "%b %Y") else "—",
-          if (!is.na(sm$last[1])) format(sm$last[1], "%b %Y") else "—"))))
+          if (!is.na(sm$first[1])) format(sm$first[1], "%b %Y") else "not recorded",
+          if (!is.na(sm$last[1])) format(sm$last[1], "%b %Y") else "not recorded"))),
+      notes_ui)
   }
 
   # "Explore this site" (map-marker popup OR About modal footer) -> load it.
@@ -2402,7 +2943,14 @@ server <- function(input, output, session) {
   })
 
   # by-name "Explore this site" button on the splash -> enter the current site.
-  observeEvent(input$loadBtn, load_site(input$site))
+  # A cleared site box is not a silent no-op: say what is missing.
+  observeEvent(input$loadBtn, {
+    if (is.null(input$site) || !(input$site %in% D$sites_meta$site)) {
+      showNotification("Pick a site first.", type = "warning")   # the veil clears on shiny:idle
+      return(invisible())
+    }
+    load_site(input$site)
+  })
 
   # ---- FLAGSHIP: the best 3 seconds -----------------------------------------
   # Load Sycamore Creek, set the flagship preset pair (specificConductanceField
@@ -2431,7 +2979,8 @@ server <- function(input, output, session) {
   observeEvent(input$goTwoSites,     nav_select("main_tabs", "Two sites"))
 
   #====================================================================
-  # SEARCH THE NETWORK — filters the precomputed in-memory index (instant)
+  # SEARCH THE NETWORK: filters the precomputed in-memory index on each site's
+  # MEDIAN (audit 2026-10-18 P2: the mean let one wet-season spike rank a site)
   #====================================================================
   # rows of the index for the currently-picked analyte (one row per site)
   search_analyte_rows <- reactive({
@@ -2445,7 +2994,7 @@ server <- function(input, output, session) {
   search_range <- reactive({
     r <- search_analyte_rows()
     if (!nrow(r)) return(c(0, 1))
-    v <- r$mean[is.finite(r$mean)]
+    v <- r$median[is.finite(r$median)]
     if (!length(v)) return(c(0, 1))
     range(v)
   })
@@ -2481,24 +3030,24 @@ server <- function(input, output, session) {
     if (!nrow(r)) return(r)
     mode <- input$search_mode %||% "threshold"
     if (identical(mode, "rank")) {
-      r <- r[order(r$mean, decreasing = identical(input$search_rank %||% "high", "high")), , drop = FALSE]
+      r <- r[order(r$median, decreasing = identical(input$search_rank %||% "high", "high")), , drop = FALSE]
       return(r)
     }
     op <- input$search_op %||% "gt"
     v1 <- suppressWarnings(as.numeric(input$search_val1))
     if (!is.finite(v1)) return(r[0, ])   # wait for a value
     keep <- switch(op,
-      gt = r$mean >  v1,
-      lt = r$mean <  v1,
+      gt = r$median >  v1,
+      lt = r$median <  v1,
       between = {
         v2 <- suppressWarnings(as.numeric(input$search_val2))
         if (!is.finite(v2)) return(r[0, ])
         lo <- min(v1, v2); hi <- max(v1, v2)
-        r$mean >= lo & r$mean <= hi
+        r$median >= lo & r$median <= hi
       })
     keep[is.na(keep)] <- FALSE
     r <- r[keep, , drop = FALSE]
-    r[order(r$mean, decreasing = TRUE), , drop = FALSE]
+    r[order(r$median, decreasing = TRUE), , drop = FALSE]
   })
 
   output$search_summary <- renderText({
@@ -2517,7 +3066,7 @@ server <- function(input, output, session) {
                  "The search index is not bundled with this version. Rebuild it with scripts/build_search_index.R."))
     if (nrow(search_result()) == 0) {
       msg <- if (identical(input$search_mode %||% "threshold", "threshold") && nzchar(input$search_analyte %||% ""))
-        "No site's average meets that threshold. Try a wider value or the highest / lowest view."
+        "No site's median meets that threshold. Try a wider value or the highest / lowest view."
       else "Pick an analyte to begin."
       return(div(class = "empty-note scope-note", bs_icon("inbox"), " ", msg))
     }
@@ -2530,27 +3079,41 @@ server <- function(input, output, session) {
     u <- r$pretty[1] %|na|% ""
     yr <- ifelse(is.finite(r$year_min) & is.finite(r$year_max),
                  ifelse(r$year_min == r$year_max, as.character(r$year_min),
-                        paste0(r$year_min, "–", r$year_max)), "—")
+                        paste0(r$year_min, "–", r$year_max)), "n/a")
+    esc_site <- htmltools::htmlEscape(r$site, attribute = TRUE)
     btn <- sprintf(
       "<button class='btn btn-sm btn-outline-primary search-go' data-site='%s'>Go to site &rarr;</button>",
-      r$site)
+      esc_site)
+    pb <- r$pct_below
+    mostly_bdl <- is.finite(pb) & pb > 0.5
     df <- data.frame(
-      Site    = sprintf("<a href='#' class='search-go-link' data-site='%s'><b>%s</b></a>", r$site, r$site),
+      Site    = sprintf("<a href='#' class='search-go-link' data-site='%s'><b>%s</b></a>",
+                        esc_site, htmltools::htmlEscape(r$site)),
       Name    = r$siteName %|na|% r$site,
-      State   = r$state %|na|% "—",
+      State   = r$state %|na|% "n/a",
+      Median  = ifelse(mostly_bdl, "mostly below DL", format(signif(r$median, 4), trim = TRUE)),
       Mean    = signif(r$mean, 4),
-      Median  = signif(r$median, 4),
       n       = r$n,
-      `below-DL` = ifelse(is.finite(r$pct_below), paste0(round(100 * r$pct_below), "%"), "—"),
+      `below-DL` = ifelse(is.finite(pb), paste0(round(100 * pb), "%"), "n/a"),
       Years   = yr,
       ` `     = btn,
+      .med    = r$median,                       # hidden: numeric sort key for Median
+      .pb     = ifelse(is.finite(pb), pb, 0),   # hidden: drives the grey rows
       check.names = FALSE, stringsAsFactors = FALSE)
     names(df)[names(df) == "Mean"]   <- if (nzchar(u)) paste0("Mean (", u, ")") else "Mean"
     names(df)[names(df) == "Median"] <- if (nzchar(u)) paste0("Median (", u, ")") else "Median"
-    datatable(df, escape = FALSE, rownames = FALSE, selection = "none",
+    # 0-based JS column indices (rownames = FALSE)
+    j_med <- 3L; j_btn <- 8L; j_hid <- c(9L, 10L)
+    # escape every column except the two that carry our own link/button HTML
+    datatable(df, escape = setdiff(seq_len(ncol(df)), c(1L, j_btn + 1L)),
+              rownames = FALSE, selection = "none",
               options = list(pageLength = 15, dom = "ftip", order = list(), scrollX = TRUE,
-                             columnDefs = list(list(orderable = FALSE, targets = c(0, ncol(df) - 1)))),
-              class = "compact stripe hover")
+                             columnDefs = list(
+                               list(orderable = FALSE, targets = c(0L, j_btn)),
+                               list(orderData = j_hid[1], targets = j_med),
+                               list(visible = FALSE, targets = j_hid))),
+              class = "compact stripe hover") |>
+      formatStyle(".pb", target = "row", opacity = styleInterval(0.25 - 1e-9, c("1", "0.55")))
   }, server = FALSE)
 
   # Go-to-site jump (button OR site-code link) -> load from bundle, colour the
@@ -2609,7 +3172,8 @@ server <- function(input, output, session) {
     # (dates are not restored — a resumed/shared view lands on the site full span)
     auto_entered(TRUE)              # suppress the first-visit Welcome modal this load
     map_hidden_render(TRUE)         # the picker map's first render will land hidden
-    enter_site(site, tab = land_tab)
+    # a deep link already shows this site in the URL: no second history entry
+    enter_site(site, tab = land_tab, push = is.null(q$site))
   })
 }
 
