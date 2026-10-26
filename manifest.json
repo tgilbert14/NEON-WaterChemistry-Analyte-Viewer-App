@@ -3498,13 +3498,13 @@
       "checksum": "36e92904e8eae0002bd58f089d903d92"
     },
     "data/codebook.csv": {
-      "checksum": "2d0cdf593234a16291a07ad42b4f58b8"
+      "checksum": "d435e2ca437c56aafcf1effb6e4e872c"
     },
     "data/neon_swc.rds": {
-      "checksum": "cde4e3a856320c02267f62de75dbd482"
+      "checksum": "a08f22550b452a01f9cb65bfd9f12b88"
     },
     "data/search_index.rds": {
-      "checksum": "02ff4be3a968f9165fe00c741b001a3a"
+      "checksum": "d3464eebbd901192dfce412e1f576653"
     },
     "helpers.R": {
       "checksum": "9f247ed089a645933ff2122591e7cc16"
