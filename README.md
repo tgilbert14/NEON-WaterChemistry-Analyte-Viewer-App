@@ -42,9 +42,9 @@ scripts/water_unit_contract.R # shared fail-closed producer/runtime unit policy
 data/neon_swc.rds             # NEON SWC, precomputed (loaded once at startup)
 data/search_index.rds         # deterministic, plausibility/unit-gated network index
 data/codebook.csv             # versioned export/analyte dictionary generated with the bundle
-scripts/runtime_manifest_files.R # exact six-file deployment allowlist
+scripts/runtime_manifest_files.R # the exact runtime-file allowlist
 config/connect-manifest-packages-v1.json # reviewed Connect/R 4.5.2 package lock
-scripts/verify_connect_runtime.R # checksum/package/six-file cold-source gate
+scripts/verify_connect_runtime.R # checksum, package and runtime-file cold-source gate
 scripts/connect_runtime_smoke.sh # localhost Shiny HTTP cold boot (--browser adds the browser smoke)
 scripts/browser_smoke.mjs     # Playwright session: deep link, tabs, site change, map markers
 scripts/check_cover.mjs       # landing-cover copy and Atlas-route check
@@ -83,7 +83,7 @@ The cache (`data/.neon_cache/`) is git-ignored; the built `data/neon_swc.rds` is
 Ordinary data/runtime rebuilds never regenerate Connect package versions. Dependency
 changes require a separate review of `config/connect-manifest-packages-v1.json`; CI
 restores all 103 locked versions on Ubuntu 22.04/R 4.5.2 and cold-boots the exact
-six-file app before a refresh candidate can publish.
+runtime files before a refresh candidate can publish.
 
 ---
 

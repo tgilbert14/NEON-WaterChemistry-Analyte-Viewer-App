@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Cold-boot the exact six files declared in manifest.json, then require the
+# Cold-boot exactly the files declared in manifest.json, then require the
 # application-specific readiness marker from a real local HTTP response.
 # --browser also runs scripts/browser_smoke.mjs (Playwright, from npm ci)
 # against the cold-booted app before it is stopped.
@@ -88,9 +88,9 @@ require_html '<html lang="en"' "the page language"
 expected_receipt=$(jq -r '[.files | to_entries | sort_by(.key)[] | .value.checksum] | join(".")' \
   "$repo_root/manifest.json")
 require_html "$expected_receipt" "the exact runtime receipt"
-echo "Connect six-file HTTP cold boot passed."
+echo "Connect runtime HTTP cold boot passed."
 if [[ "$browser" -eq 1 ]]; then
   node "$repo_root/scripts/browser_smoke.mjs" "http://127.0.0.1:$port/"
   kill -0 "$app_pid"
-  echo "Connect six-file browser smoke passed."
+  echo "Connect runtime browser smoke passed."
 fi

@@ -7,7 +7,7 @@ The landing cover is GitHub Pages, served from `docs/`:
 
 ```
   Posit Connect Cloud                         GitHub Pages (docs/)
-  └─ runs the six-file runtime allowlist      └─ landing cover, og:image card,
+  └─ runs the eight-file runtime allowlist    └─ landing cover, og:image card,
      from main, republished on every push        one link to the app
 ```
 
@@ -26,12 +26,12 @@ Rscript --vanilla scripts/write_manifest.R
 ```
 
 Do not hand-write an `appFiles` vector: the script and its regression share the single
-six-file allowlist and enforce pinned package sources and checksums. Ordinary runtime and
+runtime-file allowlist and enforce pinned package sources and checksums. Ordinary runtime and
 data rebuilds keep the reviewed 103-package graph in
 `config/connect-manifest-packages-v1.json`; a dependency change needs a separately reviewed
 lock update.
 
-Pull requests restore that exact graph on Ubuntu 22.04 with R 4.5.2, cold-boot the six files,
+Pull requests restore that exact graph on Ubuntu 22.04 with R 4.5.2, cold-boot the runtime files,
 require the readiness marker, page title and `lang="en"` over HTTP, and drive the local app
 in Chromium (`scripts/connect_runtime_smoke.sh --browser`, which runs
 `scripts/browser_smoke.mjs`). After a push to `main`, `post-deploy.yml` waits for Connect

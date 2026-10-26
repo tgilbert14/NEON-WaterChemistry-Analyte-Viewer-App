@@ -36,7 +36,8 @@ load_functions(file.path(repo_root, "scripts", "precompute_neon_data.R"),
                  "water_blank_like_rows", "water_fetch_receipt"), env)
 load_functions(file.path(repo_root, "scripts", "refresh_data.R"),
                c("water_read_fetch_receipt", "water_fetch_receipt_gate",
-                 "water_refresh_summary_lines", "water_write_step_summary"), env)
+                 "water_refresh_summary_lines", "water_write_step_summary",
+                 "water_same_content"), env)
 
 expect_error <- function(expr, pattern) {
   msg <- tryCatch({ force(expr); "" }, error = conditionMessage)
@@ -161,6 +162,22 @@ with(env, {
   unlink(summary_path)
   # A run that stopped before the build still gets readable lines.
   stopifnot(length(water_refresh_summary_lines(list(), NULL, list())) > 5L)
+
+  # 7) Content key: only built$when may differ, and nothing is changed in place.
+  a <- list(swc_long = data.frame(site = "SYCA", value = 1),
+            built = list(when = "2026-10-26T19:00:00Z", n_obs = 1L))
+  b <- a; b$built$when <- "2026-11-07T13:17:00Z"
+  moved <- b; moved$swc_long$value <- 2
+  recount <- b; recount$built$n_obs <- 2L
+  stopifnot(
+    water_same_content(b, a), identical(b$built$when, "2026-11-07T13:17:00Z"),
+    !water_same_content(moved, a), !water_same_content(recount, a),
+    !water_same_content(b, NULL), !water_same_content(NULL, a)
+  )
+  # on the committed bundle: two reads with a new timestamp are the same content
+  committed <- file.path(repo_root, "data", "neon_swc.rds")
+  rebuilt <- readRDS(committed); rebuilt$built$when <- "2000-01-01T00:00:00Z"
+  stopifnot(water_same_content(rebuilt, readRDS(committed)))
 })
 
-cat("Precompute fetch contract (token host rule, CI token, blank-like rows, receipt, miss gate, summary) passed.\n")
+cat("Precompute fetch contract (token host rule, CI token, blank-like rows, receipt, miss gate, summary, content key) passed.\n")

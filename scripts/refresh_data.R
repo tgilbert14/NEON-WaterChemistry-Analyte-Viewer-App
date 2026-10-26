@@ -81,10 +81,22 @@ water_write_step_summary <- function(lines) {
   invisible(nzchar(path))
 }
 
+# Content key: TRUE when the rebuild matches the committed bundle in every field
+# but its producer timestamp built$when.
+water_same_content <- function(candidate, base) {
+  if (!is.list(candidate) || !is.list(base) ||
+      !is.list(candidate$built) || !is.list(base$built)) return(FALSE)
+  candidate$built$when <- "<NORMALIZED>"
+  base$built$when <- "<NORMALIZED>"
+  identical(candidate, base)
+}
+
 # Baseline from the CURRENTLY COMMITTED bundle (on disk before we overwrite it),
 # so the guard is relative to what we already ship rather than a magic number.
 base <- tryCatch(readRDS(OUT)$built, error = function(e) NULL)
 base_bundle <- tryCatch(readRDS(OUT), error = function(e) NULL)
+# The committed bytes, put back below when the rebuild's content is unchanged.
+base_bytes <- if (file.exists(OUT)) readBin(OUT, "raw", file.size(OUT)) else raw()
 base_obs   <- as.numeric(base$n_obs   %||% 0)
 base_sites <- as.numeric(base$n_sites %||% 0)
 base_roster <- sort(unique(as.character(base_bundle$sites_meta$site)))
@@ -141,3 +153,14 @@ if (isTRUE(b$partial))
   stop("Candidate is flagged partial; refusing automatic publication.")
 
 cat("Guard passed: exact roster retained, observations did not shrink, and candidate is not partial.\n")
+
+# Content-key no-op: a rebuild that matches the committed bundle in every field
+# but its timestamp gets the committed bytes back, and the codebook is rewritten
+# from them, so an unchanged release rebuilds byte-identical and the publisher
+# ends with "No validated data change" instead of pushing a review branch.
+if (length(base_bytes) && water_same_content(candidate, base_bundle)) {
+  writeBin(base_bytes, OUT)
+  write_codebook(base_bundle, file.path("data", "codebook.csv"))
+  cat(sprintf("Content unchanged from the committed bundle; kept its bytes and build time %s.\n",
+              base_bundle$built$when))
+}

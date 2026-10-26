@@ -152,7 +152,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           ./node_modules/.bin/playwright install --with-deps chromium
 
-      - name: Cold-boot the exact six-file Connect runtime and drive it in a browser
+      - name: Cold-boot the exact Connect runtime files and drive them in a browser
         run: bash scripts/connect_runtime_smoke.sh --require-exact-packages --browser
 
   build_candidate:
@@ -267,7 +267,7 @@ jobs:
           bash -n scripts/connect_runtime_smoke.sh scripts/post_deploy_smoke.sh
           git diff --check
 
-      - name: Cold-boot the candidate in its six-file runtime envelope
+      - name: Cold-boot the candidate in its exact runtime-file envelope
         run: bash scripts/connect_runtime_smoke.sh
 
       - name: Package the producer candidate
