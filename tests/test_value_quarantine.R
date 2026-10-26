@@ -104,6 +104,20 @@ allowed <- base
 allowed$release <- c("RELEASE-2026", "PROVISIONAL", NA)
 allowed_bundle <- build_swc_bundle(allowed, data.frame(), coords)
 allowed_bundle$built$when <- b$built$when
+# The release tags ride through to swc_long and the release summary; apart
+# from those, the bundle equals the untagged build.
+stopifnot(
+  identical(allowed_bundle$swc_long$release[allowed_bundle$swc_long$site == "ARIK"],
+            "PROVISIONAL"),
+  is.na(allowed_bundle$swc_long$release[allowed_bundle$swc_long$site == "SYCA"]),
+  identical(allowed_bundle$built$neon_releases,
+            data.frame(release = "PROVISIONAL", n = 1L, first = "2017-05-02",
+                       last = "2017-05-02", stringsAsFactors = FALSE)),
+  identical(allowed_bundle$built$provisional_from, "2017-05-02")
+)
+allowed_bundle$swc_long$release <- NA_character_
+allowed_bundle$built$neon_releases <- NULL
+allowed_bundle$built$provisional_from <- NULL
 stopifnot(identical(allowed_bundle, b))
 odd_tag <- base
 odd_tag$release <- c("NIGHTLY", NA, NA)

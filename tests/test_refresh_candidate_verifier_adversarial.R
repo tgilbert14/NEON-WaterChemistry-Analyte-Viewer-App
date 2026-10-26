@@ -39,6 +39,7 @@ stopifnot(file.copy(
 invisible(lapply(
   c(
     "scripts/verify_refresh_candidate.R",
+    "scripts/runtime_manifest_files.R",
     "scripts/water_unit_contract.R",
     "scripts/build_search_index.R",
     "scripts/build_swc_bundle.R"
@@ -97,17 +98,14 @@ candidate_receipt_present <- policy_env$WATER_UNIT_RECEIPT_FIELDS %in%
   names(candidate_original$built)
 stopifnot(all(candidate_receipt_present) || !any(candidate_receipt_present))
 current_candidate <- all(candidate_receipt_present)
-current_codebook_version <- if (
-  current_candidate &&
-    identical(candidate_original$built$unit_policy,
-              policy_env$WATER_UNIT_POLICY)
-) {
-  "1.2.0"
-} else if (current_candidate) {
-  "1.1.0"
-} else {
-  "1.0.0"
-}
+current_codebook_version <- if (current_candidate) "1.2.0" else "1.0.0"
+# Write the fixture codebook with the current writer (the committed one can
+# predate the current export schema until the lead promotes derived bytes).
+codebook_env <- new.env(parent = globalenv())
+old_wd <- setwd(repo_root)
+sys.source(file.path("scripts", "build_swc_bundle.R"), envir = codebook_env)
+setwd(old_wd)
+codebook_env$write_codebook(candidate_original, codebook_path)
 runtime_long <- policy_env$canonicalize_runtime_water_units(
   candidate_original$swc_long
 )
@@ -258,6 +256,21 @@ mutate_index <- function(mutate) {
   write_fixture_manifest()
 }
 
+v5_label <- function(x) {
+  # Relabel a v4 bundle as v5 with a valid zero-count quarantine receipt and
+  # the v5 columns, so the v5-only checks run on the committed rows.
+  q <- policy_env$apply_water_value_quarantine(
+    character(), character(), character(), numeric(), character()
+  )
+  x$built$unit_policy <- policy_env$WATER_UNIT_POLICY
+  x$built$n_value_rows_quarantined <- 0L
+  x$built$value_quarantine_receipt <- q$receipt
+  x$built$value_quarantine_receipt_sha256 <- q$receipt_sha256
+  x$swc_long$partialBelow <- rep(0L, nrow(x$swc_long))
+  x$swc_long$release <- rep(NA_character_, nrow(x$swc_long))
+  x
+}
+
 write_codebook_table <- function(header, table) {
   writeLines(header, codebook_path)
   suppressWarnings(utils::write.table(
@@ -305,6 +318,49 @@ if (current_candidate) {
   })
   run_verifier("Candidate value-quarantine receipt is invalid")
 }
+
+# Oracle (a): a micrograms-as-mg/L Fe value that survives the runtime view
+# (pre-2017 ARIK Fe rows outside the quarantined identities, times 1000).
+mutate_bundle(function(x) {
+  later <- x$swc_long$site == "ARIK" & x$swc_long$analyte == "Fe" &
+    x$swc_long$collectDate > as.Date("2016-06-19") &
+    x$swc_long$collectDate < as.Date("2017-01-01")
+  stopifnot(sum(later) >= 3L)
+  x$swc_long$value[later] <- x$swc_long$value[later] * 1000
+  x
+})
+run_verifier("Fe/Mn oracle: the pre-2017 median is at least 100 times")
+
+# Oracle (b): the committed v4 rows dropped blank-concentration non-detects
+# (Br/Cl 0.33 to 0.65 since 2022), so the same rows labelled v5 fail.
+mutate_bundle(v5_label)
+run_verifier("Halide oracle: Br or F rows fell below 0.85 of Cl rows")
+
+# Release tags must be recounted exactly, and only known tags are accepted.
+mutate_bundle(function(x) {
+  x$swc_long$release <- rep(NA_character_, nrow(x$swc_long))
+  x$swc_long$release[[1]] <- "RELEASE-2026"
+  x
+})
+run_verifier("Candidate rows carry release tags but the build has no neon_releases")
+mutate_bundle(function(x) {
+  x$swc_long$release <- rep(NA_character_, nrow(x$swc_long))
+  x$swc_long$release[[1]] <- "NIGHTLY-1"
+  x
+})
+run_verifier("Candidate carries an unrecognized NEON release tag")
+mutate_bundle(function(x) {
+  x$swc_long$release <- rep("RELEASE-2026", nrow(x$swc_long))
+  x$built$neon_releases <- data.frame(
+    release = "RELEASE-2026", n = as.integer(nrow(x$swc_long) - 1L),
+    first = format(min(x$swc_long$collectDate), "%Y-%m-%d"),
+    last = format(max(x$swc_long$collectDate), "%Y-%m-%d"),
+    stringsAsFactors = FALSE
+  )
+  x$built$provisional_from <- NA_character_
+  x
+})
+run_verifier("Candidate neon_releases disagrees with a recount")
 
 mutate_bundle(function(x) {
   x$built$n_obs <- x$built$n_obs + 0.5

@@ -190,7 +190,14 @@ permutation_ca <- permutation_a$swc_long[
 stopifnot(
   nrow(permutation_ca) == 1L,
   identical(permutation_ca$n_reps, 4L),
-  identical(permutation_ca$belowDetection, 1L),
+  # 2 of 4 replicates below detection: a partial row whose value and spread
+  # come from the detected replicates only (audit P2, 2026-10).
+  identical(permutation_ca$belowDetection, 0L),
+  identical(permutation_ca$partialBelow, 1L),
+  identical(permutation_ca$value, mean(c(1e16, 1e-8))),
+  identical(permutation_ca$value_sd, stats::sd(c(1e16, 1e-8))),
+  is.na(permutation_ca$release),
+  !any(c("neon_releases", "provisional_from") %in% names(permutation_a$built)),
   identical(permutation_ca$labFlag, "formatChange | legacyData"),
   all(permutation_a$swc_long$n_reps[
     permutation_a$swc_long$source == "Field Probe"
@@ -394,14 +401,21 @@ legacy_value_row <- legacy_codebook[
 ]
 stopifnot(
   grepl(
-    if (committed_v5) {
-      "version 1.2.0"
-    } else if (all(producer_receipt_present)) {
-      "version 1.1.0"
-    } else {
-      "version 1.0.0"
-    },
+    if (all(producer_receipt_present)) "version 1.2.0" else "version 1.0.0",
     legacy_codebook_lines[[1]], fixed = TRUE
+  ),
+  # Every bundle kind documents exactly the export keep-vector, the v5
+  # columns included; earlier producers say those columns were not recorded.
+  identical(
+    legacy_codebook$name[legacy_codebook$section == "tidy_long_export"],
+    LONG_EXPORT_KEEP
+  ),
+  committed_v5 || identical(
+    legacy_codebook$na_semantics[
+      legacy_codebook$section == "tidy_long_export" &
+        legacy_codebook$name %in% c("partial_below", "release")
+    ],
+    rep("not recorded: this bundle predates the v5 producer", 2L)
   ),
   identical(
     legacy_value_row$na_semantics,
@@ -641,8 +655,11 @@ stopifnot(
   identical(nd_mixed$value, 0.02),
   is.na(nd_mixed$value_sd),
   identical(nd_mixed$n_reps, 2L),
-  identical(nd_mixed$belowDetection, 1L),
-  identical(nd_bundle$built$n_below, 2L),
+  # One detect + one blank ND: a partial row, not a below-detection row.
+  identical(nd_mixed$belowDetection, 0L),
+  identical(nd_mixed$partialBelow, 1L),
+  identical(nd_kept$partialBelow, 0L),
+  identical(nd_bundle$built$n_below, 1L),
   identical(nd_bundle$built$n_obs, 2L)
 )
 
