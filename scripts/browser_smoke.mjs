@@ -5,6 +5,12 @@
 // smoke proves the HTML arrived; this proves the Shiny session works.
 // Pattern from NEON-My-Little-Inverts scripts/post_deploy_browser.mjs.
 //
+// Every check that depends on the server applying a state change (the ?site=
+// deep link, the mapExplore site change) polls for up to 90 s instead of
+// reading the page once. On a cold start right after a deploy, Actions run
+// 40776451098 (2026-10-28) found Shiny idle while the context band still named
+// the default site SYCA; the deep link landed later and a warm re-run passed.
+//
 // usage: node scripts/browser_smoke.mjs <base-url>
 //        (or BROWSER_SMOKE_URL=<base-url> node scripts/browser_smoke.mjs)
 
@@ -16,6 +22,7 @@ const snagText = "This view hit a snag";
 const tabs = ["Compare", "Relationship", "Seasonal pattern"];
 const minMarkers = 30;
 const timeout = Number(process.env.BROWSER_SMOKE_TIMEOUT_MS || 180_000);
+const stateTimeout = Number(process.env.BROWSER_SMOKE_STATE_TIMEOUT_MS || 90_000);
 
 function fail(message) {
   throw new Error(`Water Chemistry browser smoke failed: ${message}`);
@@ -51,6 +58,23 @@ async function waitIdle(page, label) {
   }
   if (await page.locator("#shiny-disconnected-overlay").count()) {
     fail(`${label}: the Shiny session disconnected`);
+  }
+}
+
+// Poll until the context band's site code names `code`; the server applies
+// the deep link and site changes after the first idle tick on a cold start.
+async function waitForBandSite(page, code, label) {
+  const started = Date.now();
+  try {
+    await page.waitForFunction(
+      (want) => (document.querySelector(".context-band .cb-site-code")?.textContent || "").includes(want),
+      code,
+      { timeout: stateTimeout, polling: 250 },
+    );
+  } catch {
+    const band = await page.locator(".context-band .cb-site-code").textContent().catch(() => "");
+    const waited = ((Date.now() - started) / 1000).toFixed(1);
+    fail(`${label}: the context band names "${(band || "").trim()}", not ${code}, after waiting ${waited} s`);
   }
 }
 
@@ -100,8 +124,8 @@ try {
   if (shell.heavy !== "object") fail(`typeof window.WC_HEAVY is ${shell.heavy}, not object`);
   if (shell.title !== expectedTitle) fail(`document.title is "${shell.title}", not "${expectedTitle}"`);
   if (shell.lang !== "en") fail(`<html lang> is "${shell.lang}", not "en"`);
-  const band = await page.locator(".context-band .cb-site-code").textContent().catch(() => "");
-  if (!band || !band.includes("REDB")) fail(`the context band names "${band}", not REDB`);
+  await waitForBandSite(page, "REDB", "REDB deep link");
+  await waitIdle(page, "REDB deep link applied");
   await requireNoSnag(page, "REDB deep link");
 
   for (const tab of tabs) {
@@ -115,11 +139,7 @@ try {
 
   await clickChangeSite(page, "first Change site");
   await page.evaluate(() => window.Shiny.setInputValue("mapExplore", "ARIK", { priority: "event" }));
-  await page.waitForFunction(
-    () => (document.querySelector(".context-band .cb-site-code")?.textContent || "").includes("ARIK"),
-    null,
-    { timeout },
-  ).catch(() => {});
+  await waitForBandSite(page, "ARIK", "ARIK via mapExplore");
   await waitIdle(page, "ARIK via mapExplore");
   const arik = await page.locator(".context-band").textContent().catch(() => "");
   if (!arik || !arik.includes("Arikaree River")) {
