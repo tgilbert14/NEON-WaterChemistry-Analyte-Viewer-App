@@ -1,16 +1,17 @@
-# NEON Surface Water Chemistry — Analyte Viewer
+# NEON Water Chemistry Analyte Viewer
+
+[Live app](https://019ebf59-b2ff-a20a-cb35-6d227ca6261a.share.connect.posit.cloud/) · [Landing cover](https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/)
 
 An interactive R/Shiny app for exploring **water-chemistry analytes** measured across
 [NEON](https://www.neonscience.org/) aquatic field sites. Pick a site, a date range, and two
-analytes — then explore how they move together through time, how they relate, what else they
+analytes, then explore how they move together through time, how they relate, what else they
 correlate with, their seasonal pattern, and a quick machine-learning estimate.
 
 Built on the **Surface Water Chemistry** product
 [(DP1.20093.001)](https://data.neonscience.org/data-products/DP1.20093.001).
 
-> Rebuilt 2026 — modern [bslib](https://rstudio.github.io/bslib/) UI, real NEON data bundled for
-> instant loads, and statistics that show their work. (The original 2021 shinydashboard version
-> is preserved in [`legacy/`](legacy/).)
+> Rebuilt in 2026 with bslib. NEON data is bundled with the app, and every statistic shows its sample size.
+> (The original 2021 shinydashboard version is preserved in [`legacy/`](legacy/).)
 
 ---
 
@@ -18,16 +19,16 @@ Built on the **Surface Water Chemistry** product
 
 | Tab | What you get |
 |-----|--------------|
-| **Compare** | Two analytes through time. *Normalized* mode (z-scores on one axis) compares **shape** honestly; *Dual axis (raw)* shows original units with an explicit "independent axes" caveat. Below-detection samples are drawn as open markers. |
+| **Compare** | Two analytes through time. *Normalized* mode (z-scores on one axis) compares **shape**; *Dual axis (raw)* shows original units with an explicit "independent axes" caveat. Below-detection samples are drawn as open markers. |
 | **Relationship** | Ordinary-least-squares regression of the two analytes with a 95% confidence band, R² / adjusted R² / slope / p-value / n, and a temporal-autocorrelation flag. |
 | **Correlations** | The main analyte vs every other analyte as a lollipop (anchored at 0) plus a sortable table. Spearman by default, Pearson alongside, **n shown per row**, and rows with n < 8 flagged as unreliable. |
-| **Seasonal** | Monthly climatology (box-and-jitter) and a real **STL** seasonal-trend decomposition of the actual monthly record. No fabricated forecasts. |
+| **Seasonal** | Monthly climatology (box-and-jitter) and an **STL** seasonal-trend decomposition of the actual monthly record. No fabricated forecasts. |
 | **Predictor** | A `glm` that estimates the main analyte from its three best-correlated analytes, with cross-validated RMSE. Move the sliders for a live estimate. |
 | **Data** | The wide table behind every tab, with CSV / Excel download for exactly the current site and range. |
 | **Site map** | All NEON aquatic sites; the selected one highlighted. |
 
-The flagship default view — **Sycamore Creek, AZ (SYCA): specific conductance vs ANC** — loads a
-real, strong relationship on first visit (Pearson r ≈ 0.86 over the full record).
+The flagship default view, **Sycamore Creek, AZ (SYCA): specific conductance vs ANC**, opens on a
+strong relationship (Pearson r ≈ 0.86 over the full record).
 
 ---
 
@@ -38,22 +39,25 @@ app.R                         # the whole app: bslib UI + server
 helpers.R                     # analyte names/units, colors, theme + chart helpers,
                               #   correlation_table(), fit_lm(), kfold_rmse()
 scripts/water_unit_contract.R # shared fail-closed producer/runtime unit policy
-data/neon_swc.rds             # REAL NEON SWC, precomputed (loaded once at startup)
+data/neon_swc.rds             # NEON SWC, precomputed (loaded once at startup)
 data/search_index.rds         # deterministic, plausibility/unit-gated network index
 data/codebook.csv             # versioned export/analyte dictionary generated with the bundle
-scripts/runtime_manifest_files.R # exact six-file deployment allowlist
+scripts/runtime_manifest_files.R # the exact runtime-file allowlist
 config/connect-manifest-packages-v1.json # reviewed Connect/R 4.5.2 package lock
-scripts/verify_connect_runtime.R # checksum/package/six-file cold-source gate
-scripts/connect_runtime_smoke.sh # real localhost Shiny HTTP cold boot
+scripts/verify_connect_runtime.R # checksum, package and runtime-file cold-source gate
+scripts/connect_runtime_smoke.sh # localhost Shiny HTTP cold boot (--browser adds the browser smoke)
+scripts/browser_smoke.mjs     # Playwright session: deep link, tabs, site change, map markers
+scripts/check_cover.mjs       # landing-cover copy and Atlas-route check
+config/neon-product-watch.json # reviewed NEON change-log ids and releases (weekly watch)
 scripts/precompute_neon_data.R  # pulls SWC from the NEON public API (resumable, cached)
 scripts/build_rds_from_cache.R  # builds data/neon_swc.rds from the cache
 legacy/                       # the original 2021 app + old data files
 ```
 
 **Why a precomputed `.rds`?** The original app called `neonUtilities::loadByProduct()` on every
-selection — slow, network-dependent, and (per the original author's own note) it blocked
+selection: slow, network-dependent, and (per the original author's own note) it blocked
 publishing to shinyapps.io. The rebuild pulls the data **once** from the NEON public API into a
-compact bundle the app loads instantly. No runtime NEON calls, no `neonUtilities` dependency.
+compact bundle the app loads at startup. No runtime NEON calls, no `neonUtilities` dependency.
 
 `data/neon_swc.rds` is a list:
 
@@ -79,7 +83,7 @@ The cache (`data/.neon_cache/`) is git-ignored; the built `data/neon_swc.rds` is
 Ordinary data/runtime rebuilds never regenerate Connect package versions. Dependency
 changes require a separate review of `config/connect-manifest-packages-v1.json`; CI
 restores all 103 locked versions on Ubuntu 22.04/R 4.5.2 and cold-boots the exact
-six-file app before a refresh candidate can publish.
+runtime files before a refresh candidate can publish.
 
 ---
 
@@ -93,11 +97,11 @@ install.packages(c("shiny","bslib","bsicons","plotly","DT","ggplot2",
 shiny::runApp("app.R")
 ```
 
-## Honesty notes (by design)
+## How the numbers are handled
 
 - **Every statistic shows its sample size.** Correlations default to Spearman (robust to the
   skew typical of water chemistry), guard at n ≥ 8, and print a multiple-comparisons caveat.
-- **The seasonal view is a real STL decomposition** of the measured monthly series — not the
+- **The seasonal view is an STL decomposition** of the measured monthly series, not the
   synthetic sine-wave "forecast" the original app shipped.
 - **Analyte names and unit handling are explicit and fail closed** (e.g. Br = bromide, not
   bicarbonate; Cl = chloride; ANC in meq/L; pH unitless). For the 31 external-lab analytes,

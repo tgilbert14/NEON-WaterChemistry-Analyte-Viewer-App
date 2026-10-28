@@ -1,0 +1,13 @@
+{
+  "name": "neon-water-chemistry-ci",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Locked browser dependency for the Water Chemistry browser smoke and cover check.",
+  "scripts": {
+    "check:cover": "node scripts/check_cover.mjs",
+    "smoke:browser": "node scripts/browser_smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.1"
+  }
+}

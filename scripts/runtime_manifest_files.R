@@ -7,7 +7,9 @@ WATER_RUNTIME_FILES <- c(
   "scripts/water_unit_contract.R",
   "data/codebook.csv",
   "data/neon_swc.rds",
-  "data/search_index.rds"
+  "data/search_index.rds",
+  "www/pincards.js",
+  "www/vendor/html-to-image-1.11.11.js"
 )
 
 water_runtime_files <- function(root = ".") {

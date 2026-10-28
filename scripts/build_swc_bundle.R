@@ -54,10 +54,60 @@ collapse_water_lab_flags <- function(x) {
   if (!length(flags)) NA_character_ else paste(flags, collapse = " | ")
 }
 
+# NEON release tag text: trimmed, with "" read as not recorded (NA).
+clean_water_release <- function(x) {
+  x <- trimws(enc2utf8(as.character(x)))
+  x[!is.na(x) & !nzchar(x)] <- NA_character_
+  x
+}
+
+# One release tag per collapsed group. Replicates of one site-date-analyte come
+# from one site-month, so two distinct tags mean the inputs were mixed up.
+collapse_water_release <- function(x) {
+  tags <- unique(x[!is.na(x)])
+  if (length(tags) > 1L) {
+    stop(sprintf(
+      "Replicates of one site-date-analyte carry more than one NEON release: %s",
+      paste(sort(tags, method = "radix"), collapse = ", ")
+    ), call. = FALSE)
+  }
+  if (length(tags)) tags else NA_character_
+}
+
+# The replicate values a collapsed row reports (audit P2, 2026-10): when any
+# replicate is detected, only the detected values; when every replicate is below
+# detection, every numeric value; numeric(0) when none is numeric (a group of
+# blank-concentration non-detects).
+water_replicate_values <- function(value, below) {
+  detected <- !below & !is.na(value)
+  if (any(detected)) value[detected] else value[!is.na(value)]
+}
+
+# Release summary written to built$neon_releases: one row per recorded tag.
+water_release_summary <- function(release, collectDate) {
+  keep <- !is.na(release)
+  tags <- sort(unique(release[keep]), method = "radix")
+  if (!length(tags)) {
+    return(data.frame(release = character(), n = integer(),
+                      first = character(), last = character(),
+                      stringsAsFactors = FALSE))
+  }
+  rows <- lapply(tags, function(tag) {
+    d <- collectDate[keep & release == tag]
+    data.frame(release = tag, n = as.integer(length(d)),
+               first = format(min(d), "%Y-%m-%d"),
+               last = format(max(d), "%Y-%m-%d"),
+               stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
+}
+
 # lab_raw  : stacked external-lab rows; cols = site, collectDate, analyte,
 #            analyteConcentration, analyteUnits, belowDetectionQF, externalLabDataQF
 # field_raw: stacked field-probe rows; cols = site, collectDate, waterTemp,
-#            dissolvedOxygen, specificConductance
+#            dissolvedOxygen, specificConductance (+ optional release)
 # coords   : per-site tibble; cols = site, neonName, domain, state, lat, long, siteType
 # partial  : TRUE if built from an incomplete pull
 build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
@@ -77,7 +127,7 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
               below = as.character(belowDetectionQF) %in% .below_codes,
               labFlag = as.character(externalLabDataQF),
               laboratoryName = as.character(laboratoryName),
-              release = as.character(release),
+              release = clean_water_release(release),
               source = "External Lab") %>%
     # Since spring 2022 NEON reports a non-detect with a blank concentration
     # and "ND" in belowDetectionQF (change log 2022-08-18). Keep those rows so
@@ -85,8 +135,12 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
     filter(!is.na(collectDate), !is.na(value) | below)
 
   field_long <- if (!is.null(field_raw) && nrow(field_raw)) {
+    if (!"release" %in% names(field_raw)) {
+      field_raw$release <- rep(NA_character_, nrow(field_raw))
+    }
     field_raw %>%
-      mutate(collectDate = as.Date(substr(collectDate, 1, 10))) %>%
+      mutate(collectDate = as.Date(substr(collectDate, 1, 10)),
+             release = clean_water_release(release)) %>%
       pivot_longer(any_of(c("waterTemp","dissolvedOxygen","specificConductance")),
                    names_to = "a0", values_to = "v") %>%
       filter(!is.na(v), !is.na(collectDate)) %>%
@@ -98,7 +152,8 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
                 units = recode(a0, waterTemp = "celsius",
                                dissolvedOxygen = "milligramsPerLiter",
                                specificConductance = "microsiemensPerCentimeter"),
-                below = FALSE, labFlag = NA_character_, source = "Field Probe")
+                below = FALSE, labFlag = NA_character_, release,
+                source = "Field Probe")
   } else tibble()
 
   raw_long <- bind_rows(lab_long, field_long)
@@ -132,27 +187,38 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
   raw_long <- raw_long[quarantine_result$keep, , drop = FALSE]
   stopifnot(identical(raw_long$value,
                       values_before_quarantine[quarantine_result$keep]))
-  raw_long$release <- NULL
   raw_long <- canonical_water_raw_order(raw_long)
 
   # Collapse replicates -> one row per site/date/analyte, KEEPING the replicate
-  # count + spread + a real below-detection flag (any rep below DL). Units are now
-  # canonical per analyte, and every distinct lab flag is retained.
+  # count + spread. belowDetection = every replicate below the detection limit;
+  # partialBelow = some but not all. value and value_sd use the detected
+  # replicates when any is detected (water_replicate_values). Units are canonical
+  # per analyte, every distinct lab flag is retained, and the one NEON release
+  # tag of the group is carried.
   swc_long <- raw_long %>%
     group_by(site, collectDate, analyte) %>%
-    # value is NA only when every replicate is a blank-concentration ND.
-    summarise(value_sd = if (sum(!is.na(value)) > 1L)       # spread BEFORE collapse
-                stats::sd(value, na.rm = TRUE) else NA_real_,
+    summarise(value_sd = {                                  # spread BEFORE collapse
+                used <- water_replicate_values(value, below)
+                if (length(used) > 1L) stats::sd(used) else NA_real_
+              },
               n_reps = dplyr::n(),
-              belowDetection = as.integer(any(below, na.rm = TRUE)),
+              n_below_reps = sum(below),
+              belowDetection = as.integer(n_below_reps == n_reps),
+              partialBelow = as.integer(n_below_reps > 0L &
+                                          n_below_reps < n_reps),
               units = dplyr::first(units),
               source = dplyr::first(source),
               labFlag = collapse_water_lab_flags(labFlag),
-              value = if (all(is.na(value))) NA_real_ else
-                mean(value, na.rm = TRUE),                 # collapse LAST
+              release = collapse_water_release(release),
+              value = {                                     # collapse LAST
+                used <- water_replicate_values(value, below)
+                if (length(used)) mean(used) else NA_real_
+              },
               .groups = "drop") %>%
+    select(-n_below_reps) %>%
     relocate(value, .after = analyte) %>%
     arrange(site, analyte, collectDate)
+  swc_long$release <- as.character(swc_long$release)
 
   # Fail loud if the grain is wrong (a silent pivot-mean would hide it)
   stopifnot(!anyDuplicated(swc_long[c("site", "collectDate", "analyte")]))
@@ -199,6 +265,16 @@ build_swc_bundle <- function(lab_raw, field_raw, coords, partial = FALSE) {
     n_value_rows_quarantined = quarantine_result$n_rows_quarantined,
     value_quarantine_receipt = quarantine_result$receipt,
     value_quarantine_receipt_sha256 = quarantine_result$receipt_sha256)
+  if (has_release) {
+    built$neon_releases <- water_release_summary(swc_long$release,
+                                                 swc_long$collectDate)
+    provisional <- swc_long$collectDate[swc_long$release %in% "PROVISIONAL"]
+    built$provisional_from <- if (length(provisional)) {
+      format(min(provisional), "%Y-%m-%d")
+    } else {
+      NA_character_
+    }
+  }
 
   bundle <- list(swc_long = swc_long, swc_wide = swc_wide, sites_meta = sites_meta,
                  analyte_meta = analyte_meta, built = built)
@@ -256,6 +332,37 @@ validate_bundle <- function(b) {
               b$built$n_unit_rows_excluded,
               as.integer(sum(b$built$unit_row_exclusions$n_excluded))
             ))
+  # v5 producer columns (2026-10): partialBelow and release on every row.
+  if (identical(b$built$unit_policy, WATER_UNIT_POLICY)) {
+    stopifnot(all(c("partialBelow", "release") %in% names(b$swc_long)),
+              is.integer(b$swc_long$belowDetection),
+              all(b$swc_long$belowDetection %in% c(0L, 1L)),
+              is.integer(b$swc_long$partialBelow),
+              all(b$swc_long$partialBelow %in% c(0L, 1L)),
+              !any(b$swc_long$belowDetection == 1L &
+                     b$swc_long$partialBelow == 1L),
+              !any(b$swc_long$partialBelow == 1L & b$swc_long$n_reps < 2L),
+              is.character(b$swc_long$release))
+  }
+  has_releases <- "neon_releases" %in% names(b$built)
+  stopifnot(identical(has_releases, "provisional_from" %in% names(b$built)))
+  if (has_releases) {
+    rel <- b$built$neon_releases
+    pf <- b$built$provisional_from
+    stopifnot(is.data.frame(rel),
+              identical(names(rel), c("release", "n", "first", "last")),
+              is.character(rel$release), !anyNA(rel$release),
+              !anyDuplicated(rel$release),
+              is.integer(rel$n), !anyNA(rel$n), all(rel$n > 0L),
+              is.character(rel$first), is.character(rel$last),
+              all(grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", c(rel$first, rel$last))),
+              all(rel$first <= rel$last),
+              "release" %in% names(b$swc_long),
+              identical(sum(rel$n), sum(!is.na(b$swc_long$release))),
+              is.character(pf), length(pf) == 1L,
+              is.na(pf) || grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", pf),
+              identical(is.na(pf), !"PROVISIONAL" %in% rel$release))
+  }
   invisible(TRUE)
 }
 
@@ -264,14 +371,19 @@ validate_bundle <- function(b) {
 # the ACTUAL columns the app's tidy long export emits (the keep-vector) so it can
 # never drift from what ships; every column carries type + units-or-NA + allowed +
 # definition + NA-semantics. CODEBOOK_VERSION is stamped into the header.
-CODEBOOK_VERSION <- "1.2.0"          # v5 producer: blank-concentration NDs kept
-PRIOR_CODEBOOK_VERSION <- "1.1.0"    # v4 producer bundle
+# 1.2.0 = the export schema with partial_below and release, written for v4 and
+# v5 producer bundles (v4 rows describe both columns as not recorded). The
+# receipt-free legacy bundle keeps 1.0.0 but lists the same rows.
+CODEBOOK_VERSION <- "1.2.0"          # v4 and v5 producer bundles
 LEGACY_CODEBOOK_VERSION <- "1.0.0"   # receipt-free legacy bundle
 # The keep-vector = the exact columns output$dl_long / long_slice() transmutes.
 # Keep this list in lock-step with app.R long_slice().
 LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","units",
-                      "n_reps","value_sd","below_detection","implausible_extreme",
-                      "lab_flag","source","product")
+                      "n_reps","value_sd","below_detection","partial_below",
+                      "implausible_extreme","lab_flag","source","product",
+                      "release")
+# NA text for the v5 columns in a bundle written by an earlier producer.
+CODEBOOK_PRE_V5_NA <- "not recorded: this bundle predates the v5 producer"
 .CODEBOOK_DEFS <- list(
   site = list(type="character", units=NA, allowed="NEON 4-letter site code",
               def="NEON aquatic site where the sample was collected",
@@ -283,7 +395,7 @@ LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","un
   analyte_label = list(type="character", units=NA, allowed="free text",
               def="Human-readable analyte name", na="never NA"),
   value = list(type="numeric", units="see units column (canonical per analyte)", allowed=">= 0 typical",
-              def="Replicate-mean concentration / measurement for the site-date-analyte",
+              def="Mean of the detected replicates for the site-date-analyte; the mean of every replicate when all are below the detection limit",
               na="NA when every replicate was a non-detect reported with a blank concentration"),
   units = list(type="character", units=NA, allowed="canonical NEON unit string",
               def="Pinned established unit for the analyte; UV absorbance = 'absorbance units'",
@@ -291,10 +403,13 @@ LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","un
   n_reps = list(type="integer", units="count", allowed=">= 1",
               def="Number of lab/field replicates collapsed into value", na="never NA"),
   value_sd = list(type="numeric", units="same as value", allowed=">= 0",
-              def="Standard deviation across replicates before collapse",
-              na="NA when n_reps == 1"),
+              def="Standard deviation of the replicate values used for value",
+              na="NA when fewer than 2 replicate values are used for value"),
   below_detection = list(type="logical", units=NA, allowed="TRUE/FALSE",
-              def="Any replicate reported below the analytical detection limit (value kept, never substituted)",
+              def="Every replicate reported below the analytical detection limit (value kept, never substituted)",
+              na="never NA"),
+  partial_below = list(type="logical", units=NA, allowed="TRUE/FALSE",
+              def="Some but not all replicates reported below the detection limit; value then uses the detected replicates only",
               na="never NA"),
   implausible_extreme = list(type="logical", units=NA, allowed="TRUE/FALSE",
               def="Flagged above the plausibility ceiling; kept in this raw export, excluded from fits/maps/STL/glm",
@@ -306,7 +421,23 @@ LONG_EXPORT_KEEP <- c("site","collectDate","analyte","analyte_label","value","un
   source = list(type="character", units=NA, allowed="External Lab | Field Probe",
               def="Measurement origin", na="never NA"),
   product = list(type="character", units=NA, allowed="DP1.20093.001",
-              def="NEON data product code", na="never NA")
+              def="NEON data product code", na="never NA"),
+  release = list(type="character", units=NA, allowed="RELEASE-YYYY | PROVISIONAL",
+              def="NEON release tag of the site-month the row came from",
+              na="NA when the build did not record a release for the site-month")
+)
+# Definitions as written by producers before v5 (any-replicate flag, mean of
+# every numeric replicate).
+.CODEBOOK_PRE_V5_DEFS <- list(
+  value = list(def="Replicate-mean concentration / measurement for the site-date-analyte",
+               na="NA only if all replicates were non-numeric"),
+  value_sd = list(def="Standard deviation across replicates before collapse",
+                  na="NA when n_reps == 1"),
+  below_detection = list(def="Any replicate reported below the analytical detection limit (value kept, never substituted)",
+                         na="never NA"),
+  partial_below = list(def=.CODEBOOK_DEFS$partial_below$def,
+                       na=CODEBOOK_PRE_V5_NA),
+  release = list(def=.CODEBOOK_DEFS$release$def, na=CODEBOOK_PRE_V5_NA)
 )
 write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
   receipt_present <- WATER_UNIT_RECEIPT_FIELDS %in% names(bundle$built)
@@ -323,10 +454,8 @@ write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
   }
   v5_producer <- current_producer &&
     identical(bundle$built$unit_policy, WATER_UNIT_POLICY)
-  codebook_version <- if (v5_producer) {
+  codebook_version <- if (current_producer) {
     CODEBOOK_VERSION
-  } else if (current_producer) {
-    PRIOR_CODEBOOK_VERSION
   } else {
     LEGACY_CODEBOOK_VERSION
   }
@@ -341,9 +470,11 @@ write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
         na = "NA when unflagged"
       )
     }
-    if (identical(col, "value") && !v5_producer) {
-      # Bundles before v5 dropped blank-concentration non-detects at build.
-      d$na <- "NA only if all replicates were non-numeric"
+    if (!v5_producer && col %in% names(.CODEBOOK_PRE_V5_DEFS)) {
+      # Bundles before v5 dropped blank-concentration non-detects, flagged a
+      # row when any replicate was below detection, and lack the v5 columns.
+      d$def <- .CODEBOOK_PRE_V5_DEFS[[col]]$def
+      d$na <- .CODEBOOK_PRE_V5_DEFS[[col]]$na
     }
     if (is.null(d)) d <- list(type="", units=NA, allowed="", def="(undocumented)", na="")
     tibble::tibble(name = col, type = d$type,
@@ -354,8 +485,15 @@ write_codebook <- function(bundle, out = file.path("data","codebook.csv")) {
   long_cb$section <- "tidy_long_export"
 
   # analyte dictionary section: one row per analyte actually emitted, with its
-  # canonical unit + coverage + below-detection fraction
-  am <- bundle$analyte_meta
+  # canonical unit + coverage + below-detection fraction. Counted on the
+  # runtime view (the rows the app and its exports use), which is what
+  # verify_refresh_candidate.R reconciles; for a v5 bundle it equals the bundle.
+  runtime_long <- canonicalize_runtime_water_units(bundle$swc_long)$data
+  am <- runtime_long %>% group_by(analyte) %>%
+    summarise(units = dplyr::first(units), n = dplyr::n(),
+              n_sites = dplyr::n_distinct(site),
+              n_below = sum(belowDetection), .groups = "drop") %>%
+    arrange(desc(n))
   am$pct_below <- ifelse(is.finite(am$n) & am$n > 0, round(am$n_below / am$n, 4), NA_real_)
   dict_cb <- tibble::tibble(
     name = am$analyte, type = "numeric",

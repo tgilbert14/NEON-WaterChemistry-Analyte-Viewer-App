@@ -19,7 +19,12 @@ source("helpers.R")
 
 D <- readRDS(file.path("data", "neon_swc.rds"))
 site <- "ARIK"
+# A v5 bundle already keeps blank-concentration non-detects (value NA), so count
+# what the bundle carries before injecting more and only inject into rows that
+# still hold a number.
+n0 <- sum(is.na(apply_runtime_water_unit_contract(D)$swc_long$value))
 cand <- which(D$swc_long$site == site & D$swc_long$belowDetection == 1 &
+              !is.na(D$swc_long$value) &
               D$swc_long$analyte %in% c("Br", "NO3+NO2 - N", "Fe", "Mn", "TDP"))
 stopifnot(length(cand) >= 50)
 set.seed(1)
@@ -27,7 +32,7 @@ hit <- sample(cand, 50)
 D$swc_long$value[hit] <- NA_real_
 
 D <- apply_runtime_water_unit_contract(D)
-stopifnot(sum(is.na(D$swc_long$value)) == 50)   # NA non-detects survive the contract
+stopifnot(sum(is.na(D$swc_long$value)) == n0 + 50)   # NA non-detects survive the contract
 
 # same gate as app.R data-load block
 CANON_MAP <- canonical_units(D$swc_long)

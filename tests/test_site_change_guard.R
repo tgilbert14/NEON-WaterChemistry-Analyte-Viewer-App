@@ -34,13 +34,14 @@ stopifnot(!grepl("window_title\\s*=", page_call, perl = TRUE))
 cat("Site-change guard passed: no frozen site-dependent inputs; plain page title and lang set.\n")
 
 # The picker map's first render lands behind a hidden splash when the startup
-# resolver auto-enters a deep-linked or resumed site; a leaflet widget rendered
-# into display:none never gets its view or layers. The map must re-render once
-# on "Change site": renderLeaflet reads map_render_nonce, the resolver marks the
-# hidden render, and the changeSite observer bumps the nonce.
-stopifnot(grepl("renderLeaflet\\(\\{\\s*\\n\\s*map_render_nonce\\(\\)", src, perl = TRUE))
-stopifnot(grepl("map_hidden_render\\(TRUE\\)", src, perl = TRUE))
-change_site <- regmatches(src, regexpr("observeEvent\\(input\\$changeSite(.|\n){0,900}", src, perl = TRUE))
-stopifnot(length(change_site) == 1L,
-          grepl("map_render_nonce\\(map_render_nonce\\(\\) \\+ 1L\\)", change_site, perl = TRUE))
-cat("Picker-map re-render guard passed.\n")
+# resolver auto-enters a deep-linked or resumed site; the leaflet binding keeps it
+# as pendingRenderData until the widget's own resize() runs with a real size.
+# kickMaps must call that resize() (via HTMLWidgets.find('#map')), and the server
+# must not force a second render: two map instances race each other's pending
+# Leaflet events and throw "_leaflet_pos" page errors.
+kick <- regmatches(src, regexpr("addCustomMessageHandler\\('kickMaps'(.|\n){0,900}", src, perl = TRUE))
+stopifnot(length(kick) == 1L,
+          grepl("HTMLWidgets.find\\('#map'\\)", kick, perl = TRUE),
+          grepl("\\.resize\\(m\\.offsetWidth, m\\.offsetHeight\\)", kick, perl = TRUE))
+stopifnot(!grepl("map_render_nonce", src, fixed = TRUE))
+cat("Picker-map pending-render guard passed.\n")

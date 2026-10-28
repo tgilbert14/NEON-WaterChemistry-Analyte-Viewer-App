@@ -15,7 +15,7 @@ rd <- function(f) suppressWarnings(suppressMessages(read_csv(f, show_col_types =
 a_files <- list.files(CACHE_DIR, pattern = "_analyte\\.csv$", full.names = TRUE)
 p_files <- list.files(CACHE_DIR, pattern = "_parent\\.csv$",  full.names = TRUE)
 cat(sprintf("cache: %d analyte files, %d parent files\n", length(a_files), length(p_files)))
-if (!length(a_files)) stop("No cached analyte CSVs yet — let the pull run a bit longer.")
+if (!length(a_files)) stop("No cached analyte CSVs yet: let the pull run a bit longer.")
 
 lab_raw <- bind_rows(lapply(a_files, function(f) {
   d <- tryCatch(rd(f), error = function(e) NULL); if (is.null(d) || !nrow(d)) return(NULL)

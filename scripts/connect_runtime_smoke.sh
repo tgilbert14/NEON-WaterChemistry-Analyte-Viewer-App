@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-# Cold-boot the exact six files declared in manifest.json, then require the
+# Cold-boot exactly the files declared in manifest.json, then require the
 # application-specific readiness marker from a real local HTTP response.
+# --browser also runs scripts/browser_smoke.mjs (Playwright, from npm ci)
+# against the cold-booted app before it is stopped.
 
 set -euo pipefail
 
@@ -11,12 +13,17 @@ log="${stage}.log"
 html="${stage}.html"
 port="${WATER_CONNECT_SMOKE_PORT:-3939}"
 exact_arg=""
-if [[ "${1:-}" == "--require-exact-packages" ]]; then
-  exact_arg="--require-exact-packages"
-elif [[ $# -ne 0 ]]; then
-  echo "usage: $0 [--require-exact-packages]" >&2
-  exit 2
-fi
+browser=0
+for arg in "$@"; do
+  case "$arg" in
+    --require-exact-packages) exact_arg="--require-exact-packages" ;;
+    --browser) browser=1 ;;
+    *)
+      echo "usage: $0 [--require-exact-packages] [--browser]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 cleanup() {
   if [[ -n "${app_pid:-}" ]]; then
@@ -69,8 +76,21 @@ if [[ "$ready" -ne 1 ]]; then
   exit 1
 fi
 kill -0 "$app_pid"
-grep -Fq 'water-chemistry-v1' "$html"
+require_html() {
+  if ! grep -Fq "$1" "$html"; then
+    echo "Water Connect runtime HTML lacks $2: $1" >&2
+    exit 1
+  fi
+}
+require_html 'water-chemistry-v1' "the readiness marker"
+require_html '<title>NEON Water Chemistry · Analyte Viewer</title>' "the page title"
+require_html '<html lang="en"' "the page language"
 expected_receipt=$(jq -r '[.files | to_entries | sort_by(.key)[] | .value.checksum] | join(".")' \
   "$repo_root/manifest.json")
-grep -Fq "$expected_receipt" "$html"
-echo "Connect six-file HTTP cold boot passed."
+require_html "$expected_receipt" "the exact runtime receipt"
+echo "Connect runtime HTTP cold boot passed."
+if [[ "$browser" -eq 1 ]]; then
+  node "$repo_root/scripts/browser_smoke.mjs" "http://127.0.0.1:$port/"
+  kill -0 "$app_pid"
+  echo "Connect runtime browser smoke passed."
+fi

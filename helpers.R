@@ -133,6 +133,16 @@ apply_runtime_water_unit_contract <- function(bundle) {
   }
   result <- canonicalize_runtime_water_units(bundle$swc_long)
   bundle$swc_long <- result$data
+  # Columns the v5 producer adds (2026-10 finish round): partialBelow (some but
+  # not all replicates below detection) and release (the NEON release tag of the
+  # row's site-month, or "PROVISIONAL"). A bundle from an earlier producer lacks
+  # them; NA means "not recorded", never "no".
+  if (!"partialBelow" %in% names(bundle$swc_long)) {
+    bundle$swc_long$partialBelow <- rep(NA_integer_, nrow(bundle$swc_long))
+  }
+  if (!"release" %in% names(bundle$swc_long)) {
+    bundle$swc_long$release <- rep(NA_character_, nrow(bundle$swc_long))
+  }
 
   bundle$swc_wide <- bundle$swc_long |>
     dplyr::select(site, collectDate, analyte, value) |>
@@ -264,7 +274,55 @@ is_plausible <- function(value, analyte, ceil_map, site = NULL) {
   }
   ok <- !is.finite(value) | is.na(ceil) | (value <= ceil)
   ok[is.na(ok)] <- TRUE
+  unname(ok & in_physical_range(value, a))
+}
+
+# Physical plausibility range for the field-probe analytes (audit 2026-10-18 P2).
+# A data-derived ceiling can never fire on these (a stuck probe or a sign error
+# sits inside the pooled quantiles) and it has no lower bound. A listed analyte
+# is kept only when lo < value <= hi (lo <= value when lo_closed). Ions and lab
+# analytes are not floored: a true zero or a tiny value is chemistry there.
+PLAUSIBLE_RANGE <- tibble::tribble(
+  ~analyte,                   ~lo,  ~hi, ~lo_closed, ~units,
+  "specificConductanceField", 0.5,  Inf, FALSE,      "µS/cm",
+  "specificConductance",      0.5,  Inf, FALSE,      "µS/cm",
+  "dissolvedOxygenField",     0,    25,  TRUE,       "mg/L",
+  "waterTemp",                -1,   40,  FALSE,      "°C"
+)
+# TRUE = inside the physical range (or analyte not listed, or value not finite).
+in_physical_range <- function(value, analyte) {
+  i  <- match(as.character(analyte), PLAUSIBLE_RANGE$analyte)
+  lo <- PLAUSIBLE_RANGE$lo[i]; hi <- PLAUSIBLE_RANGE$hi[i]
+  lc <- PLAUSIBLE_RANGE$lo_closed[i]
+  above_lo <- ifelse(lc %in% TRUE, value >= lo, value > lo)
+  ok <- is.na(i) | !is.finite(value) | (above_lo & value <= hi)
+  ok[is.na(ok)] <- TRUE
   unname(ok)
+}
+# Site median that keeps blank-concentration non-detects (value NA, flagged
+# below detection) in the count by ranking them below every reported value.
+# NA when the middle of the record falls among them: the median is then below
+# the detection limit and has no number. Search, its verifier and the map share it.
+nd_median <- function(value, below) {
+  v <- ifelse(is.na(value) & below %in% 1, -Inf, value)
+  v <- v[!is.na(v)]
+  if (!length(v)) return(NA_real_)
+  m <- stats::median(v)
+  if (is.finite(m)) m else NA_real_
+}
+
+# One plain-language sentence stating the gate exactly (export headers, report).
+plausibility_rule_text <- function() {
+  rng <- vapply(seq_len(nrow(PLAUSIBLE_RANGE)), function(i) {
+    r <- PLAUSIBLE_RANGE[i, ]
+    lo <- paste0(if (isTRUE(r$lo_closed)) ">= " else "> ", r$lo)
+    paste0(analyte_display(r$analyte), " ", lo,
+           if (is.finite(r$hi)) paste0(" and <= ", r$hi) else "", " ", r$units)
+  }, character(1))
+  paste0("a value is excluded from fits, trends, maps and search when it is above its analyte ceiling ",
+         "(the larger of the pooled 99.9th percentile and 50x the pooled median; for conductance, TDS, ANC, ",
+         "DIC and the major ions the site's own 99.5th percentile and 30x its median, once the site has 8 values) ",
+         "or outside its physical range (kept only when ", paste(rng, collapse = "; "), ")")
 }
 
 ## ---- Heavy-tail map colour scale (review finding #1, map washout) ---------
@@ -358,55 +416,204 @@ analyte_choices <- function(present_codes) {
 }
 
 ## ---- Scientifically grounded preset comparisons (Aquatics) ----------------
+# Preset names are input values (selectInput sends them back), so they stay ASCII:
+# under a C locale (manifest.json declares locale "C") R cannot hold a non-ASCII
+# name as UTF-8, and a browser value like "a \u2194 b" would never match it.
 PRESETS <- list(
-  "Ionic strength ↔ buffering (flagship)" = c("specificConductanceField", "ANC"),
-  "Ionic strength ↔ calcium"               = c("specificConductanceField", "Ca"),
+  "Ionic strength vs buffering (flagship)" = c("specificConductanceField", "ANC"),
+  "Ionic strength vs calcium"               = c("specificConductanceField", "Ca"),
   "Inorganic vs total dissolved N"             = c("TDN", "NO3+NO2 - N"),
   "Total vs bioavailable phosphorus"           = c("TP", "Ortho - P"),
-  "DOM quantity ↔ quality (SUVA)"          = c("DOC", "UV Absorbance (254 nm)"),
-  "Carbonate system (alkalinity ↔ pH)"     = c("HCO3", "pH"),
-  "Redox metals (iron ↔ manganese)"        = c("Fe", "Mn")
+  "DOM quantity vs quality (SUVA)"          = c("DOC", "UV Absorbance (254 nm)"),
+  "Carbonate system (DIC vs ANC)"           = c("DIC", "ANC"),
+  "Redox metals (iron vs manganese)"        = c("Fe", "Mn")
 )
 PRESET_REASON <- c(
-  "Ionic strength ↔ buffering (flagship)" = "Specific conductance integrates all dissolved ions; in carbonate terrain it tracks ANC tightly, the README's Sycamore Creek example.",
-  "Ionic strength ↔ calcium"               = "Conductance should rise with the dominant cation; calcium is a primary driver of ionic strength in most streams.",
+  "Ionic strength vs buffering (flagship)" = "Specific conductance integrates all dissolved ions; in carbonate terrain it tracks ANC tightly, the README's Sycamore Creek example.",
+  "Ionic strength vs calcium"               = "Conductance should rise with the dominant cation; calcium is a primary driver of ionic strength in most streams.",
   "Inorganic vs total dissolved N"             = "Nitrate+nitrite is the oxidized fraction within total dissolved N; the relationship shows how much of the N pool is inorganic.",
   "Total vs bioavailable phosphorus"           = "Orthophosphate (SRP) is the bioavailable fraction of total P; the ratio diagnoses dissolved-reactive vs particle-bound P.",
-  "DOM quantity ↔ quality (SUVA)"          = "UV absorbance per unit DOC (SUVA) indexes aromaticity / terrestrial origin of organic matter (Weishaar et al. 2003).",
-  "Carbonate system (alkalinity ↔ pH)"     = "Bicarbonate dominance and pH are coupled through carbonate equilibria; together they define the buffering regime.",
-  "Redox metals (iron ↔ manganese)"        = "Fe and Mn are both mobilized under low-oxygen conditions; they co-vary in groundwater-fed and wetland-influenced streams."
+  "DOM quantity vs quality (SUVA)"          = "UV absorbance per unit DOC (SUVA) indexes aromaticity / terrestrial origin of organic matter (Weishaar et al. 2003).",
+  "Carbonate system (DIC vs ANC)"           = "Dissolved inorganic carbon and acid neutralizing capacity are tied together by carbonate equilibria; NEON recommends estimating bicarbonate from either one.",
+  "Redox metals (iron vs manganese)"        = "Fe and Mn are both mobilized under low-oxygen conditions; they co-vary in groundwater-fed and wetland-influenced streams."
 )
 
 season_of <- function(d) factor(c("Winter","Spring","Summer","Fall")[(lubridate::month(d) %% 12) %/% 3 + 1],
                                  levels = c("Winter","Spring","Summer","Fall"))
+
+## ---- NEON provenance: release tags, DOIs, data notes ----------------------
+# DP1.20093.001 release DOIs, from GET /api/v0/products/DP1.20093.001
+# (releases[].productDoi.url), read 2026-10-22. config/neon-product-watch.json
+# carries the same list for the refresh workflow's release watch, and a test
+# keeps the two equal. A release tag missing here renders without a DOI, and the
+# watch opens an issue to add it.
+NEON_PRODUCT_NAME <- "Chemical properties of surface water"
+NEON_RELEASE_DOI <- c(
+  "RELEASE-2021" = "https://doi.org/10.48443/05k7-e011",
+  "RELEASE-2022" = "https://doi.org/10.48443/tx4b-zx50",
+  "RELEASE-2023" = "https://doi.org/10.48443/wf2d-h925",
+  "RELEASE-2024" = "https://doi.org/10.48443/fdfd-d514",
+  "RELEASE-2025" = "https://doi.org/10.48443/a8cf-fj36",
+  "RELEASE-2026" = "https://doi.org/10.48443/7b2c-ga32"
+)
+
+# What a bundle records about NEON releases. The v5 producer writes
+# built$neon_releases (columns release, n, first, last; one row per tag,
+# "PROVISIONAL" included) and built$provisional_from (the first collectDate of a
+# provisional row, or NA). Earlier bundles carry neither, so recorded = FALSE.
+neon_release_info <- function(built) {
+  rel <- built$neon_releases
+  recorded <- is.data.frame(rel) && nrow(rel) > 0 && "release" %in% names(rel)
+  tags <- if (recorded) as.character(rel$release) else character(0)
+  released <- sort(unique(tags[!is.na(tags) & grepl("^RELEASE-[0-9]{4}$", tags)]))
+  latest <- if (length(released)) released[length(released)] else NA_character_
+  pf <- built$provisional_from
+  pf <- if (length(pf) == 1 && !is.na(pf) && nzchar(as.character(pf))) as.character(pf) else NA_character_
+  list(
+    recorded = recorded,
+    releases = released,
+    latest = latest,
+    doi = if (!is.na(latest) && latest %in% names(NEON_RELEASE_DOI))
+      unname(NEON_RELEASE_DOI[latest]) else NA_character_,
+    provisional_from = pf,
+    n_provisional = if (recorded && "n" %in% names(rel))
+      as.integer(sum(rel$n[tags %in% "PROVISIONAL"])) else NA_integer_
+  )
+}
+
+# NEON's citation for this bundle, one plain-text sentence group per element.
+neon_citation_lines <- function(built) {
+  info <- neon_release_info(built)
+  accessed <- substr(as.character(built$when %||% ""), 1, 10)
+  page <- "https://data.neonscience.org/data-products/DP1.20093.001"
+  out <- character(0)
+  if (!is.na(info$latest)) {
+    out <- c(out, sprintf(
+      "NEON (National Ecological Observatory Network). %s (DP1.20093.001), %s. %sDataset accessed from %s on %s.",
+      NEON_PRODUCT_NAME, info$latest,
+      if (!is.na(info$doi)) paste0(info$doi, ". ") else "",
+      paste0(page, "/", info$latest), accessed))
+  }
+  if (!is.na(info$provisional_from)) {
+    out <- c(out, sprintf(
+      "NEON (National Ecological Observatory Network). %s (DP1.20093.001), provisional data from %s onward. Dataset accessed from %s on %s. Provisional data have no DOI and can still change.",
+      NEON_PRODUCT_NAME, info$provisional_from, page, accessed))
+  }
+  if (!isTRUE(info$recorded)) {
+    out <- c(out, sprintf(
+      "NEON (National Ecological Observatory Network). %s (DP1.20093.001). Dataset accessed from %s on %s. This bundle does not record release tags, so its most recent months may be provisional.",
+      NEON_PRODUCT_NAME, page, accessed))
+  }
+  out
+}
+
+# Notes a reader of a site's record needs: entries from NEON's DP1.20093.001
+# change log (GET /api/v0/products/DP1.20093.001, changeLogs[]) plus facts
+# measured on the bundle (id "bundle-..."). Every change-log id here is reviewed
+# with a matching disposition in config/neon-product-watch.json, and a test checks
+# it. scope: "site" (the sites listed), "network" (every site) or "analyte" (the
+# analytes listed). Lists are "|"-separated.
+NEON_DATA_NOTES <- tibble::tribble(
+  ~id,              ~scope,    ~sites,                          ~analytes,                                  ~from,        ~to,          ~text,
+  "16402",          "site",    "BARC|SUGG|CRAM|LIRO|PRLA|PRPO", "",                                         "2012-01-01", "2018-01-01", "Until 2018 NEON also sampled this lake's inlet and outlet. Those samples are averaged with the lake samples taken on the same day.",
+  "60906",          "site",    "SYCA",                          "",                                         "2022-01-26", "2022-01-26", "NEON moved this study reach upstream on 2022-01-26, so samples before and after that date come from different stretches of the creek.",
+  "68004",          "site",    "OKSR|TOOK",                     "",                                         "2020-03-23", "2022-12-31", "Quarantine rules at Toolik Field Station cut NEON's field visits from March 2020 through 2022, so this record has fewer samples in those years.",
+  "68005",          "site",    "BLDE",                          "",                                         "2022-06-12", "2022-10-31", "Flooding closed the roads into Yellowstone from 2022-06-12 to 2022-10-31, so no samples were collected here in that window.",
+  "17910",          "network", "",                              "",                                         "2020-03-23", "2021-12-31", "COVID-19 safety rules reduced or cancelled NEON sampling from March 2020 through 2021, so most records thin out in those years.",
+  "16403",          "analyte", "",                              "ANC",                                      "2018-01-01", "2018-01-01", "NEON cut ANC sampling to once a month in 2018.",
+  "bundle-lab-end", "analyte", "",                              "ANC|specificConductance|TSS - Dry Mass",   "2020-03-19", "2020-03-19", "This bundle's values for this analyte end on 2020-03-19.",
+  "37504",          "analyte", "",                              "specificConductance|TSS - Dry Mass",       "2021-03-23", "2021-03-23", "NEON's external lab stopped reporting this analyte in 2021. For conductance, use the field probe's specific conductance, which continues."
+)
+# Rows of NEON_DATA_NOTES that apply to a site and/or a set of analytes; network
+# notes always apply.
+neon_notes_for <- function(site = NULL, analytes = NULL) {
+  n <- NEON_DATA_NOTES
+  in_list <- function(field, keys) vapply(strsplit(field, "|", fixed = TRUE),
+                                          function(x) any(keys %in% x), logical(1))
+  site_hit <- n$scope == "site" & length(site) > 0 & in_list(n$sites, site)
+  an_hit <- n$scope == "analyte" & length(analytes) > 0 & in_list(n$analytes, analytes)
+  n[site_hit | an_hit | n$scope == "network", , drop = FALSE]
+}
+
+# One layout call for every time-axis context mark on a plotly chart, so the
+# marks never overwrite each other (plotly replaces `shapes` wholesale): the
+# dashed 2019-07-01 lab method-change line (when `code` is a method-change
+# analyte and [d1, d2] straddles the date) and a light band over NEON's
+# provisional months (when the bundle records built$provisional_from).
+add_time_context <- function(p, code, d1, d2, built = NULL, color = "#8a949c") {
+  shapes <- list(); notes <- list()
+  if (spans_method_change(code, d1, d2)) {
+    shapes[[length(shapes) + 1]] <- list(
+      type = "line", xref = "x", yref = "paper",
+      x0 = METHOD_CHANGE_DATE, x1 = METHOD_CHANGE_DATE, y0 = 0, y1 = 1,
+      line = list(color = color, width = 1.2, dash = "dash"))
+    notes[[length(notes) + 1]] <- list(
+      x = METHOD_CHANGE_DATE, y = 1, xref = "x", yref = "paper",
+      text = "lab method change", showarrow = FALSE, xanchor = "left",
+      yanchor = "top", xshift = 3, font = list(size = 10, color = color))
+  }
+  pf <- if (!is.null(built)) neon_release_info(built)$provisional_from else NA_character_
+  if (!is.na(pf)) {
+    x0 <- max(as.Date(pf), as.Date(d1)); x1 <- as.Date(d2)
+    if (!is.na(x0) && !is.na(x1) && x1 > x0) {
+      shapes[[length(shapes) + 1]] <- list(
+        type = "rect", xref = "x", yref = "paper", x0 = x0, x1 = x1, y0 = 0, y1 = 1,
+        fillcolor = "rgba(138,148,156,0.12)", line = list(width = 0), layer = "below")
+      notes[[length(notes) + 1]] <- list(
+        x = x0, y = 0, xref = "x", yref = "paper", text = "provisional",
+        showarrow = FALSE, xanchor = "left", yanchor = "bottom", xshift = 3,
+        font = list(size = 10, color = color))
+    }
+  }
+  if (!length(shapes)) return(p)
+  plotly::layout(p, shapes = shapes, annotations = notes)
+}
+
+# HTML for one pinned card (www/pincards.js reads it from a point's customdata).
+# `rows` is a named character vector: label -> value. Every string is escaped.
+pin_card_html <- function(title, rows) {
+  esc <- htmltools::htmlEscape
+  cells <- paste0("<div class='wc-pin-r'><span class='wc-pin-k'>", esc(names(rows)),
+                  "</span> <span class='wc-pin-v'>", esc(unname(rows)), "</span></div>",
+                  collapse = "")
+  paste0("<div class='wc-pin-card'><div class='wc-pin-t'>", esc(title), "</div>",
+         cells, "</div>")
+}
 
 ## ---- In-app sibling links (suite chrome) ---------------------------------
 # The "Explore the NEON series" block surfaced in the About modal. Registry +
 # live URLs mirror docs/index.html so the in-app links and the landing grid can
 # never drift. Each sibling hyperlinks to its live github.io cover.
 SIBLINGS <- tibble::tribble(
-  ~name,                ~url,
-  "Driver Cascade",     "https://tgilbert14.github.io/NEON-Driver-Cascade/",
-  "Small Mammals",      "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/",
-  "Breeding Birds",     "https://tgilbert14.github.io/NEON-Breeding-Birds/",
-  "Ground Beetles",     "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/",
-  "Plant Diversity",    "https://tgilbert14.github.io/NEON-Plant-Diversity/",
-  "Plant Phenology",    "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/",
-  "Veg Structure",      "https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/",
-  "Mosquito Pulse",     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/",
-  "Little Inverts",     "https://tgilbert14.github.io/NEON-My-Little-Inverts/"
+  ~name,                                ~url,                                                                  ~current,
+  "Small Mammal Tracker",               "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/",         FALSE,
+  "Plant Diversity",                    "https://tgilbert14.github.io/NEON-Plant-Diversity/",                  FALSE,
+  "Breeding Birds",                     "https://tgilbert14.github.io/NEON-Breeding-Birds/",                   FALSE,
+  "Plant Phenology",                    "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/",         FALSE,
+  "Vegetation Structure",               "https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/",    FALSE,
+  "Ground Beetle Tracker",              "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/",            FALSE,
+  "Water Chemistry Analyte Viewer",     "https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/", TRUE,
+  "Mosquito Pulse",                     "https://tgilbert14.github.io/NEON-Mosquito-Pulse/",                   FALSE,
+  "My Little Inverts",                  "https://tgilbert14.github.io/NEON-My-Little-Inverts/",                FALSE,
+  "NEON Cross-Product Response Atlas",  "https://tgilbert14.github.io/NEON-Driver-Cascade/",                   FALSE
 )
 sibling_block <- function() {
   htmltools::tagList(
     htmltools::tags$hr(),
     htmltools::tags$p(htmltools::tags$b("Explore the NEON series"),
-      htmltools::tags$span(class = "scope-note",
-        " — sibling explorers built on the same honest-stats playbook, each on a different NEON measurement:")),
+      htmltools::tags$span(class = "scope-note", .noWS = "before",
+        ": other NEON explorers, each on a different measurement:")),
     htmltools::tags$div(
       style = "display:flex; flex-wrap:wrap; gap:.4rem .6rem; margin:.3rem 0 .2rem",
-      lapply(seq_len(nrow(SIBLINGS)), function(i)
-        htmltools::tags$a(href = SIBLINGS$url[i], target = "_blank", rel = "noopener",
-          class = "sibling-chip", SIBLINGS$name[i])))
+      lapply(seq_len(nrow(SIBLINGS)), function(i) {
+        if (isTRUE(SIBLINGS$current[i]))
+          htmltools::tags$span(class = "sibling-chip sibling-current", `aria-current` = "page",
+            SIBLINGS$name[i], htmltools::tags$span(class = "visually-hidden", " (this app)"),
+            htmltools::tags$span(class = "sibling-here", `aria-hidden` = "true", " · you are here"))
+        else
+          htmltools::tags$a(href = SIBLINGS$url[i], target = "_blank", rel = "noopener",
+            class = "sibling-chip", SIBLINGS$name[i])
+      }))
   )
 }
 
@@ -567,6 +774,31 @@ pair_censor_note <- function(pc, A, B, thresh = 0.25) {
   paste0(lead, " below detection in this window, exploratory only")
 }
 
+# Lag-1 autocorrelation of a time-ordered series (NA-safe, signed).
+lag1_acf <- function(z) suppressWarnings(tryCatch({
+  z <- z[is.finite(z)]
+  if (length(z) < 4 || stats::sd(z) == 0) return(NA_real_)
+  stats::acf(z, lag.max = 1, plot = FALSE)$acf[2]
+}, error = function(e) NA_real_))
+# Effective sample size of a correlation between two autocorrelated series:
+# n * (1 - rx*ry) / (1 + rx*ry) when rx*ry > 0, else NA (no adjustment).
+effective_n <- function(n, rx, ry) {
+  k <- rx * ry
+  ifelse(is.finite(k) & k > 0 & n > 3, n * (1 - k) / (1 + k), NA_real_)
+}
+# 95% interval for Spearman rho: Fisher z with the Bonett-Wright (2000) se
+# sqrt((1 + rho^2/2) / (n_use - 3)), n_use = n_eff when finite, else n.
+# NA unless n_use > 3 and n >= min_n. Returns list(lo, hi, n_use).
+spearman_ci <- function(rho, n, n_eff = NA_real_, min_n = 8, level = 0.95) {
+  n_use <- ifelse(is.finite(n_eff), n_eff, n)
+  ok <- is.finite(rho) & is.finite(n_use) & n_use > 3 & n >= min_n
+  se <- sqrt((1 + rho^2 / 2) / pmax(n_use - 3, 1e-9))
+  zq <- stats::qnorm(1 - (1 - level) / 2)
+  z  <- atanh(pmin(pmax(rho, -0.999999), 0.999999))
+  list(lo = ifelse(ok, tanh(z - zq * se), NA_real_),
+       hi = ifelse(ok, tanh(z + zq * se), NA_real_), n_use = n_use)
+}
+
 # Correlation of `main` vs every other numeric column of a per-site wide frame.
 # Reports n (paired), Pearson r, Spearman rho, p-value of the chosen method,
 # and an honesty flag. min_n is the reliability floor (default 8).
@@ -602,12 +834,8 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
   }
   bm_all <- if (use_site_bdl) bdl_col(main) else NULL
   ptest <- function(x, y, mth) suppressWarnings(tryCatch(stats::cor.test(x, y, method = mth)$p.value, error = function(e) NA_real_))
-  # lag-1 ACF of a series (NA-safe); used to flag temporal autocorrelation and to
-  # compute the variance-inflation-adjusted effective n when |ACF| is high.
-  acf1 <- function(z) suppressWarnings(tryCatch({
-    if (length(z) < 4) return(NA_real_)
-    stats::acf(z, lag.max = 1, plot = FALSE, na.action = stats::na.pass)$acf[2]
-  }, error = function(e) NA_real_))
+  # time order for the lag-1 ACFs (pivot_wider does not guarantee date order)
+  ord <- if ("collectDate" %in% names(wide_site)) order(wide_site$collectDate) else seq_along(m)
   rows <- lapply(others, function(a) {
     y <- suppressWarnings(as.numeric(wide_site[[a]]))
     ok <- is.finite(m) & is.finite(y)
@@ -617,8 +845,12 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     pp <- if (n >= 4) ptest(m[ok], y[ok], "pearson")  else NA_real_
     ps <- if (n >= 4) ptest(m[ok], y[ok], "spearman") else NA_real_
     ties <- n >= 4 && (any(duplicated(m[ok])) || any(duplicated(y[ok])))
-    # lag-1 ACF of each member of the pair; the larger |ACF| drives n_eff
-    ac <- if (n >= 6) max(abs(acf1(m[ok])), abs(acf1(y[ok])), na.rm = TRUE) else NA_real_
+    # signed lag-1 ACF of each member of the pair, on the paired dates in time order
+    oo <- ord[ok[ord]]
+    rx <- if (n >= 6) lag1_acf(m[oo]) else NA_real_
+    ry <- if (n >= 6) lag1_acf(y[oo]) else NA_real_
+    ac <- if (n >= 6) suppressWarnings(max(abs(c(rx, ry)), na.rm = TRUE)) else NA_real_
+    if (!is.finite(ac)) ac <- NA_real_
     if (use_site_bdl) {
       # denominator = dates where BOTH analytes were sampled (finite value or a
       # below-detection row, so NA-valued non-detects count); numerator = either
@@ -634,24 +866,27 @@ correlation_table <- function(wide_site, main, method = c("spearman","pearson"),
     }
     tibble(code = a, display = analyte_display(a), n = n,
            pearson = pe, spearman = sp, p_pearson = pp, p_spearman = ps, ties = ties,
-           acf1 = ac, pct_below = pb, pct_below_main = pbm, pct_below_partner = pba)
+           acf1 = ac, acf_main = rx, acf_partner = ry,
+           pct_below = pb, pct_below_main = pbm, pct_below_partner = pba)
   })
   out <- bind_rows(rows)
   if (!nrow(out)) return(out)
   out$coef <- if (method == "spearman") out$spearman else out$pearson
   out$p    <- if (method == "spearman") out$p_spearman else out$p_pearson
-  # Effective-n-adjusted p when lag-1 autocorrelation is material (|ACF| >= 0.5):
-  # n_eff = n * (1-r)/(1+r) shrinks the df, and the two-sided t-test p is
-  # recomputed on n_eff. Reported alongside the raw p so a repeated-measures
-  # series cannot quietly borrow significance it does not have.
-  out$n_eff <- with(out, ifelse(is.finite(acf1) & abs(acf1) >= 0.5 & n > 3,
-                                pmax(3, n * (1 - abs(acf1)) / (1 + abs(acf1))), NA_real_))
+  # Effective n for two autocorrelated series (audit 2026-10-18 P3):
+  # n_eff = n * (1 - rx*ry) / (1 + rx*ry), rx and ry the signed lag-1 ACFs,
+  # applied whenever rx*ry > 0 (no |ACF| cliff). The two-sided t-test p is
+  # recomputed on n_eff and reported beside the raw p.
+  out$n_eff <- effective_n(out$n, out$acf_main, out$acf_partner)
   out$p_eff <- with(out, {
     ne <- n_eff; r <- coef
     tval <- abs(r) * sqrt((ne - 2) / pmax(1e-9, 1 - r^2))
     p <- 2 * stats::pt(tval, df = pmax(1, ne - 2), lower.tail = FALSE)
     ifelse(is.finite(ne) & is.finite(r) & abs(r) < 1, pmin(1, p), NA_real_)
   })
+  # 95% interval on Spearman rho (Fisher z, Bonett-Wright se) on n_eff when set
+  ci <- spearman_ci(out$spearman, out$n, out$n_eff, min_n = min_n)
+  out$rho_lo <- ci$lo; out$rho_hi <- ci$hi
   out <- out |> filter(n >= 4, is.finite(coef)) |>
     mutate(heavy_censor = is.finite(pct_below) & pct_below >= censor_thresh,
            # reliable drives the grey-out: a row is reliable only if it clears the

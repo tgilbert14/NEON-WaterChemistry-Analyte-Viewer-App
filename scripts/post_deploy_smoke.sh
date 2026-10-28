@@ -11,6 +11,7 @@ CONNECT_TIMEOUT="${SMOKE_CONNECT_TIMEOUT:-15}"
 MAX_TIME="${SMOKE_MAX_TIME:-45}"
 APP_MARKER="${SMOKE_APP_MARKER:-water-chemistry-v1}"
 APP_RECEIPT="${SMOKE_APP_RECEIPT:-}"
+APP_TITLE='<title>NEON Water Chemistry · Analyte Viewer</title>'
 failed=0
 
 check_one() {
@@ -27,6 +28,10 @@ check_one() {
         echo "wait [$label] HTTP $code but app marker is absent ($attempt/$MAX_ATTEMPTS)"
       elif [[ "$label" == *"app"* && -n "$APP_RECEIPT" ]] && ! grep -Fq "$APP_RECEIPT" "$body"; then
         echo "wait [$label] HTTP $code but exact runtime receipt is absent ($attempt/$MAX_ATTEMPTS)"
+      elif [[ "$label" == *"app"* ]] && ! { grep -Fq "$APP_TITLE" "$body" && grep -Fq '<html lang="en"' "$body"; }; then
+        echo "wait [$label] HTTP $code but the app title or lang=\"en\" is absent ($attempt/$MAX_ATTEMPTS)"
+      elif [[ "$label" == *"landing"* ]] && ! { grep -Eqi '<title>[^<]+</title>' "$body" && grep -Eqi '<html[^>]* lang="en"' "$body"; }; then
+        echo "wait [$label] HTTP $code but the cover lacks a <title> or lang=\"en\" ($attempt/$MAX_ATTEMPTS)"
       else
         echo "ok [$label] HTTP $code + semantic body check (attempt $attempt)"
         rm -f "$body"

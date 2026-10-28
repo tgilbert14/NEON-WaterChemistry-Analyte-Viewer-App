@@ -16,7 +16,79 @@ scalar_character <- function(x) {
   is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
 }
 
+# ---- Independent oracles (base R only) -------------------------------------
+# Each one recomputes a fact straight from the candidate rows and never calls
+# the producer rule it checks. tests/test_candidate_oracles.R loads these
+# functions by name from this file.
+
+# (a) Fe/Mn unit mislabel. NEON change log 2026-04-21: USGS_NWQA reported Fe
+# and Mn at six sites in micrograms labelled mg/L until mid-2016, which puts
+# the pre-2017 median 1e3 to 6e3 times the later one (every other site and
+# the quarantined view stay under 15). Fails each site-analyte with at least
+# min_n finite values on both sides whose before/after median ratio reaches
+# max_ratio.
+water_oracle_fe_mn <- function(site, analyte, collectDate, value,
+                               sites = c("ARIK", "BARC", "PRLA", "PRPO",
+                                         "REDB", "SUGG"),
+                               analytes = c("Fe", "Mn"),
+                               cut = as.Date("2017-01-01"), min_n = 3L,
+                               max_ratio = 100) {
+  site <- as.character(site); analyte <- as.character(analyte)
+  collectDate <- as.Date(collectDate); value <- as.numeric(value)
+  out <- data.frame(site = character(), analyte = character(),
+                    ratio = numeric(), stringsAsFactors = FALSE)
+  for (s in sites) for (a in analytes) {
+    hit <- site == s & analyte == a & is.finite(value) & !is.na(collectDate)
+    before <- value[hit & collectDate < cut]
+    after <- value[hit & collectDate >= cut]
+    if (length(before) < min_n || length(after) < min_n) next
+    mb <- stats::median(before); ma <- stats::median(after)
+    if (mb > 0 && !(mb < max_ratio * ma)) {
+      out <- rbind(out, data.frame(site = s, analyte = a, ratio = mb / ma,
+                                   stringsAsFactors = FALSE))
+    }
+  }
+  out
+}
+
+# (b) Halide row parity, v5 bundles only. Br and F are reported on the same
+# anion run as Cl; before 2022 the yearly Br/Cl and F/Cl collapsed-row ratios
+# sit at 0.93 to 1.03 in every year with >= 100 Cl rows (committed v4 bundle,
+# measured 2026-10-26). Since 2022 NEON reports a non-detect as a blank
+# concentration; a producer that drops those rows again shows Br/Cl at 0.33 to
+# 0.65. Fails each year >= from_year with >= min_cl Cl rows where a numerator's
+# ratio is below floor.
+WATER_ORACLE_HALIDE_FLOOR <- 0.85
+water_oracle_halide_parity <- function(analyte, collectDate,
+                                       numerators = c("Br", "F"),
+                                       from_year = 2022L, min_cl = 100L,
+                                       floor = WATER_ORACLE_HALIDE_FLOOR) {
+  analyte <- as.character(analyte)
+  year <- as.integer(format(as.Date(collectDate), "%Y"))
+  out <- data.frame(year = integer(), analyte = character(),
+                    ratio = numeric(), stringsAsFactors = FALSE)
+  years <- sort(unique(year[!is.na(year) & year >= from_year]))
+  for (y in years) {
+    n_cl <- sum(analyte == "Cl" & year %in% y)
+    if (n_cl < min_cl) next
+    for (a in numerators) {
+      ratio <- sum(analyte == a & year %in% y) / n_cl
+      if (ratio < floor) {
+        out <- rbind(out, data.frame(year = y, analyte = a, ratio = ratio,
+                                     stringsAsFactors = FALSE))
+      }
+    }
+  }
+  out
+}
+
+water_oracle_text <- function(x) {
+  paste(apply(x, 1L, function(r) paste(trimws(r), collapse = " ")),
+        collapse = "; ")
+}
+
 source(file.path("scripts", "water_unit_contract.R"))
+source(file.path("scripts", "runtime_manifest_files.R"))
 
 args <- commandArgs(trailingOnly = TRUE)
 need(length(args) == 1L && nzchar(args[[1]]) &&
@@ -27,10 +99,8 @@ need(length(args) == 1L && nzchar(args[[1]]) &&
      ))
 baseline_path <- args[[1]]
 
-required_paths <- c(
-  "app.R", "helpers.R", "scripts/water_unit_contract.R", "data/codebook.csv",
-  "data/neon_swc.rds", "data/search_index.rds", "manifest.json"
-)
+# The runtime allowlist is owned by scripts/runtime_manifest_files.R.
+required_paths <- c(WATER_RUNTIME_FILES, "manifest.json")
 missing_paths <- required_paths[!file.exists(required_paths)]
 need(!length(missing_paths), "Missing required candidate path(s): %s",
      paste(missing_paths, collapse = ", "))
@@ -201,6 +271,90 @@ runtime_result <- tryCatch(
 )
 runtime_long <- runtime_result$data
 
+receipt_fields_present <- WATER_UNIT_RECEIPT_FIELDS %in% names(bundle$built)
+v5_policy <- all(receipt_fields_present) &&
+  identical(bundle$built$unit_policy, WATER_UNIT_POLICY)
+
+fe_mn_failures <- water_oracle_fe_mn(
+  runtime_long$site, runtime_long$analyte, runtime_long$collectDate,
+  runtime_long$value
+)
+need(!nrow(fe_mn_failures),
+     paste0(
+       "Fe/Mn oracle: the pre-2017 median is at least 100 times the later ",
+       "one (a micrograms-as-mg/L mislabel survived): %s."
+     ), water_oracle_text(fe_mn_failures))
+if (v5_policy) {
+  halide_failures <- water_oracle_halide_parity(
+    bundle$swc_long$analyte, bundle$swc_long$collectDate
+  )
+  need(!nrow(halide_failures),
+       paste0(
+         "Halide oracle: Br or F rows fell below %.2f of Cl rows in a year ",
+         "since 2022 (blank-concentration non-detects dropped?): %s."
+       ), WATER_ORACLE_HALIDE_FLOOR, water_oracle_text(halide_failures))
+}
+
+# v5 producer columns and the release summary, recounted from swc_long.
+if (v5_policy) {
+  need(all(c("partialBelow", "release") %in% names(bundle$swc_long)),
+       "v5 candidate swc_long lacks partialBelow or release.")
+  pb <- bundle$swc_long$partialBelow
+  need(is.integer(pb) && !anyNA(pb) && all(pb %in% c(0L, 1L)) &&
+         !any(pb == 1L & bundle$swc_long$belowDetection == 1L) &&
+         !any(pb == 1L & bundle$swc_long$n_reps < 2L),
+       "v5 candidate partialBelow must be exact 0L/1L, never with belowDetection or one replicate.")
+  need(is.character(bundle$swc_long$release),
+       "v5 candidate release column must be character.")
+}
+row_release <- if ("release" %in% names(bundle$swc_long)) {
+  as.character(bundle$swc_long$release)
+} else {
+  rep(NA_character_, nrow(bundle$swc_long))
+}
+recorded_release <- !is.na(row_release)
+need(all(grepl("^RELEASE-[0-9]{4}$", row_release[recorded_release]) |
+           row_release[recorded_release] == "PROVISIONAL"),
+     "Candidate carries an unrecognized NEON release tag: %s.",
+     show_set(unique(row_release[recorded_release &
+                                   !grepl("^RELEASE-[0-9]{4}$", row_release) &
+                                   row_release != "PROVISIONAL"])))
+has_release_summary <- "neon_releases" %in% names(bundle$built)
+need(identical(has_release_summary,
+               "provisional_from" %in% names(bundle$built)),
+     "Candidate carries only one of neon_releases and provisional_from.")
+if (has_release_summary) {
+  tags <- sort(unique(row_release[recorded_release]), method = "radix")
+  expected_releases <- data.frame(
+    release = tags,
+    n = vapply(tags, function(t) sum(row_release %in% t), integer(1),
+               USE.NAMES = FALSE),
+    first = vapply(tags, function(t) format(min(
+      bundle$swc_long$collectDate[row_release %in% t]), "%Y-%m-%d"),
+      character(1), USE.NAMES = FALSE),
+    last = vapply(tags, function(t) format(max(
+      bundle$swc_long$collectDate[row_release %in% t]), "%Y-%m-%d"),
+      character(1), USE.NAMES = FALSE),
+    stringsAsFactors = FALSE
+  )
+  observed_releases <- bundle$built$neon_releases
+  if (is.data.frame(observed_releases)) rownames(observed_releases) <- NULL
+  need(is.data.frame(observed_releases) &&
+         identical(observed_releases, expected_releases),
+       "Candidate neon_releases disagrees with a recount of swc_long release tags.")
+  provisional_dates <- bundle$swc_long$collectDate[row_release %in% "PROVISIONAL"]
+  expected_provisional <- if (length(provisional_dates)) {
+    format(min(provisional_dates), "%Y-%m-%d")
+  } else {
+    NA_character_
+  }
+  need(identical(bundle$built$provisional_from, expected_provisional),
+       "Candidate provisional_from disagrees with the first PROVISIONAL row.")
+} else {
+  need(!any(recorded_release),
+       "Candidate rows carry release tags but the build has no neon_releases summary.")
+}
+
 # Rebuild the deterministic search tables from the effective runtime rows, not
 # from any producer receipt. The verifier deliberately repeats the builder's
 # aggregation here so every statistic, label, metadata field, and ordering key
@@ -248,7 +402,7 @@ expected_per_site <- expected_search_gated |>
     .groups = "drop",
     n = dplyr::n(),
     mean = finite_or_na(value, mean),
-    median = finite_or_na(value, stats::median),
+    median = helper_env$nd_median(value, belowDetection),
     min = finite_or_na(value, min),
     max = finite_or_na(value, max),
     n_below = sum(belowDetection == 1, na.rm = TRUE),
@@ -493,19 +647,20 @@ if (!has_unit_contract) {
     exclusion_receipt$collectDate
   ), , drop = FALSE]
   rownames(exclusion_receipt) <- NULL
+  policy_identities <- water_unit_identities_for_policy(bundle$built$unit_policy)
   exclusion_rule_index <- match(
-    water_unit_rule_key(WATER_UNIT_EXCLUSION_IDENTITIES$analyte,
-                        WATER_UNIT_EXCLUSION_IDENTITIES$from_unit),
+    water_unit_rule_key(policy_identities$analyte,
+                        policy_identities$from_unit),
     water_unit_rule_key(WATER_UNIT_EXCLUSION_RULES$analyte,
                         WATER_UNIT_EXCLUSION_RULES$from_unit)
   )
   expected_exclusions <- data.frame(
-    site = WATER_UNIT_EXCLUSION_IDENTITIES$site,
-    collectDate = WATER_UNIT_EXCLUSION_IDENTITIES$collectDate,
-    analyte = WATER_UNIT_EXCLUSION_IDENTITIES$analyte,
-    from_unit = WATER_UNIT_EXCLUSION_IDENTITIES$from_unit,
+    site = policy_identities$site,
+    collectDate = policy_identities$collectDate,
+    analyte = policy_identities$analyte,
+    from_unit = policy_identities$from_unit,
     reason = WATER_UNIT_EXCLUSION_RULES$reason[exclusion_rule_index],
-    max_source_rows = WATER_UNIT_EXCLUSION_IDENTITIES$max_source_rows,
+    max_source_rows = policy_identities$max_source_rows,
     stringsAsFactors = FALSE
   )
   expected_exclusions <- expected_exclusions[order(
@@ -575,13 +730,10 @@ runtime_units <- vapply(
 codebook_lines <- readLines("data/codebook.csv", warn = FALSE)
 v5_producer <- has_unit_contract &&
   identical(bundle$built$unit_policy, WATER_UNIT_POLICY)
-expected_codebook_version <- if (v5_producer) {
-  "1.2.0"
-} else if (has_unit_contract) {
-  "1.1.0"
-} else {
-  "1.0.0"
-}
+# 1.2.0 = the export schema with partial_below and release (v4 and v5
+# producer bundles); the receipt-free legacy bundle keeps 1.0.0.
+expected_codebook_version <- if (has_unit_contract) "1.2.0" else "1.0.0"
+pre_v5_na <- "not recorded: this bundle predates the v5 producer"
 expected_codebook_header <- c(
   sprintf(
     paste0(
@@ -631,29 +783,32 @@ need(identical(sort(unique(codebook$section)),
 
 long_export_keep <- c(
   "site", "collectDate", "analyte", "analyte_label", "value", "units",
-  "n_reps", "value_sd", "below_detection", "implausible_extreme",
-  "lab_flag", "source", "product"
+  "n_reps", "value_sd", "below_detection", "partial_below",
+  "implausible_extreme", "lab_flag", "source", "product", "release"
 )
 long_types <- c(
   site = "character", collectDate = "Date", analyte = "character",
   analyte_label = "character", value = "numeric", units = "character",
   n_reps = "integer", value_sd = "numeric", below_detection = "logical",
+  partial_below = "logical",
   implausible_extreme = "logical", lab_flag = "character",
-  source = "character", product = "character"
+  source = "character", product = "character", release = "character"
 )
 long_units <- c(
   site = "NA", collectDate = "ISO date", analyte = "NA",
   analyte_label = "NA", value = "see units column (canonical per analyte)",
   units = "NA", n_reps = "count", value_sd = "same as value",
-  below_detection = "NA", implausible_extreme = "NA", lab_flag = "NA",
-  source = "NA", product = "NA"
+  below_detection = "NA", partial_below = "NA", implausible_extreme = "NA",
+  lab_flag = "NA", source = "NA", product = "NA", release = "NA"
 )
 long_allowed <- c(
   site = "NEON 4-letter site code", collectDate = "YYYY-MM-DD",
   analyte = "raw analyte code", analyte_label = "free text",
   value = ">= 0 typical", units = "canonical NEON unit string",
   n_reps = ">= 1", value_sd = ">= 0",
-  below_detection = "TRUE/FALSE", implausible_extreme = "TRUE/FALSE",
+  below_detection = "TRUE/FALSE", partial_below = "TRUE/FALSE",
+  implausible_extreme = "TRUE/FALSE",
+  release = "RELEASE-YYYY | PROVISIONAL",
   lab_flag = if (has_unit_contract) {
     "sorted distinct NEON externalLabDataQF codes joined by ' | '"
   } else {
@@ -666,20 +821,37 @@ long_definition <- c(
   collectDate = "Field collection date (sub-day time dropped)",
   analyte = "NEON analyte identifier (join key to the analyte dictionary)",
   analyte_label = "Human-readable analyte name",
-  value = paste0(
-    "Replicate-mean concentration / measurement for the ",
-    "site-date-analyte"
-  ),
+  value = if (v5_producer) {
+    paste0(
+      "Mean of the detected replicates for the site-date-analyte; the mean ",
+      "of every replicate when all are below the detection limit"
+    )
+  } else {
+    paste0(
+      "Replicate-mean concentration / measurement for the ",
+      "site-date-analyte"
+    )
+  },
   units = paste0(
     "Pinned established unit for the analyte; UV absorbance = ",
     "'absorbance units'"
   ),
   n_reps = "Number of lab/field replicates collapsed into value",
-  value_sd = "Standard deviation across replicates before collapse",
+  value_sd = if (v5_producer) {
+    "Standard deviation of the replicate values used for value"
+  } else {
+    "Standard deviation across replicates before collapse"
+  },
   below_detection = paste0(
-    "Any replicate reported below the analytical detection limit ",
+    if (v5_producer) "Every" else "Any",
+    " replicate reported below the analytical detection limit ",
     "(value kept, never substituted)"
   ),
+  partial_below = paste0(
+    "Some but not all replicates reported below the detection limit; ",
+    "value then uses the detected replicates only"
+  ),
+  release = "NEON release tag of the site-month the row came from",
   implausible_extreme = paste0(
     "Flagged above the plausibility ceiling; kept in this raw export, ",
     "excluded from fits/maps/STL/glm"
@@ -704,7 +876,18 @@ long_na_semantics <- c(
     "NA only if all replicates were non-numeric"
   },
   units = "never NA after canonicalization", n_reps = "never NA",
-  value_sd = "NA when n_reps == 1", below_detection = "never NA",
+  value_sd = if (v5_producer) {
+    "NA when fewer than 2 replicate values are used for value"
+  } else {
+    "NA when n_reps == 1"
+  },
+  below_detection = "never NA",
+  partial_below = if (v5_producer) "never NA" else pre_v5_na,
+  release = if (v5_producer) {
+    "NA when the build did not record a release for the site-month"
+  } else {
+    pre_v5_na
+  },
   implausible_extreme = "never NA", lab_flag = if (has_unit_contract) {
     "NA when every replicate is unflagged"
   } else {

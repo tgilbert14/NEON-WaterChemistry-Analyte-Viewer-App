@@ -10,7 +10,7 @@ if (!exists("WATER_ESTABLISHED_UNIT_TARGETS", inherits = TRUE)) {
   source(file.path("scripts", "water_unit_contract.R"))
 }
 
-WATER_REFRESH_REVIEW_SCHEMA <- "water-refresh-review-v2"
+WATER_REFRESH_REVIEW_SCHEMA <- "water-refresh-review-v3"
 WATER_REFRESH_REVIEW_PRODUCT <- "DP1.20093.001"
 WATER_REFRESH_REVIEW_BELOW_CODES <- c("1", "ND", "BDL", "BD", "TRUE", "true")
 WATER_REFRESH_REVIEW_STATUSES <- c(
@@ -25,17 +25,18 @@ WATER_REFRESH_REVIEW_APPROVED_STATUSES <- c(
   "audited-exclusion", "approved-missing-label-rewrite"
 )
 
-# Fixed replay contract. Extra input columns (notably the per-row NEON
-# `release` tag captured by precompute_neon_data.R) are dropped
-# deterministically by water_refresh_replay_inputs(); a replayed build therefore
-# skips the release check and relies on the value-quarantine median guard.
+# Fixed replay contract (v3). The per-row NEON `release` tag captured by
+# precompute_neon_data.R is part of the replay on lab and field rows (NA when the
+# input carried none), so a replayed build reproduces swc_long$release,
+# built$neon_releases and the value-quarantine release check. Any other extra
+# input column is dropped deterministically by water_refresh_replay_inputs().
 WATER_REFRESH_REPLAY_LAB_COLUMNS <- c(
   "site", "collectDate", "analyte", "analyteConcentration", "analyteUnits",
-  "laboratoryName", "belowDetectionQF", "externalLabDataQF"
+  "laboratoryName", "belowDetectionQF", "externalLabDataQF", "release"
 )
 WATER_REFRESH_REPLAY_FIELD_COLUMNS <- c(
   "site", "collectDate", "waterTemp", "dissolvedOxygen",
-  "specificConductance"
+  "specificConductance", "release"
 )
 WATER_REFRESH_REPLAY_COORD_COLUMNS <- c(
   "site", "neonName", "domain", "state", "lat", "long", "siteType"
@@ -94,10 +95,14 @@ water_review_source_sha <- function(source_sha) {
 }
 
 water_refresh_replay_inputs <- function(lab_raw, field_raw, coords) {
-  lab_required <- setdiff(WATER_REFRESH_REPLAY_LAB_COLUMNS, "laboratoryName")
+  lab_required <- setdiff(WATER_REFRESH_REPLAY_LAB_COLUMNS,
+                          c("laboratoryName", "release"))
   water_review_require_columns(lab_raw, lab_required, "lab_raw")
   if (!"laboratoryName" %in% names(lab_raw)) {
-    lab_raw$laboratoryName <- NA_character_
+    lab_raw$laboratoryName <- rep(NA_character_, nrow(lab_raw))
+  }
+  if (!"release" %in% names(lab_raw)) {
+    lab_raw$release <- rep(NA_character_, nrow(lab_raw))
   }
   lab <- data.frame(
     site = water_review_character(lab_raw$site),
@@ -110,6 +115,7 @@ water_refresh_replay_inputs <- function(lab_raw, field_raw, coords) {
     laboratoryName = water_review_character(lab_raw$laboratoryName),
     belowDetectionQF = water_review_character(lab_raw$belowDetectionQF),
     externalLabDataQF = water_review_character(lab_raw$externalLabDataQF),
+    release = water_review_character(lab_raw$release),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
@@ -136,6 +142,9 @@ water_refresh_replay_inputs <- function(lab_raw, field_raw, coords) {
     waterTemp = field_value("waterTemp"),
     dissolvedOxygen = field_value("dissolvedOxygen"),
     specificConductance = field_value("specificConductance"),
+    release = if ("release" %in% names(field_raw))
+      water_review_character(field_raw$release) else
+        rep(NA_character_, nrow(field_raw)),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
